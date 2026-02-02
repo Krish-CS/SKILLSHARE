@@ -1,0 +1,397 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/user_provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../models/skilled_user_profile.dart';
+
+class EditSkilledProfileScreen extends StatefulWidget {
+  const EditSkilledProfileScreen({super.key});
+
+  @override
+  State<EditSkilledProfileScreen> createState() => _EditSkilledProfileScreenState();
+}
+
+class _EditSkilledProfileScreenState extends State<EditSkilledProfileScreen> {
+  SkilledUserProfile? _profile;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    
+    if (authProvider.currentUser != null) {
+      await userProvider.loadProfile(authProvider.currentUser!.uid);
+    }
+    
+    setState(() {
+      _profile = userProvider.currentProfile;
+      _isLoading = false;
+    });
+  }
+
+  void _showVerificationDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Verification Required'),
+        content: const Text(
+          'You need to verify your Aadhaar to upload portfolio images and add services. '
+          'Please complete the verification process first.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _addPortfolioPhotos() {
+    if (_profile?.isVerified != true) {
+      _showVerificationDialog();
+      return;
+    }
+    // TODO: Implement add portfolio photos
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Add Portfolio Photos feature coming soon')),
+    );
+  }
+
+  void _addServicePricing() {
+    if (_profile?.isVerified != true) {
+      _showVerificationDialog();
+      return;
+    }
+    // TODO: Implement add service & pricing
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Add Service & Pricing feature coming soon')),
+    );
+  }
+
+  void _toggleVisibility() async {
+    if (_profile == null) return;
+    
+    final newVisibility = _profile!.visibility == 'public' ? 'private' : 'public';
+    final updatedProfile = SkilledUserProfile(
+      userId: _profile!.userId,
+      bio: _profile!.bio,
+      skills: _profile!.skills,
+      category: _profile!.category,
+      profilePicture: _profile!.profilePicture,
+      verificationStatus: _profile!.verificationStatus,
+      visibility: newVisibility,
+      portfolioImages: _profile!.portfolioImages,
+      portfolioVideos: _profile!.portfolioVideos,
+      verificationData: _profile!.verificationData,
+      rating: _profile!.rating,
+      reviewCount: _profile!.reviewCount,
+      projectCount: _profile!.projectCount,
+      isVerified: _profile!.isVerified,
+      verifiedAt: _profile!.verifiedAt,
+      createdAt: _profile!.createdAt,
+      updatedAt: DateTime.now(),
+    );
+
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final success = await userProvider.updateProfile(updatedProfile);
+    
+    if (success && mounted) {
+      setState(() {
+        _profile = updatedProfile;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Profile visibility changed to $newVisibility')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final authProvider = Provider.of<AuthProvider>(context);
+    final currentUser = authProvider.currentUser;
+    
+    final isVerified = _profile?.isVerified ?? false;
+    final hasPortfolio = _profile?.portfolioImages.isNotEmpty ?? false;
+    
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text('Edit Profile', style: TextStyle(color: Colors.white)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.white),
+            onPressed: () {
+              // Settings
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+            onPressed: () {
+              // Notifications
+            },
+          ),
+        ],
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF2196F3), Color(0xFF64B5F6)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Profile Header Card with gradient background
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.purple.shade400,
+                    Colors.pink.shade300,
+                    Colors.blue.shade300,
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Column(
+                children: [
+                  // Profile Picture with white border
+                  Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 3),
+                    ),
+                    child: CircleAvatar(
+                      radius: 45,
+                      backgroundColor: Colors.white,
+                      backgroundImage: _profile?.profilePicture != null && _profile!.profilePicture!.isNotEmpty
+                          ? NetworkImage(_profile!.profilePicture!)
+                          : (currentUser?.profilePhoto != null && currentUser!.profilePhoto!.isNotEmpty
+                              ? NetworkImage(currentUser.profilePhoto!)
+                              : null),
+                      child: (_profile?.profilePicture == null || _profile!.profilePicture!.isEmpty) &&
+                              (currentUser?.profilePhoto == null || currentUser!.profilePhoto!.isEmpty)
+                          ? const Icon(Icons.person, size: 45, color: Colors.grey)
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Username
+                  Text(
+                    currentUser?.name ?? 'User',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  
+                  // Category
+                  Text(
+                    _profile?.category ?? 'No Category',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+            
+            // White content area
+            Container(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Visibility Row
+                  Row(
+                    children: [
+                      const Icon(Icons.visibility, color: Color(0xFF2196F3), size: 20),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Profile Visibility: ',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        (_profile?.visibility ?? 'private').toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: _profile?.visibility == 'public'
+                              ? Colors.green
+                              : Colors.orange,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Verification Row
+                  Row(
+                    children: [
+                      Icon(
+                        isVerified ? Icons.check_circle : Icons.pending,
+                        color: isVerified ? Colors.green : Colors.orange,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Verification: ',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        isVerified ? 'VERIFIED' : 'PENDING',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: isVerified ? Colors.green : Colors.orange,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  
+                  // Portfolio message or images
+                  if (!hasPortfolio)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'No portfolio images yet. Add some\nusing the button below.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 13,
+                        ),
+                      ),
+                    )
+                  else
+                    SizedBox(
+                      height: 100,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _profile!.portfolioImages.length,
+                        itemBuilder: (context, index) {
+                          return Container(
+                            width: 100,
+                            margin: const EdgeInsets.only(right: 8),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              image: DecorationImage(
+                                image: NetworkImage(_profile!.portfolioImages[index]),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  
+                  // Add Photos to Portfolio Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton.icon(
+                      onPressed: _addPortfolioPhotos,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFF6B6B),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        elevation: 0,
+                      ),
+                      icon: const Icon(Icons.add, color: Colors.white),
+                      label: const Text(
+                        'Add Photos to Portfolio',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  
+                  // Pricing & Services Header
+                  const Text(
+                    'Pricing & Services',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Add Service & Pricing Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: OutlinedButton.icon(
+                      onPressed: _addServicePricing,
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFF2196F3), width: 1.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                      ),
+                      icon: const Icon(Icons.add, color: Color(0xFF2196F3)),
+                      label: const Text(
+                        'Add Service & Pricing',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF2196F3),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

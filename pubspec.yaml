@@ -1,0 +1,78 @@
+name: skillshare
+description: A Flutter app for skilled professionals to showcase their work and connect with customers.
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.4.4
+  
+  # State Management
+  provider: ^6.1.1
+  
+  # UI Components
+  cupertino_icons: ^1.0.6
+  google_fonts: ^6.1.0
+  cached_network_image: ^3.3.0
+  flutter_rating_bar: ^4.0.1
+  shimmer: ^3.0.0
+  
+  # Image Handling & Upload
+  image_picker: ^1.0.5
+  cloudinary_public: ^0.21.0
+  flutter_image_compress: ^2.1.0
+  http: ^1.1.0
+  path: ^1.9.0
+  
+  # Location
+  geolocator: ^10.1.0
+  geocoding: ^2.1.1
+  
+  # Chat
+  intl: ^0.18.1
+  
+  # Utils
+  uuid: ^4.2.2
+  url_launcher: ^6.2.2
+  share_plus: ^10.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icons/app_icon.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/icons/app_icon.png"
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/
+
+#   fonts:
+#     - family: Poppins
+#       fonts:
+#         - asset: assets/fonts/Poppins-Regular.ttf
+#         - asset: assets/fonts/Poppins-Medium.ttf
+#           weight: 500
+#         - asset: assets/fonts/Poppins-SemiBold.ttf
+#           weight: 600
+#         - asset: assets/fonts/Poppins-Bold.ttf
+#           weight: 700
