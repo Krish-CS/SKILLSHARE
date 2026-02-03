@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../utils/user_roles.dart';
 
 /// Portfolio Screen - For Skilled Persons Only
 /// This is where skilled persons showcase their work through photos/videos

@@ -5,7 +5,7 @@ import 'package:shimmer/shimmer.dart';
 import '../../models/job_model.dart';
 import '../../models/user_model.dart';
 import '../../services/firestore_service.dart';
-import '../../providers/auth_provider.dart';
+import '../../providers/auth_provider.dart' as app_auth;
 import '../../utils/user_roles.dart';
 import '../../widgets/job_card.dart';
 import 'create_job_screen.dart';
@@ -150,7 +150,7 @@ class _JobsScreenState extends State<JobsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
+    final authProvider = Provider.of<app_auth.AuthProvider>(context);
     final userRole = authProvider.userRole ?? UserRoles.customer;
     
     // Role-based title
