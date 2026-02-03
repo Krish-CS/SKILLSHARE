@@ -5,6 +5,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/user_provider.dart';
 import '../../models/skilled_user_profile.dart';
 import '../../utils/app_constants.dart';
+import '../../utils/user_roles.dart';
 import '../../utils/add_dummy_profiles.dart';
 import '../../widgets/expert_card.dart';
 import '../profile/profile_screen.dart';
@@ -106,6 +107,22 @@ class _HomeScreenState extends State<HomeScreen> {
     final authProvider = Provider.of<AuthProvider>(context);
     final userProvider = Provider.of<UserProvider>(context);
     final currentUser = authProvider.currentUser;
+    final userRole = authProvider.userRole ?? UserRoles.customer;
+    
+    // Role-based title and subtitle
+    String screenTitle = 'SkillShare';
+    String screenSubtitle = '';
+    
+    if (userRole == UserRoles.skilledPerson) {
+      screenTitle = 'Dashboard';
+      screenSubtitle = 'View your performance & opportunities';
+    } else if (userRole == UserRoles.company) {
+      screenTitle = 'Find Talent';
+      screenSubtitle = 'Hire skilled professionals for your projects';
+    } else {
+      screenTitle = 'Discover Skills';
+      screenSubtitle = 'Find experts for your needs';
+    }
 
     return Scaffold(
       body: SafeArea(
@@ -127,9 +144,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   child: FlexibleSpaceBar(
-                    title: const Text(
-                      'SkillShare',
-                      style: TextStyle(
+                    title: Text(
+                      screenTitle,
+                      style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),

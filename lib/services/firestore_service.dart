@@ -42,6 +42,23 @@ class FirestoreService {
     }
   }
 
+  // Update user role
+  Future<void> updateUserRole(String userId, String role) async {
+    try {
+      await _firestore
+          .collection(AppConstants.usersCollection)
+          .doc(userId)
+          .update({
+        'role': role,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      debugPrint('User role updated to: $role');
+    } catch (e) {
+      debugPrint('Error updating user role: $e');
+      rethrow;
+    }
+  }
+
   // ===== Skilled User Profile =====
 
   Future<void> updateSkilledUserProfile(SkilledUserProfile profile) async {

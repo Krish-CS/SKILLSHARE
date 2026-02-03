@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../models/job_model.dart';
 import '../../models/user_model.dart';
 import '../../services/firestore_service.dart';
+import '../../providers/auth_provider.dart';
+import '../../utils/user_roles.dart';
 import '../../widgets/job_card.dart';
 import 'create_job_screen.dart';
 import 'job_detail_screen.dart';
@@ -135,14 +138,34 @@ class _JobsScreenState extends State<JobsScreen> {
   }
 
   bool get _canPostJobs {
-    return _currentUser?.role == AppConstants.roleCompany;
+    // Only companies and customers can post jobs
+    return _currentUser?.role == AppConstants.roleCompany || 
+           _currentUser?.role == UserRoles.customer;
+  }
+  
+  bool get _canApplyToJobs {
+    // Only skilled persons can apply to jobs
+    return _currentUser?.role == UserRoles.skilledPerson;
   }
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
+    final userRole = authProvider.userRole ?? UserRoles.customer;
+    
+    // Role-based title
+    String screenTitle = 'Jobs';
+    if (userRole == UserRoles.skilledPerson) {
+      screenTitle = 'Find Jobs';
+    } else if (userRole == UserRoles.company) {
+      screenTitle = 'Post Jobs';
+    } else {
+      screenTitle = 'Hire & Jobs';
+    }
+    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Jobs', style: TextStyle(color: Colors.white)),
+        title: Text(screenTitle, style: const TextStyle(color: Colors.white)),
         flexibleSpace: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(

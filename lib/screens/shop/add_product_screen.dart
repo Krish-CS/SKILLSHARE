@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../models/product_model.dart';
 import '../../services/firestore_service.dart';
 import '../../services/cloudinary_service.dart';
+import '../../providers/auth_provider.dart';
+import '../../utils/user_roles.dart';
 
 class AddProductScreen extends StatefulWidget {
   const AddProductScreen({super.key});
@@ -40,6 +43,54 @@ class _AddProductScreenState extends State<AddProductScreen> {
     'Home Decor',
     'Other',
   ];
+
+  @override
+  Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
+    
+    // CRITICAL: Only skilled persons can add products
+    if (!authProvider.isSkilledPerson) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Add Product'),
+          backgroundColor: Colors.red,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.block, size: 80, color: Colors.red),
+                const SizedBox(height: 20),
+                const Text(
+                  'Access Denied',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Only skilled persons can add products to sell. Customers and companies can browse and purchase products.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Go Back'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    
+    // Continue with normal product addition screen
+    return _buildProductForm();
+  }
+  
+  Widget _buildProductForm() {
+    return Scaffold(
 
   @override
   void dispose() {

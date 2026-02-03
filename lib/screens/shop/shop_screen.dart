@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../models/product_model.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/product_card.dart';
+import '../../providers/auth_provider.dart';
+import '../../utils/user_roles.dart';
 import 'add_product_screen.dart';
 import 'product_detail_screen.dart';
 
@@ -129,9 +132,22 @@ class _ShopScreenState extends State<ShopScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
+    final userRole = authProvider.userRole ?? UserRoles.customer;
+    
+    // Role-based title
+    String screenTitle = 'Shop';
+    if (userRole == UserRoles.customer) {
+      screenTitle = 'Shop - Browse Products';
+    } else if (userRole == UserRoles.company) {
+      screenTitle = 'Shop - Business Supplies';
+    } else if (userRole == UserRoles.skilledPerson) {
+      screenTitle = 'Shop - Browse Materials';
+    }
+    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Shop', style: TextStyle(color: Colors.white)),
+        title: Text(screenTitle, style: const TextStyle(color: Colors.white)),
         flexibleSpace: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(

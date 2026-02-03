@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/job_model.dart';
 import '../../services/firestore_service.dart';
+import '../../providers/auth_provider.dart';
+import '../../utils/user_roles.dart';
 import '../../utils/app_helpers.dart';
 
 class CreateJobScreen extends StatefulWidget {
@@ -33,6 +36,54 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     'Contract',
     'Freelance',
   ];
+  
+  @override
+  Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
+    
+    // CRITICAL: Only companies and customers can post jobs
+    if (!authProvider.canPostJobs) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Post Job'),
+          backgroundColor: Colors.red,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.block, size: 80, color: Colors.red),
+                const SizedBox(height: 20),
+                const Text(
+                  'Access Denied',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Only customers and companies can post jobs. Skilled persons can apply to available jobs.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Go Back'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    
+    // Continue with normal job creation screen
+    return _buildJobForm();
+  }
+  
+  Widget _buildJobForm() {
+    return Scaffold(
 
   @override
   void dispose() {

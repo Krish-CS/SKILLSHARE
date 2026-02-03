@@ -38,22 +38,27 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
         // Get fresh user data from Firestore
         _currentUser = await _firestoreService.getUserById(userId);
         
-        // Try to load skilled user profile if user is a skilled user
-        if (_currentUser?.role == 'skilled_user') {
-          try {
-            _skilledProfile = await _firestoreService.getSkilledUserProfile(userId);
-            
-            // Update currentUser profilePhoto from skilled profile if available
-            if (_skilledProfile?.profilePicture != null && 
-                _skilledProfile!.profilePicture!.isNotEmpty &&
-                _currentUser != null) {
-              _currentUser = _currentUser!.copyWith(
-                profilePhoto: _skilledProfile!.profilePicture,
-              );
-            }
-          } catch (e) {
-            debugPrint('No skilled profile yet: $e');
+        // Try to load skilled user profile
+        try {
+          _skilledProfile = await _firestoreService.getSkilledUserProfile(userId);
+          
+          // If skilled profile exists but user role is not skilled_user, fix it
+          if (_skilledProfile != null && _currentUser?.role != 'skilled_user') {
+            debugPrint('Fixing user role - skilled profile exists but role is ${_currentUser?.role}');
+            await _firestoreService.updateUserRole(userId, 'skilled_user');
+            _currentUser = await _firestoreService.getUserById(userId); // Reload
           }
+          
+          // Update currentUser profilePhoto from skilled profile if available
+          if (_skilledProfile?.profilePicture != null && 
+              _skilledProfile!.profilePicture!.isNotEmpty &&
+              _currentUser != null) {
+            _currentUser = _currentUser!.copyWith(
+              profilePhoto: _skilledProfile!.profilePicture,
+            );
+          }
+        } catch (e) {
+          debugPrint('No skilled profile yet: $e');
         }
       }
     } catch (e) {
@@ -227,7 +232,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(

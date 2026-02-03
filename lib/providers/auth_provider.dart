@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
+import '../utils/user_roles.dart';
 
 class AuthProvider with ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -15,6 +16,22 @@ class AuthProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isAuthenticated => _currentUser != null;
+  
+  // Role-based getters for easy access
+  String? get userRole => _currentUser?.role;
+  bool get isCustomer => _currentUser?.role == UserRoles.customer;
+  bool get isCompany => _currentUser?.role == UserRoles.company;
+  bool get isSkilledPerson => _currentUser?.role == UserRoles.skilledPerson;
+  bool get isAdmin => _currentUser?.role == UserRoles.admin;
+  
+  // Check if user can perform specific actions
+  bool get canPostJobs => _currentUser != null && UserRoles.canPostJobs(_currentUser!.role);
+  bool get canApplyToJobs => _currentUser != null && UserRoles.canApplyToJobs(_currentUser!.role);
+  bool get canSellProducts => _currentUser != null && UserRoles.canSellProducts(_currentUser!.role);
+  bool get canBuyProducts => _currentUser != null && UserRoles.canBuyProducts(_currentUser!.role);
+  bool get canUploadPortfolio => _currentUser != null && UserRoles.canUploadPortfolio(_currentUser!.role);
+  bool get canHireSkilledPersons => _currentUser != null && UserRoles.canHireSkilledPersons(_currentUser!.role);
+  bool get canBeHired => _currentUser != null && UserRoles.canBeHired(_currentUser!.role);
 
   AuthProvider() {
     _initialize();
