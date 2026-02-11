@@ -1,6 +1,7 @@
 class AppConstants {
-  // User Roles
-  static const String roleSkilledUser = 'skilled_user';
+  // User Roles - DEPRECATED: Use UserRoles class instead
+  // Keeping for backward compatibility only
+  static const String roleSkilledUser = 'skilled_person'; // Changed to match UserRoles
   static const String roleCustomer = 'customer';
   static const String roleCompany = 'company';
   static const String roleAdmin = 'admin';
@@ -29,6 +30,8 @@ class AppConstants {
   // Collection Names
   static const String usersCollection = 'users';
   static const String skilledUsersCollection = 'skilled_users';
+  static const String customerProfilesCollection = 'customer_profiles';
+  static const String companyProfilesCollection = 'company_profiles';
   static const String jobsCollection = 'jobs';
   static const String reviewsCollection = 'reviews';
   static const String chatsCollection = 'chats';
@@ -56,4 +59,22 @@ class AppConstants {
 
   // Location search radius (in kilometers)
   static const double searchRadius = 50.0;
+
+  // Categories for skills/portfolios/products
+  static const List<String> categories = [
+    'Baking',
+    'Carpentry',
+    'Plumbing',
+    'Electrical',
+    'Painting',
+    'Tailoring',
+    'Handicrafts',
+    'Artwork',
+    'Beauty Services',
+    'Furniture Making',
+    'Home Decor',
+    'Catering',
+    'Photography',
+    'Other',
+  ];
 }

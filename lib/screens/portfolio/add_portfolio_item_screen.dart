@@ -1,85 +1,120 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:typed_data';
-import '../../models/product_model.dart';
-import '../../services/firestore_service.dart';
+import 'dart:io';
+import '../../models/portfolio_model.dart';
+import '../../services/portfolio_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../../providers/auth_provider.dart' as app_auth;
-import '../../providers/user_provider.dart';
 import '../../utils/app_constants.dart';
 
-class AddProductScreen extends StatefulWidget {
-  const AddProductScreen({super.key});
+class AddPortfolioItemScreen extends StatefulWidget {
+  final PortfolioItem? portfolioItem; // For editing existing item
+
+  const AddPortfolioItemScreen({super.key, this.portfolioItem});
 
   @override
-  State<AddProductScreen> createState() => _AddProductScreenState();
+  State<AddPortfolioItemScreen> createState() => _AddPortfolioItemScreenState();
 }
 
-class _AddProductScreenState extends State<AddProductScreen> {
+class _AddPortfolioItemScreenState extends State<AddPortfolioItemScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
+  final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final _priceController = TextEditingController();
-  final _stockController = TextEditingController();
-  final FirestoreService _firestoreService = FirestoreService();
+  final PortfolioService _portfolioService = PortfolioService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
   final ImagePicker _picker = ImagePicker();
-  
+
   String? _selectedCategory;
+  List<String> _skills = [];
   List<String> _imageUrls = [];
-  List<XFile> _selectedImages = [];
-  List<Uint8List> _selectedImageBytes = [];
+  List<String> _videoUrls = [];
+  List<File> _selectedImages = [];
+  List<File> _selectedVideos = [];
   bool _isLoading = false;
   bool _isUploading = false;
 
-  final List<String> _categories = AppConstants.categories;
+  @override
+  void initState() {
+    super.initState();
+    if (widget.portfolioItem != null) {
+      _loadExistingItem();
+    }
+  }
+
+  void _loadExistingItem() {
+    final item = widget.portfolioItem!;
+    _titleController.text = item.title;
+    _descriptionController.text = item.description;
+    _selectedCategory = item.category;
+    _skills = List.from(item.tags);
+    _imageUrls = List.from(item.images);
+    _videoUrls = List.from(item.videos);
+  }
 
   @override
   void dispose() {
-    _nameController.dispose();
+    _titleController.dispose();
     _descriptionController.dispose();
-    _priceController.dispose();
-    _stockController.dispose();
     super.dispose();
   }
 
   Future<void> _pickImages() async {
     try {
-      if (_selectedImages.length + _imageUrls.length >= 5) {
+      if (_selectedImages.length + _imageUrls.length >= 10) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Maximum 5 images allowed')),
+          const SnackBar(content: Text('Maximum 10 images allowed')),
         );
         return;
       }
 
       final List<XFile> images = await _picker.pickMultiImage(
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 85,
+        maxWidth: 1920,
+        maxHeight: 1920,
+        imageQuality: 90,
       );
 
-      // User cancelled - do nothing
       if (images.isEmpty) return;
 
       setState(() {
-        final remaining = 5 - (_selectedImages.length + _imageUrls.length);
-        final newImages = images.take(remaining).toList();
-        _selectedImages.addAll(newImages);
+        final remaining = 10 - (_selectedImages.length + _imageUrls.length);
+        _selectedImages.addAll(
+          images.take(remaining).map((img) => File(img.path)),
+        );
       });
-      // Read bytes for preview and web upload
-      for (final img in images.take(5 - (_selectedImageBytes.length + _imageUrls.length))) {
-        final bytes = await img.readAsBytes();
-        _selectedImageBytes.add(bytes);
-      }
-      if (mounted) setState(() {});
-    } on Exception catch (e) {
-      // Only show error for actual errors, not cancellations
-      if (mounted && e.toString().isNotEmpty && !e.toString().contains('cancel')) {
+    } catch (e) {
+      if (mounted && !e.toString().contains('cancel')) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error picking images: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickVideo() async {
+    try {
+      if (_selectedVideos.length + _videoUrls.length >= 3) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Maximum 3 videos allowed')),
+        );
+        return;
+      }
+
+      final XFile? video = await _picker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(minutes: 3),
+      );
+
+      if (video == null) return;
+
+      setState(() {
+        _selectedVideos.add(File(video.path));
+      });
+    } catch (e) {
+      if (mounted && !e.toString().contains('cancel')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking video: $e')),
         );
       }
     }
@@ -88,9 +123,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
   void _removeImage(int index) {
     setState(() {
       _selectedImages.removeAt(index);
-      if (index < _selectedImageBytes.length) {
-        _selectedImageBytes.removeAt(index);
-      }
     });
   }
 
@@ -100,9 +132,61 @@ class _AddProductScreenState extends State<AddProductScreen> {
     });
   }
 
-  Future<void> _saveProduct() async {
+  void _removeVideo(int index) {
+    setState(() {
+      _selectedVideos.removeAt(index);
+    });
+  }
+
+  void _removeUploadedVideo(int index) {
+    setState(() {
+      _videoUrls.removeAt(index);
+    });
+  }
+
+  void _addSkill() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        String skillName = '';
+        return AlertDialog(
+          title: const Text('Add Skill Tag'),
+          content: TextField(
+            onChanged: (value) => skillName = value,
+            decoration: const InputDecoration(hintText: 'Enter skill name'),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (skillName.trim().isNotEmpty && !_skills.contains(skillName.trim())) {
+                  setState(() {
+                    _skills.add(skillName.trim());
+                  });
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _removeSkill(String skill) {
+    setState(() {
+      _skills.remove(skill);
+    });
+  }
+
+  Future<void> _savePortfolioItem() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     if (_selectedCategory == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a category')),
@@ -113,7 +197,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     if (_selectedImages.isEmpty && _imageUrls.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please add at least one product image'),
+          content: Text('Please add at least one image'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -129,52 +213,62 @@ class _AddProductScreenState extends State<AddProductScreen> {
       final userId = FirebaseAuth.instance.currentUser!.uid;
       final now = DateTime.now();
       List<String> finalImageUrls = List.from(_imageUrls);
-      
+      List<String> finalVideoUrls = List.from(_videoUrls);
+
       // Upload selected images
       if (_selectedImages.isNotEmpty) {
-        for (int i = 0; i < _selectedImages.length; i++) {
-          String? url;
-          if (kIsWeb && i < _selectedImageBytes.length) {
-            url = await _cloudinaryService.uploadImageBytes(
-              _selectedImageBytes[i],
-              folder: 'products',
-            );
-          } else {
-            final bytes = await _selectedImages[i].readAsBytes();
-            url = await _cloudinaryService.uploadImageBytes(
-              bytes,
-              folder: 'products',
-            );
-          }
+        for (var image in _selectedImages) {
+          final url = await _cloudinaryService.uploadImage(
+            image,
+            folder: 'portfolio',
+          );
           if (url != null) {
             finalImageUrls.add(url);
           }
         }
       }
-      
-      final product = ProductModel(
-        id: '', // Will be set by Firestore
+
+      // Upload selected videos
+      if (_selectedVideos.isNotEmpty) {
+        for (var video in _selectedVideos) {
+          final url = await _cloudinaryService.uploadVideo(
+            video,
+            folder: 'portfolio',
+          );
+          if (url != null) {
+            finalVideoUrls.add(url);
+          }
+        }
+      }
+
+      final portfolioItem = PortfolioItem(
+        id: widget.portfolioItem?.id ?? '',
         userId: userId,
-        name: _nameController.text.trim(),
+        title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
-        price: double.parse(_priceController.text.trim()),
         images: finalImageUrls,
+        videos: finalVideoUrls,
         category: _selectedCategory!,
-        stock: int.parse(_stockController.text.trim()),
-        isAvailable: true,
-        rating: 0.0,
-        reviewCount: 0,
-        createdAt: now,
+        tags: _skills,
+        likes: widget.portfolioItem?.likes ?? 0,
+        views: widget.portfolioItem?.views ?? 0,
+        createdAt: widget.portfolioItem?.createdAt ?? now,
         updatedAt: now,
       );
 
-      await _firestoreService.createProduct(product);
+      if (widget.portfolioItem == null) {
+        await _portfolioService.createPortfolioItem(portfolioItem);
+      } else {
+        await _portfolioService.updatePortfolioItem(portfolioItem);
+      }
 
       if (mounted) {
-        Navigator.pop(context, true);
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Product added successfully!'),
+          SnackBar(
+            content: Text(widget.portfolioItem == null
+                ? 'Portfolio item added successfully!'
+                : 'Portfolio item updated successfully!'),
             backgroundColor: Colors.green,
           ),
         );
@@ -183,7 +277,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error adding product: $e'),
+            content: Text('Error saving portfolio item: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -201,12 +295,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<app_auth.AuthProvider>(context);
-    
-    // CRITICAL: Only skilled persons can sell products
+
     if (!authProvider.isSkilledPerson) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Add Product'),
+          title: const Text('Add Portfolio Item'),
           backgroundColor: Colors.red,
         ),
         body: Center(
@@ -223,7 +316,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  'Only skilled persons can sell products. Customers and companies can browse and purchase products.',
+                  'Only skilled persons can manage their portfolio.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 16, color: Colors.grey),
                 ),
@@ -239,77 +332,21 @@ class _AddProductScreenState extends State<AddProductScreen> {
       );
     }
 
-    // CRITICAL: Check Aadhaar verification
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    if (userProvider.currentProfile == null && authProvider.currentUser != null) {
-      userProvider.loadProfile(authProvider.currentUser!.uid);
-    }
-    final isVerified = userProvider.currentProfile?.isVerified ?? false;
-    if (!isVerified) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Add Product', style: TextStyle(color: Colors.white)),
-          iconTheme: const IconThemeData(color: Colors.white),
-          flexibleSpace: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFFE91E63), Color(0xFFFF9800)],
-              ),
-            ),
-          ),
-        ),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.security, size: 80, color: Colors.orange),
-                const SizedBox(height: 20),
-                const Text(
-                  'Verification Required',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'You need to complete Aadhaar verification before you can sell products. '
-                  'Please go to your profile and complete the verification process.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE91E63)),
-                  child: const Text('Go Back', style: TextStyle(color: Colors.white)),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Product', style: TextStyle(color: Colors.white)),
-        iconTheme: const IconThemeData(color: Colors.white),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFFE91E63), Color(0xFFFF9800)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
+        title: Text(
+          widget.portfolioItem == null ? 'Add Portfolio Item' : 'Edit Portfolio Item',
+          style: const TextStyle(color: Colors.white),
         ),
+        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: Colors.teal,
       ),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Product Name
+            // Title
             Card(
               elevation: 2,
               child: Padding(
@@ -318,26 +355,26 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Product Name',
+                      'Title',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFFE91E63),
+                        color: Colors.teal,
                       ),
                     ),
                     const SizedBox(height: 8),
                     TextFormField(
-                      controller: _nameController,
+                      controller: _titleController,
                       decoration: InputDecoration(
-                        hintText: 'Enter product name',
+                        hintText: 'e.g., Custom Wedding Cake',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        prefixIcon: const Icon(Icons.shopping_bag),
+                        prefixIcon: const Icon(Icons.title),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Please enter product name';
+                          return 'Please enter a title';
                         }
                         return null;
                       },
@@ -361,7 +398,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFFE91E63),
+                        color: Colors.teal,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -374,7 +411,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         ),
                         prefixIcon: const Icon(Icons.category),
                       ),
-                      items: _categories.map((category) {
+                      items: AppConstants.categories.map((category) {
                         return DropdownMenuItem(
                           value: category,
                           child: Text(category),
@@ -384,12 +421,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         setState(() {
                           _selectedCategory = value;
                         });
-                      },
-                      validator: (value) {
-                        if (value == null) {
-                          return 'Please select a category';
-                        }
-                        return null;
                       },
                     ),
                   ],
@@ -411,23 +442,23 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFFE91E63),
+                        color: Colors.teal,
                       ),
                     ),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _descriptionController,
                       decoration: InputDecoration(
-                        hintText: 'Describe your product',
+                        hintText: 'Describe your work and the skills used',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
                         prefixIcon: const Icon(Icons.description),
                       ),
-                      maxLines: 4,
+                      maxLines: 5,
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Please enter product description';
+                          return 'Please enter a description';
                         }
                         return null;
                       },
@@ -438,99 +469,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Price and Stock
-            Row(
-              children: [
-                Expanded(
-                  child: Card(
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Price',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFE91E63),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            controller: _priceController,
-                            decoration: InputDecoration(
-                              hintText: '₹ 0.00',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              prefixIcon: const Icon(Icons.currency_rupee),
-                            ),
-                            keyboardType: TextInputType.number,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Enter price';
-                              }
-                              if (double.tryParse(value) == null) {
-                                return 'Invalid price';
-                              }
-                              return null;
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Card(
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Stock',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFE91E63),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            controller: _stockController,
-                            decoration: InputDecoration(
-                              hintText: '0',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              prefixIcon: const Icon(Icons.inventory),
-                            ),
-                            keyboardType: TextInputType.number,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Enter stock';
-                              }
-                              if (int.tryParse(value) == null) {
-                                return 'Invalid';
-                              }
-                              return null;
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Image Upload with Preview
+            // Skill Tags
             Card(
               elevation: 2,
               child: Padding(
@@ -542,15 +481,65 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
-                          'Product Images',
+                          'Skill Tags',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFFE91E63),
+                            color: Colors.teal,
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: _addSkill,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add Skill'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _skills.map((skill) {
+                        return Chip(
+                          label: Text(skill),
+                          onDeleted: () => _removeSkill(skill),
+                          deleteIcon: const Icon(Icons.close, size: 18),
+                          backgroundColor: Colors.teal.shade50,
+                        );
+                      }).toList(),
+                    ),
+                    if (_skills.isEmpty)
+                      const Text(
+                        'Add relevant skills to help customers find your work',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Images Upload
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Portfolio Images',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.teal,
                           ),
                         ),
                         Text(
-                          '${_selectedImages.length + _imageUrls.length}/5',
+                          '${_selectedImages.length + _imageUrls.length}/10',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey[600],
@@ -559,7 +548,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    
+
                     // Image Preview Grid
                     if (_selectedImages.isNotEmpty || _imageUrls.isNotEmpty)
                       SizedBox(
@@ -569,7 +558,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           itemCount: _imageUrls.length + _selectedImages.length,
                           itemBuilder: (context, index) {
                             if (index < _imageUrls.length) {
-                              // Display uploaded URLs
                               return Stack(
                                 children: [
                                   Container(
@@ -607,7 +595,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                 ],
                               );
                             } else {
-                              // Display selected files
                               final fileIndex = index - _imageUrls.length;
                               return Stack(
                                 children: [
@@ -619,7 +606,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(color: Colors.grey[300]!),
                                       image: DecorationImage(
-                                        image: MemoryImage(_selectedImageBytes[fileIndex]),
+                                        image: FileImage(_selectedImages[fileIndex]),
                                         fit: BoxFit.cover,
                                       ),
                                     ),
@@ -649,21 +636,21 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           },
                         ),
                       ),
-                    
+
                     if (_selectedImages.isNotEmpty || _imageUrls.isNotEmpty)
                       const SizedBox(height: 12),
-                    
+
                     // Add Images Button
                     InkWell(
-                      onTap: (_selectedImages.length + _imageUrls.length < 5)
+                      onTap: (_selectedImages.length + _imageUrls.length < 10)
                           ? _pickImages
                           : null,
                       child: Container(
                         height: 100,
                         decoration: BoxDecoration(
                           border: Border.all(
-                            color: (_selectedImages.length + _imageUrls.length < 5)
-                                ? const Color(0xFFE91E63)
+                            color: (_selectedImages.length + _imageUrls.length < 10)
+                                ? Colors.teal
                                 : Colors.grey[400]!,
                             width: 2,
                             style: BorderStyle.solid,
@@ -678,18 +665,18 @@ class _AddProductScreenState extends State<AddProductScreen> {
                               Icon(
                                 Icons.add_photo_alternate,
                                 size: 40,
-                                color: (_selectedImages.length + _imageUrls.length < 5)
-                                    ? const Color(0xFFE91E63)
+                                color: (_selectedImages.length + _imageUrls.length < 10)
+                                    ? Colors.teal
                                     : Colors.grey,
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                (_selectedImages.length + _imageUrls.length < 5)
+                                (_selectedImages.length + _imageUrls.length < 10)
                                     ? 'Tap to add images'
-                                    : 'Maximum 5 images',
+                                    : 'Maximum 10 images',
                                 style: TextStyle(
-                                  color: (_selectedImages.length + _imageUrls.length < 5)
-                                      ? const Color(0xFFE91E63)
+                                  color: (_selectedImages.length + _imageUrls.length < 10)
+                                      ? Colors.teal
                                       : Colors.grey,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -703,17 +690,96 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+
+            // Videos Upload
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Portfolio Videos (Optional)',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.teal,
+                          ),
+                        ),
+                        Text(
+                          '${_selectedVideos.length + _videoUrls.length}/3',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Video List
+                    if (_selectedVideos.isNotEmpty || _videoUrls.isNotEmpty)
+                      Column(
+                        children: [
+                          ..._videoUrls.asMap().entries.map((entry) {
+                            return ListTile(
+                              leading: const Icon(Icons.video_library, color: Colors.teal),
+                              title: Text('Video ${entry.key + 1}'),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                onPressed: () => _removeUploadedVideo(entry.key),
+                              ),
+                            );
+                          }),
+                          ..._selectedVideos.asMap().entries.map((entry) {
+                            return ListTile(
+                              leading: const Icon(Icons.video_file, color: Colors.teal),
+                              title: Text('New Video ${entry.key + 1}'),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                onPressed: () => _removeVideo(entry.key),
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+
+                    // Add Video Button
+                    ElevatedButton.icon(
+                      onPressed: (_selectedVideos.length + _videoUrls.length < 3)
+                          ? _pickVideo
+                          : null,
+                      icon: const Icon(Icons.video_call),
+                      label: Text(
+                        (_selectedVideos.length + _videoUrls.length < 3)
+                            ? 'Add Video'
+                            : 'Maximum 3 videos',
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 32),
 
             // Save Button
             ElevatedButton(
-              onPressed: _isLoading ? null : _saveProduct,
+              onPressed: _isLoading ? null : _savePortfolioItem,
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
-                backgroundColor: const Color(0xFFE91E63),
+                backgroundColor: Colors.teal,
                 foregroundColor: Colors.white,
               ),
               child: _isLoading
@@ -725,16 +791,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         strokeWidth: 2,
                       ),
                     )
-                  : const Text(
-                      'Add Product',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  : Text(
+                      widget.portfolioItem == null
+                          ? 'Add to Portfolio'
+                          : 'Update Portfolio Item',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
             ),
           ],
         ),
       ),
-      // Upload overlay
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       bottomSheet: _isUploading
           ? Container(
               width: double.infinity,
@@ -746,7 +812,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   CircularProgressIndicator(color: Colors.white),
                   SizedBox(width: 16),
                   Text(
-                    'Uploading images...',
+                    'Uploading media...',
                     style: TextStyle(color: Colors.white, fontSize: 16),
                   ),
                 ],

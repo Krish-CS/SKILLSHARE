@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'dart:typed_data';
 import '../../providers/user_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/skilled_user_profile.dart';
@@ -24,20 +26,28 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
   final _bioController = TextEditingController();
   final _skillController = TextEditingController();
   final _aadhaarController = TextEditingController();
+  final _customCategoryController = TextEditingController();
+  final _locationController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   final CloudinaryService _cloudinaryService = CloudinaryService();
+  final FirestoreService _firestoreService = FirestoreService();
   
   String? _selectedCategory;
   List<String> _skills = [];
+  List<String> _skillSuggestions = []; // Global skill suggestions
   bool _isLoading = true;
   bool _isUploading = false;
   bool _isVerified = false;
+  bool _isVerifying = false; // Separate flag for verification
   String _verificationStatus = 'pending';
+  String _uploadStatusMessage = 'Saving profile...';
   
   // Image variables
   File? _profileImage;
+  Uint8List? _profileImageBytes;
   String? _profileImageUrl;
   List<File> _portfolioImages = [];
+  List<Uint8List> _portfolioImageBytes = [];
   List<String> _portfolioImageUrls = [];
 
   final List<String> _categories = [
@@ -50,6 +60,10 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
     'Photography',
     'Videography',
     'Editing',
+    ...AppConstants.categories.where((c) => ![
+      'Home Baking', 'Handicrafts', 'Content Creation', 'Beauty & Wellness',
+      'Carpentry', 'Tailoring', 'Photography', 'Videography', 'Editing', 'Other'
+    ].contains(c)),
     'Other',
   ];
 
@@ -66,7 +80,16 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
     if (userProvider.currentProfile != null) {
       final profile = userProvider.currentProfile!;
       _bioController.text = profile.bio;
-      _selectedCategory = profile.category;
+      _locationController.text = profile.address ?? '';
+      
+      // Handle custom category - if not in list, set as Other + custom
+      if (profile.category != null && !_categories.contains(profile.category)) {
+        _selectedCategory = 'Other';
+        _customCategoryController.text = profile.category!;
+      } else {
+        _selectedCategory = profile.category;
+      }
+      
       _skills = List.from(profile.skills);
       _profileImageUrl = profile.profilePicture;
       _portfolioImageUrls = List.from(profile.portfolioImages);
@@ -79,6 +102,13 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       }
     }
 
+    // Load global skill suggestions
+    try {
+      _skillSuggestions = await _firestoreService.getCustomSkills();
+    } catch (e) {
+      debugPrint('Error loading skill suggestions: $e');
+    }
+
     setState(() {
       _isLoading = false;
     });
@@ -89,15 +119,24 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
     _bioController.dispose();
     _skillController.dispose();
     _aadhaarController.dispose();
+    _customCategoryController.dispose();
+    _locationController.dispose();
     super.dispose();
   }
 
-  void _addSkill() {
-    if (_skillController.text.isNotEmpty) {
+  void _addSkill([String? skillName]) {
+    final skill = (skillName ?? _skillController.text).trim();
+    if (skill.isNotEmpty && !_skills.contains(skill)) {
       setState(() {
-        _skills.add(_skillController.text.trim());
+        _skills.add(skill);
         _skillController.clear();
       });
+      // Add to global suggestions in background
+      _firestoreService.addCustomSkill(skill);
+      // Add to local suggestions list so it appears immediately
+      if (!_skillSuggestions.any((s) => s.toLowerCase() == skill.toLowerCase())) {
+        _skillSuggestions.add(skill);
+      }
     }
   }
 
@@ -120,9 +159,16 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       // User cancelled - do nothing
       if (image == null) return;
 
-      setState(() {
-        _profileImage = File(image.path);
-      });
+      if (kIsWeb) {
+        final bytes = await image.readAsBytes();
+        setState(() {
+          _profileImageBytes = bytes;
+        });
+      } else {
+        setState(() {
+          _profileImage = File(image.path);
+        });
+      }
     } on Exception catch (e) {
       // Only show error for actual errors, not cancellations
       if (mounted && e.toString().isNotEmpty && !e.toString().contains('cancel')) {
@@ -135,7 +181,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
 
   Future<void> _pickPortfolioImages() async {
     try {
-      if (_portfolioImages.length + _portfolioImageUrls.length >= 10) {
+      if ((kIsWeb ? _portfolioImageBytes.length : _portfolioImages.length) + _portfolioImageUrls.length >= 10) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Maximum 10 portfolio images allowed')),
         );
@@ -151,12 +197,23 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       // User cancelled - do nothing
       if (images.isEmpty) return;
 
-      setState(() {
-        final remaining = 10 - (_portfolioImages.length + _portfolioImageUrls.length);
-        _portfolioImages.addAll(
-          images.take(remaining).map((img) => File(img.path)),
-        );
-      });
+      final remaining = 10 - (_portfolioImages.length + _portfolioImageUrls.length);
+      if (kIsWeb) {
+        final selected = images.take(remaining).toList();
+        final bytesList = <Uint8List>[];
+        for (final img in selected) {
+          bytesList.add(await img.readAsBytes());
+        }
+        setState(() {
+          _portfolioImageBytes.addAll(bytesList);
+        });
+      } else {
+        setState(() {
+          _portfolioImages.addAll(
+            images.take(remaining).map((img) => File(img.path)),
+          );
+        });
+      }
     } on Exception catch (e) {
       // Only show error for actual errors, not cancellations
       if (mounted && e.toString().isNotEmpty && !e.toString().contains('cancel')) {
@@ -169,7 +226,11 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
 
   void _removePortfolioImage(int index) {
     setState(() {
-      _portfolioImages.removeAt(index);
+      if (kIsWeb) {
+        _portfolioImageBytes.removeAt(index);
+      } else {
+        _portfolioImages.removeAt(index);
+      }
     });
   }
 
@@ -244,42 +305,43 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
     }
 
     setState(() {
-      _isUploading = true;
+      _isVerifying = true;
     });
 
     try {
-      // Simulate API call for verification
+      // Simulate API call for Aadhaar verification
       await Future.delayed(const Duration(seconds: 2));
       
-      // In production, you would call actual Aadhaar verification API
-      // For now, we'll mark as verified
       setState(() {
         _isVerified = true;
         _verificationStatus = 'verified';
+        _isVerifying = false;
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Aadhaar verified successfully!'),
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Aadhaar verification successful!'),
+              ],
+            ),
             backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
+        setState(() => _isVerifying = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Verification failed: $e'),
             backgroundColor: Colors.red,
           ),
         );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUploading = false;
-        });
       }
     }
   }
@@ -294,6 +356,19 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       return;
     }
 
+    // Resolve actual category name (handle "Other" → custom text)
+    String finalCategory = _selectedCategory!;
+    if (_selectedCategory == 'Other') {
+      final custom = _customCategoryController.text.trim();
+      if (custom.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter your custom category')),
+        );
+        return;
+      }
+      finalCategory = custom;
+    }
+
     if (_skills.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please add at least one skill')),
@@ -303,6 +378,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
 
     setState(() {
       _isUploading = true;
+      _uploadStatusMessage = 'Saving profile...';
     });
 
     try {
@@ -313,22 +389,43 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       List<String> finalPortfolioUrls = List.from(_portfolioImageUrls);
 
       // Upload profile image if selected
-      if (_profileImage != null) {
-        finalProfileUrl = await _cloudinaryService.uploadImage(
-          _profileImage!,
-          folder: 'profiles',
-        );
+      if (_profileImage != null || _profileImageBytes != null) {
+        setState(() => _uploadStatusMessage = 'Uploading profile photo...');
+        if (kIsWeb && _profileImageBytes != null) {
+          finalProfileUrl = await _cloudinaryService.uploadImageBytes(
+            _profileImageBytes!,
+            folder: 'profiles',
+          );
+        } else if (_profileImage != null) {
+          finalProfileUrl = await _cloudinaryService.uploadImage(
+            _profileImage!,
+            folder: 'profiles',
+          );
+        }
       }
 
       // Upload portfolio images if selected
-      if (_portfolioImages.isNotEmpty) {
-        for (var image in _portfolioImages) {
-          final url = await _cloudinaryService.uploadImage(
-            image,
-            folder: 'portfolios',
-          );
-          if (url != null) {
-            finalPortfolioUrls.add(url);
+      if (_portfolioImages.isNotEmpty || _portfolioImageBytes.isNotEmpty) {
+        setState(() => _uploadStatusMessage = 'Uploading portfolio images...');
+        if (kIsWeb) {
+          for (final bytes in _portfolioImageBytes) {
+            final url = await _cloudinaryService.uploadImageBytes(
+              bytes,
+              folder: 'portfolios',
+            );
+            if (url != null) {
+              finalPortfolioUrls.add(url);
+            }
+          }
+        } else {
+          for (var image in _portfolioImages) {
+            final url = await _cloudinaryService.uploadImage(
+              image,
+              folder: 'portfolios',
+            );
+            if (url != null) {
+              finalPortfolioUrls.add(url);
+            }
           }
         }
       }
@@ -343,17 +440,25 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
         };
       }
 
+      setState(() => _uploadStatusMessage = 'Saving to database...');
+
+      // Get user name to denormalize into skilled_users collection
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final userName = authProvider.currentUser?.name;
+
       final profile = SkilledUserProfile(
         userId: widget.userId,
+        name: userName,
         bio: _bioController.text.trim(),
         skills: _skills,
-        category: _selectedCategory,
+        category: finalCategory,
         profilePicture: finalProfileUrl ?? '',
         verificationStatus: _verificationStatus,
         visibility: _isVerified ? AppConstants.visibilityPublic : AppConstants.visibilityPrivate,
         portfolioImages: finalPortfolioUrls,
         portfolioVideos: currentProfile?.portfolioVideos ?? [],
         verificationData: verificationData,
+        address: _locationController.text.trim().isNotEmpty ? _locationController.text.trim() : null,
         rating: currentProfile?.rating ?? 0.0,
         reviewCount: currentProfile?.reviewCount ?? 0,
         projectCount: currentProfile?.projectCount ?? 0,
@@ -471,18 +576,20 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                           onTap: _showImageSourceDialog,
                           child: Stack(
                             children: [
-                              CircleAvatar(
+                                CircleAvatar(
                                 radius: 60,
                                 backgroundColor: Colors.grey[300],
-                                backgroundImage: _profileImage != null
+                                backgroundImage: (kIsWeb && _profileImageBytes != null)
+                                  ? MemoryImage(_profileImageBytes!)
+                                  : (_profileImage != null
                                     ? FileImage(_profileImage!)
                                     : (_profileImageUrl != null && _profileImageUrl!.isNotEmpty
-                                        ? NetworkImage(_profileImageUrl!)
-                                        : null) as ImageProvider?,
-                                child: (_profileImage == null && (_profileImageUrl == null || _profileImageUrl!.isEmpty))
-                                    ? const Icon(Icons.person, size: 60, color: Colors.grey)
-                                    : null,
-                              ),
+                                      ? NetworkImage(_profileImageUrl!)
+                                      : null)) as ImageProvider?,
+                                child: (_profileImage == null && _profileImageBytes == null && (_profileImageUrl == null || _profileImageUrl!.isEmpty))
+                                  ? const Icon(Icons.person, size: 60, color: Colors.grey)
+                                  : null,
+                                ),
                               Positioned(
                                 bottom: 0,
                                 right: 0,
@@ -514,7 +621,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
 
                   // Category Selection
                   DropdownButtonFormField<String>(
-                    value: _selectedCategory,
+                    value: _categories.contains(_selectedCategory) ? _selectedCategory : null,
                     decoration: const InputDecoration(
                       labelText: 'Category',
                       prefixIcon: Icon(Icons.category),
@@ -528,6 +635,9 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                 onChanged: (value) {
                   setState(() {
                     _selectedCategory = value;
+                    if (value != 'Other') {
+                      _customCategoryController.clear();
+                    }
                   });
                 },
                 validator: (value) {
@@ -535,7 +645,37 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                   return null;
                 },
               ),
+              // Custom category input when "Other" is selected
+              if (_selectedCategory == 'Other') ...[
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _customCategoryController,
+                  decoration: const InputDecoration(
+                    labelText: 'Your Custom Category',
+                    hintText: 'e.g., Mehndi Design, Pottery, etc.',
+                    prefixIcon: Icon(Icons.edit),
+                  ),
+                  validator: (value) {
+                    if (_selectedCategory == 'Other' && (value == null || value.trim().isEmpty)) {
+                      return 'Please enter your category';
+                    }
+                    return null;
+                  },
+                ),
+              ],
               const SizedBox(height: 16),
+
+              // Location
+              TextFormField(
+                controller: _locationController,
+                decoration: const InputDecoration(
+                  labelText: 'Location',
+                  hintText: 'City, State',
+                  prefixIcon: Icon(Icons.location_on),
+                ),
+              ),
+              const SizedBox(height: 16),
+
               // Bio
               TextFormField(
                 controller: _bioController,
@@ -553,27 +693,62 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                 },
               ),
               const SizedBox(height: 16),
-              // Skills
+
+              // Skills with suggestions
               const Text(
                 'Skills',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Type a skill or pick from suggestions below',
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
               const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _skillController,
-                      decoration: const InputDecoration(
-                        hintText: 'Add a skill',
-                      ),
-                      onSubmitted: (_) => _addSkill(),
+                    child: Autocomplete<String>(
+                      optionsBuilder: (TextEditingValue textEditingValue) {
+                        if (textEditingValue.text.isEmpty) {
+                          return const Iterable<String>.empty();
+                        }
+                        return _skillSuggestions.where((s) =>
+                          s.toLowerCase().contains(textEditingValue.text.toLowerCase()) &&
+                          !_skills.contains(s)
+                        );
+                      },
+                      onSelected: (String selection) {
+                        _addSkill(selection);
+                        _skillController.clear();
+                      },
+                      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                        // Sync custom controller reference
+                        controller.addListener(() {
+                          if (_skillController.text != controller.text) {
+                            _skillController.text = controller.text;
+                          }
+                        });
+                        return TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          decoration: InputDecoration(
+                            hintText: 'Add a skill',
+                            suffixIcon: IconButton(
+                              onPressed: () {
+                                _addSkill(controller.text);
+                                controller.clear();
+                              },
+                              icon: const Icon(Icons.add_circle, color: Color(0xFF2196F3)),
+                            ),
+                          ),
+                          onSubmitted: (_) {
+                            _addSkill(controller.text);
+                            controller.clear();
+                          },
+                        );
+                      },
                     ),
-                  ),
-                  IconButton(
-                    onPressed: _addSkill,
-                    icon: const Icon(Icons.add),
-                    color: const Color(0xFF2196F3),
                   ),
                 ],
               ),
@@ -587,9 +762,32 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                     onDeleted: () => _removeSkill(skill),
                     backgroundColor: const Color(0xFF2196F3).withValues(alpha: 0.1),
                     labelStyle: const TextStyle(color: Color(0xFF2196F3)),
+                    deleteIconColor: const Color(0xFF2196F3),
                   );
                 }).toList(),
               ),
+              // Show suggested skills from global list
+              if (_skillSuggestions.where((s) => !_skills.contains(s)).isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('Suggested skills:', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: _skillSuggestions
+                      .where((s) => !_skills.contains(s))
+                      .take(10)
+                      .map((skill) => ActionChip(
+                            label: Text(skill, style: const TextStyle(fontSize: 12)),
+                            onPressed: () {
+                              setState(() => _skills.add(skill));
+                            },
+                            backgroundColor: Colors.grey[100],
+                            side: BorderSide(color: Colors.grey[300]!),
+                          ))
+                      .toList(),
+                ),
+              ],
               const SizedBox(height: 24),
               
               // Portfolio Images Section
@@ -605,12 +803,12 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
               const SizedBox(height: 12),
               
               // Display existing portfolio images
-              if (_portfolioImageUrls.isNotEmpty || _portfolioImages.isNotEmpty)
+              if (_portfolioImageUrls.isNotEmpty || _portfolioImages.isNotEmpty || _portfolioImageBytes.isNotEmpty)
                 SizedBox(
                   height: 120,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
-                    itemCount: _portfolioImageUrls.length + _portfolioImages.length,
+                    itemCount: _portfolioImageUrls.length + (kIsWeb ? _portfolioImageBytes.length : _portfolioImages.length),
                     itemBuilder: (context, index) {
                       if (index < _portfolioImageUrls.length) {
                         // Display existing URL images
@@ -661,7 +859,9 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(12),
                                 image: DecorationImage(
-                                  image: FileImage(_portfolioImages[fileIndex]),
+                                  image: kIsWeb
+                                      ? MemoryImage(_portfolioImageBytes[fileIndex])
+                                      : FileImage(_portfolioImages[fileIndex]) as ImageProvider,
                                   fit: BoxFit.cover,
                                 ),
                               ),
@@ -696,12 +896,12 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
               
               // Add Portfolio Images Button
               OutlinedButton.icon(
-                onPressed: (_portfolioImages.length + _portfolioImageUrls.length < 10)
+                onPressed: ((kIsWeb ? _portfolioImageBytes.length : _portfolioImages.length) + _portfolioImageUrls.length < 10)
                     ? _pickPortfolioImages
                     : null,
                 icon: const Icon(Icons.add_photo_alternate),
                 label: Text(
-                  'Add Portfolio Images (${_portfolioImages.length + _portfolioImageUrls.length}/10)',
+                  'Add Portfolio Images (${(kIsWeb ? _portfolioImageBytes.length : _portfolioImages.length) + _portfolioImageUrls.length}/10)',
                 ),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFF2196F3),
@@ -814,19 +1014,19 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       ),
       
       // Loading overlay
-      if (_isUploading)
+      if (_isUploading || _isVerifying)
         Container(
           color: Colors.black.withValues(alpha: 0.5),
-          child: const Center(
+          child: Center(
             child: Card(
               child: Padding(
-                padding: EdgeInsets.all(24),
+                padding: const EdgeInsets.all(24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text('Uploading images...'),
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text(_isVerifying ? 'Verifying Aadhaar...' : _uploadStatusMessage),
                   ],
                 ),
               ),

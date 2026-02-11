@@ -22,6 +22,23 @@ class PortfolioService {
     }
   }
 
+  /// Create a new portfolio item (alias for addPortfolioItem)
+  Future<void> createPortfolioItem(PortfolioItem item) async {
+    try {
+      final Map<String, dynamic> itemMap = item.toMap();
+      if (item.id.isEmpty) {
+        // Create new document
+        await _firestore.collection(_portfolioCollection).add(itemMap);
+      } else {
+        // Update existing document
+        await _firestore.collection(_portfolioCollection).doc(item.id).set(itemMap);
+      }
+    } catch (e) {
+      throw Exception('Failed to create portfolio item: $e');
+    }
+  }
+
+
   /// Update an existing portfolio item
   Future<void> updatePortfolioItem(PortfolioItem item) async {
     try {
@@ -49,12 +66,17 @@ class PortfolioService {
       final snapshot = await _firestore
           .collection(_portfolioCollection)
           .where('userId', isEqualTo: userId)
-          .orderBy('createdAt', descending: true)
           .get();
 
-      return snapshot.docs
+      // Convert to list and sort on client side to avoid composite index requirement
+      final items = snapshot.docs
           .map((doc) => PortfolioItem.fromMap(doc.data(), doc.id))
           .toList();
+      
+      // Sort by createdAt descending (newest first)
+      items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      
+      return items;
     } catch (e) {
       throw Exception('Failed to get user portfolio: $e');
     }
@@ -79,12 +101,19 @@ class PortfolioService {
         query = query.where('tags', arrayContainsAny: tags);
       }
 
-      query = query.orderBy('createdAt', descending: true).limit(limit);
-
+      // Remove orderBy to avoid composite index requirement
       final snapshot = await query.get();
-      return snapshot.docs
+      
+      // Convert to list and sort on client side
+      final items = snapshot.docs
           .map((doc) => PortfolioItem.fromMap(doc.data() as Map<String, dynamic>, doc.id))
           .toList();
+      
+      // Sort by createdAt descending (newest first)
+      items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      
+      // Apply limit on client side
+      return items.take(limit).toList();
     } catch (e) {
       throw Exception('Failed to get public portfolio items: $e');
     }

@@ -4,6 +4,8 @@ import '../../providers/auth_provider.dart';
 import '../../utils/app_constants.dart';
 import '../main_navigation.dart';
 import '../profile/skilled_user_setup_screen.dart';
+import '../profile/customer_setup_screen.dart';
+import '../profile/company_setup_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -50,17 +52,29 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (!mounted) return;
 
     if (success) {
-      // If skilled user, go directly to profile setup
+      final userId = authProvider.currentUser!.uid;
+      
+      // Navigate to role-specific setup screen
       if (_selectedRole == AppConstants.roleSkilledUser) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => SkilledUserSetupScreen(
-              userId: authProvider.currentUser!.uid,
-            ),
+            builder: (_) => SkilledUserSetupScreen(userId: userId),
+          ),
+        );
+      } else if (_selectedRole == AppConstants.roleCustomer) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => CustomerSetupScreen(userId: userId),
+          ),
+        );
+      } else if (_selectedRole == AppConstants.roleCompany) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => CompanySetupScreen(userId: userId),
           ),
         );
       } else {
-        // For customers/companies, go to main navigation
+        // Fallback to main navigation
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const MainNavigation()),
         );
@@ -74,18 +88,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sign Up'),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Sign Up'),
+        ),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                 const Text(
                   'Create Account',
                   style: TextStyle(
@@ -252,6 +268,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

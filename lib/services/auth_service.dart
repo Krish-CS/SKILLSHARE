@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
@@ -204,22 +205,41 @@ class AuthService {
       final doc = await _firestore
           .collection(AppConstants.usersCollection)
           .doc(uid)
-          .get();
+          .get(const GetOptions(source: Source.serverAndCache));
 
       if (!doc.exists) return null;
 
       return UserModel.fromMap(doc.data()!, uid);
     } catch (e) {
-      return null;
+      debugPrint('getUserData error: $e');
+      // Try again from cache only on failure
+      try {
+        final doc = await _firestore
+            .collection(AppConstants.usersCollection)
+            .doc(uid)
+            .get(const GetOptions(source: Source.cache));
+        
+        if (!doc.exists) return null;
+        return UserModel.fromMap(doc.data()!, uid);
+      } catch (cacheError) {
+        debugPrint('Cache read error: $cacheError');
+        return null;
+      }
     }
   }
 
   // Update user profile
   Future<void> updateUserProfile(UserModel user) async {
-    await _firestore
-        .collection(AppConstants.usersCollection)
-        .doc(user.uid)
-        .update(user.toMap());
+    try {
+      await _firestore
+          .collection(AppConstants.usersCollection)
+          .doc(user.uid)
+          .update(user.toMap());
+    } catch (e) {
+      debugPrint('updateUserProfile error: $e');
+      // Silently fail on web if offline
+      rethrow;
+    }
   }
 
   // Reset password

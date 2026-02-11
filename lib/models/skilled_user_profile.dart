@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SkilledUserProfile {
   final String userId;
+  final String? name;
   final String bio;
   final List<String> skills;
   final String? category; // Home Baking, Handicrafts, Content Creation, etc.
@@ -27,6 +28,7 @@ class SkilledUserProfile {
 
   SkilledUserProfile({
     required this.userId,
+    this.name,
     required this.bio,
     required this.skills,
     this.category,
@@ -54,6 +56,7 @@ class SkilledUserProfile {
   factory SkilledUserProfile.fromMap(Map<String, dynamic> map, String userId) {
     return SkilledUserProfile(
       userId: userId,
+      name: map['name'],
       bio: map['bio'] ?? '',
       skills: List<String>.from(map['skills'] ?? []),
       category: map['category'],
@@ -81,6 +84,7 @@ class SkilledUserProfile {
 
   Map<String, dynamic> toMap() {
     return {
+      if (name != null) 'name': name,
       'bio': bio,
       'skills': skills,
       'category': category,
@@ -107,6 +111,7 @@ class SkilledUserProfile {
   }
 
   SkilledUserProfile copyWith({
+    String? name,
     String? bio,
     List<String>? skills,
     String? category,
@@ -130,6 +135,7 @@ class SkilledUserProfile {
   }) {
     return SkilledUserProfile(
       userId: userId,
+      name: name ?? this.name,
       bio: bio ?? this.bio,
       skills: skills ?? this.skills,
       category: category ?? this.category,

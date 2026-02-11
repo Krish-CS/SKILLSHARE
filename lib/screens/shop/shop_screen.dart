@@ -5,7 +5,11 @@ import '../../models/product_model.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/product_card.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/user_provider.dart';
 import '../../utils/user_roles.dart';
+import '../../utils/app_constants.dart';
+import '../../utils/app_helpers.dart';
+import '../../utils/web_image_loader.dart';
 import 'add_product_screen.dart';
 import 'product_detail_screen.dart';
 
@@ -31,14 +35,7 @@ class _ShopScreenState extends State<ShopScreen> {
 
   final List<String> _categories = [
     'All',
-    'Tools',
-    'Materials',
-    'Equipment',
-    'Electronics',
-    'Furniture',
-    'Crafts',
-    'Services',
-    'Other',
+    ...AppConstants.categories,
   ];
 
   @override
@@ -167,20 +164,12 @@ class _ShopScreenState extends State<ShopScreen> {
               });
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () async {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const AddProductScreen(),
-                ),
-              );
-              if (result == true) {
-                _loadProducts();
-              }
-            },
-          ),
+          // Only show add button for verified skilled persons
+          if (authProvider.isSkilledPerson)
+            IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: () => _handleAddProduct(context),
+            ),
         ],
       ),
       body: Column(
@@ -247,13 +236,13 @@ class _ShopScreenState extends State<ShopScreen> {
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
-                            value: _selectedCategory ?? 'All',
+                            value: _categories.contains(_selectedCategory ?? 'All') ? (_selectedCategory ?? 'All') : 'All',
                             isExpanded: true,
                             icon: const Icon(Icons.arrow_drop_down),
                             items: _categories.map((category) {
                               return DropdownMenuItem(
                                 value: category,
-                                child: Text(category),
+                                child: Text(category, overflow: TextOverflow.ellipsis),
                               );
                             }).toList(),
                             onChanged: _onCategorySelected,
@@ -343,19 +332,35 @@ class _ShopScreenState extends State<ShopScreen> {
   }
 
   Widget _buildGridView() {
-    return GridView.builder(
-      padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.7,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-      ),
-      itemCount: _filteredProducts.length,
-      itemBuilder: (context, index) {
-        return ProductCard(
-          product: _filteredProducts[index],
-          onTap: () => _navigateToProductDetail(_filteredProducts[index]),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Responsive: calculate columns based on available width
+        final width = constraints.maxWidth;
+        int crossAxisCount;
+        if (width > 1200) {
+          crossAxisCount = 5;
+        } else if (width > 900) {
+          crossAxisCount = 4;
+        } else if (width > 600) {
+          crossAxisCount = 3;
+        } else {
+          crossAxisCount = 2;
+        }
+        return GridView.builder(
+          padding: const EdgeInsets.all(16),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            childAspectRatio: 0.75,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+          ),
+          itemCount: _filteredProducts.length,
+          itemBuilder: (context, index) {
+            return ProductCard(
+              product: _filteredProducts[index],
+              onTap: () => _navigateToProductDetail(_filteredProducts[index]),
+            );
+          },
         );
       },
     );
@@ -383,21 +388,20 @@ class _ShopScreenState extends State<ShopScreen> {
                   // Product Image
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      product.images.isNotEmpty
-                          ? product.images.first
-                          : 'https://via.placeholder.com/100',
+                    child: SizedBox(
                       width: 100,
                       height: 100,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          width: 100,
-                          height: 100,
-                          color: Colors.grey[300],
-                          child: const Icon(Icons.image_not_supported),
-                        );
-                      },
+                      child: product.images.isNotEmpty
+                          ? WebImageLoader.loadImage(
+                              imageUrl: product.images.first,
+                              width: 100,
+                              height: 100,
+                              fit: BoxFit.cover,
+                            )
+                          : Container(
+                              color: Colors.grey[300],
+                              child: const Icon(Icons.image, color: Colors.grey),
+                            ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -443,7 +447,7 @@ class _ShopScreenState extends State<ShopScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              '\$${product.price.toStringAsFixed(2)}',
+                              AppHelpers.formatCurrency(product.price),
                               style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -594,30 +598,27 @@ class _ShopScreenState extends State<ShopScreen> {
             ),
           ),
           if (_searchQuery.isEmpty && (_selectedCategory == null || _selectedCategory == 'All'))
-            Padding(
-              padding: const EdgeInsets.only(top: 24),
-              child: ElevatedButton.icon(
-                onPressed: () async {
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const AddProductScreen(),
+            Builder(
+              builder: (context) {
+                final auth = Provider.of<AuthProvider>(context, listen: false);
+                if (!auth.isSkilledPerson) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 24),
+                  child: ElevatedButton.icon(
+                    onPressed: () => _handleAddProduct(context),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Product'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFE91E63),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
                     ),
-                  );
-                  if (result == true) {
-                    _loadProducts();
-                  }
-                },
-                icon: const Icon(Icons.add),
-                label: const Text('Add Product'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFE91E63),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
                   ),
-                ),
-              ),
+                );
+              },
             ),
         ],
       ),
@@ -633,6 +634,63 @@ class _ShopScreenState extends State<ShopScreen> {
     );
     
     // If product was deleted, reload
+    if (result == true) {
+      _loadProducts();
+    }
+  }
+
+  /// Handles add product with verification check
+  Future<void> _handleAddProduct(BuildContext context) async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+
+    if (!authProvider.isSkilledPerson) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Only skilled persons can add products'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Load profile to check verification
+    if (userProvider.currentProfile == null && authProvider.currentUser != null) {
+      await userProvider.loadProfile(authProvider.currentUser!.uid);
+    }
+
+    if (userProvider.currentProfile?.isVerified != true) {
+      if (!context.mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.security, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Verification Required'),
+            ],
+          ),
+          content: const Text(
+            'You need to complete Aadhaar verification before you can sell products. '
+            'Please go to your profile and complete the verification process.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    if (!context.mounted) return;
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AddProductScreen()),
+    );
     if (result == true) {
       _loadProducts();
     }

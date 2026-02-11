@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../models/job_model.dart';
 import '../../models/user_model.dart';
@@ -9,6 +8,7 @@ import '../../services/firestore_service.dart';
 import '../../services/chat_service.dart';
 import '../../utils/app_helpers.dart';
 import '../../utils/app_constants.dart';
+import '../../utils/web_image_loader.dart';
 import '../profile/profile_screen.dart';
 import '../chat/chat_detail_screen.dart';
 
@@ -457,12 +457,10 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                           children: [
                             CircleAvatar(
                               radius: 30,
-                              backgroundImage: _employer!.profilePhoto != null
-                                  ? CachedNetworkImageProvider(_employer!.profilePhoto!)
-                                  : null,
-                              child: _employer!.profilePhoto == null
+                              backgroundImage: WebImageLoader.getImageProvider(_employer!.profilePhoto),
+                              child: _employer!.profilePhoto == null || _employer!.profilePhoto!.isEmpty
                                   ? Text(
-                                      _employer!.name[0].toUpperCase(),
+                                      _employer!.name.isNotEmpty ? _employer!.name[0].toUpperCase() : 'E',
                                       style: const TextStyle(fontSize: 24),
                                     )
                                   : null,
@@ -611,12 +609,10 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                 },
                                 child: CircleAvatar(
                                   radius: 25,
-                                  backgroundImage: profile.profilePicture != null
-                                      ? CachedNetworkImageProvider(profile.profilePicture!)
-                                      : null,
-                                  child: profile.profilePicture == null
+                                  backgroundImage: WebImageLoader.getImageProvider(profile.profilePicture),
+                                  child: profile.profilePicture == null || profile.profilePicture!.isEmpty
                                       ? Text(
-                                          applicantUser?.name[0].toUpperCase() ?? 'U',
+                                          applicantUser?.name.isNotEmpty == true ? applicantUser!.name[0].toUpperCase() : 'U',
                                           style: const TextStyle(fontSize: 20),
                                         )
                                       : null,

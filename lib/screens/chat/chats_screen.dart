@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/chat_model.dart';
 import '../../services/chat_service.dart';
 import '../../utils/app_helpers.dart';
+import '../../utils/web_image_loader.dart';
 import 'chat_detail_screen.dart';
 
 class ChatsScreen extends StatefulWidget {
@@ -237,12 +237,10 @@ class _ChatsScreenState extends State<ChatsScreen> {
               children: [
                 CircleAvatar(
                   radius: 28,
-                  backgroundImage: photo != null
-                      ? CachedNetworkImageProvider(photo)
-                      : null,
-                  child: photo == null
+                  backgroundImage: WebImageLoader.getImageProvider(photo),
+                  child: photo == null || photo.isEmpty
                       ? Text(
-                          name[0].toUpperCase(),
+                          name.isNotEmpty ? name[0].toUpperCase() : 'U',
                           style: const TextStyle(fontSize: 24),
                         )
                       : null,

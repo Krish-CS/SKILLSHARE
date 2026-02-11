@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/user_model.dart';
 import '../../models/skilled_user_profile.dart';
+import '../../models/customer_profile.dart';
+import '../../models/company_profile.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../services/firestore_service.dart';
+import '../../utils/web_image_loader.dart';
+import '../../utils/user_roles.dart';
 import 'profile_screen.dart';
 import 'edit_skilled_profile_screen.dart';
+import 'customer_setup_screen.dart';
+import 'company_setup_screen.dart';
 import '../auth/login_screen.dart';
 
 class ProfileTabScreen extends StatefulWidget {
@@ -21,7 +26,10 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   UserModel? _currentUser;
   SkilledUserProfile? _skilledProfile;
+  CustomerProfile? _customerProfile;
+  CompanyProfile? _companyProfile;
   bool _isLoading = true;
+  String? _profilePhotoUrl;
 
   @override
   void initState() {
@@ -37,28 +45,37 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
       if (userId != null) {
         // Get fresh user data from Firestore
         _currentUser = await _firestoreService.getUserById(userId);
+        _profilePhotoUrl = _currentUser?.profilePhoto;
         
-        // Try to load skilled user profile
-        try {
-          _skilledProfile = await _firestoreService.getSkilledUserProfile(userId);
-          
-          // If skilled profile exists but user role is not skilled_user, fix it
-          if (_skilledProfile != null && _currentUser?.role != 'skilled_user') {
-            debugPrint('Fixing user role - skilled profile exists but role is ${_currentUser?.role}');
-            await _firestoreService.updateUserRole(userId, 'skilled_user');
-            _currentUser = await _firestoreService.getUserById(userId); // Reload
+        // Load role-specific profile for photo
+        final role = _currentUser?.role;
+        if (role == UserRoles.skilledPerson) {
+          try {
+            _skilledProfile = await _firestoreService.getSkilledUserProfile(userId);
+            if (_skilledProfile?.profilePicture != null && _skilledProfile!.profilePicture!.isNotEmpty) {
+              _profilePhotoUrl = _skilledProfile!.profilePicture;
+            }
+          } catch (e) {
+            debugPrint('No skilled profile yet: $e');
           }
-          
-          // Update currentUser profilePhoto from skilled profile if available
-          if (_skilledProfile?.profilePicture != null && 
-              _skilledProfile!.profilePicture!.isNotEmpty &&
-              _currentUser != null) {
-            _currentUser = _currentUser!.copyWith(
-              profilePhoto: _skilledProfile!.profilePicture,
-            );
+        } else if (role == UserRoles.customer) {
+          try {
+            _customerProfile = await _firestoreService.getCustomerProfile(userId);
+            if (_customerProfile?.profilePicture != null && _customerProfile!.profilePicture!.isNotEmpty) {
+              _profilePhotoUrl = _customerProfile!.profilePicture;
+            }
+          } catch (e) {
+            debugPrint('No customer profile yet: $e');
           }
-        } catch (e) {
-          debugPrint('No skilled profile yet: $e');
+        } else if (role == UserRoles.company) {
+          try {
+            _companyProfile = await _firestoreService.getCompanyProfile(userId);
+            if (_companyProfile?.logoUrl != null && _companyProfile!.logoUrl!.isNotEmpty) {
+              _profilePhotoUrl = _companyProfile!.logoUrl;
+            }
+          } catch (e) {
+            debugPrint('No company profile yet: $e');
+          }
         }
       }
     } catch (e) {
@@ -170,42 +187,12 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                       child: CircleAvatar(
                         radius: 60,
                         backgroundColor: Colors.white,
-                        child: _skilledProfile?.profilePicture != null && 
-                               _skilledProfile!.profilePicture!.isNotEmpty
-                            ? ClipOval(
-                                child: CachedNetworkImage(
-                                  imageUrl: _skilledProfile!.profilePicture!,
-                                  width: 120,
-                                  height: 120,
-                                  fit: BoxFit.cover,
-                                  placeholder: (context, url) => const CircularProgressIndicator(),
-                                  errorWidget: (context, url, error) => const Icon(
-                                    Icons.person,
-                                    size: 60,
-                                    color: Color(0xFF9C27B0),
-                                  ),
-                                ),
-                              )
-                            : _currentUser?.profilePhoto != null
-                                ? ClipOval(
-                                    child: CachedNetworkImage(
-                                      imageUrl: _currentUser!.profilePhoto!,
-                                      width: 120,
-                                      height: 120,
-                                      fit: BoxFit.cover,
-                                      placeholder: (context, url) => const CircularProgressIndicator(),
-                                      errorWidget: (context, url, error) => const Icon(
-                                        Icons.person,
-                                        size: 60,
-                                        color: Color(0xFF9C27B0),
-                                      ),
-                                    ),
-                                  )
-                                : const Icon(
-                                    Icons.person,
-                                    size: 60,
-                                    color: Color(0xFF9C27B0),
-                                  ),
+                        child: WebImageLoader.loadAvatar(
+                          imageUrl: _profilePhotoUrl,
+                          radius: 60,
+                          fallbackText: _currentUser?.name,
+                          backgroundColor: const Color(0xFF9C27B0),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -236,7 +223,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        _currentUser?.role == 'skilled_user' ? 'Skilled User' : 'Customer',
+                        UserRoles.getDisplayName(_currentUser?.role ?? UserRoles.customer),
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w500,
@@ -267,23 +254,33 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                 },
               ),
 
-              // Edit Profile for Skilled Users
-              if (_currentUser?.role == 'skilled_user')
-                _buildMenuTile(
-                  icon: Icons.edit,
-                  title: 'Edit Professional Profile',
-                  onTap: () async {
-                    if (_currentUser != null) {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => EditSkilledProfileScreen(),
-                        ),
-                      );
-                      _loadUserData();
-                    }
-                  },
-                ),
+              // Edit Profile - available for ALL roles
+              _buildMenuTile(
+                icon: Icons.edit,
+                title: _currentUser?.role == UserRoles.skilledPerson
+                    ? 'Edit Professional Profile'
+                    : _currentUser?.role == UserRoles.company
+                        ? 'Edit Company Profile'
+                        : 'Edit Profile',
+                onTap: () async {
+                  if (_currentUser == null) return;
+                  Widget editScreen;
+                  if (_currentUser!.role == UserRoles.skilledPerson) {
+                    editScreen = EditSkilledProfileScreen();
+                  } else if (_currentUser!.role == UserRoles.customer) {
+                    editScreen = CustomerSetupScreen(userId: _currentUser!.uid);
+                  } else if (_currentUser!.role == UserRoles.company) {
+                    editScreen = CompanySetupScreen(userId: _currentUser!.uid);
+                  } else {
+                    editScreen = EditSkilledProfileScreen();
+                  }
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => editScreen),
+                  );
+                  _loadUserData();
+                },
+              ),
 
               const Divider(height: 32),
 

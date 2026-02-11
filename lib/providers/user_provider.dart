@@ -1,18 +1,31 @@
 import 'package:flutter/material.dart';
 import '../models/skilled_user_profile.dart';
+import '../models/customer_profile.dart';
+import '../models/company_profile.dart';
 import '../models/review_model.dart';
 import '../services/firestore_service.dart';
 
 class UserProvider with ChangeNotifier {
   final FirestoreService _firestoreService = FirestoreService();
 
-  SkilledUserProfile? _currentProfile;
+  // Role-specific profiles
+  SkilledUserProfile? _skilledProfile;
+  CustomerProfile? _customerProfile;
+  CompanyProfile? _companyProfile;
+  
   List<SkilledUserProfile> _verifiedUsers = [];
   List<ReviewModel> _reviews = [];
   bool _isLoading = false;
   String? _error;
 
-  SkilledUserProfile? get currentProfile => _currentProfile;
+  // Getters for role-specific profiles
+  SkilledUserProfile? get skilledProfile => _skilledProfile;
+  CustomerProfile? get customerProfile => _customerProfile;
+  CompanyProfile? get companyProfile => _companyProfile;
+  
+  // Legacy getter for backward compatibility
+  SkilledUserProfile? get currentProfile => _skilledProfile;
+  
   List<SkilledUserProfile> get verifiedUsers => _verifiedUsers;
   List<ReviewModel> get reviews => _reviews;
   bool get isLoading => _isLoading;
@@ -24,7 +37,7 @@ class UserProvider with ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      _currentProfile = await _firestoreService.getSkilledUserProfile(userId);
+      _skilledProfile = await _firestoreService.getSkilledUserProfile(userId);
 
       _isLoading = false;
       notifyListeners();
@@ -42,7 +55,81 @@ class UserProvider with ChangeNotifier {
       notifyListeners();
 
       await _firestoreService.updateSkilledUserProfile(profile);
-      _currentProfile = profile;
+      _skilledProfile = profile;
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Load customer profile
+  Future<void> loadCustomerProfile(String userId) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      _customerProfile = await _firestoreService.getCustomerProfile(userId);
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Update customer profile
+  Future<bool> updateCustomerProfile(CustomerProfile profile) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      await _firestoreService.updateCustomerProfile(profile);
+      _customerProfile = profile;
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Load company profile
+  Future<void> loadCompanyProfile(String userId) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      _companyProfile = await _firestoreService.getCompanyProfile(userId);
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Update company profile
+  Future<bool> updateCompanyProfile(CompanyProfile profile) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      await _firestoreService.updateCompanyProfile(profile);
+      _companyProfile = profile;
 
       _isLoading = false;
       notifyListeners();

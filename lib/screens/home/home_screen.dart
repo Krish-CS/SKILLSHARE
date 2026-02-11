@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/user_provider.dart';
 import '../../models/skilled_user_profile.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/user_roles.dart';
 import '../../utils/add_dummy_profiles.dart';
+import '../../utils/web_image_loader.dart';
 import '../../widgets/expert_card.dart';
+import '../../services/firestore_service.dart';
 import '../profile/profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -27,15 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<String> _categories = [
     'All',
-    'Home Baking',
-    'Handicrafts',
-    'Content Creation',
-    'Beauty & Wellness',
-    'Carpentry',
-    'Tailoring',
-    'Photography',
-    'Videography',
-    'Editing',
+    ...AppConstants.categories,
   ];
 
   @override
@@ -57,9 +50,45 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadData() async {
     try {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
       await userProvider.loadVerifiedUsers();
+
+      // Load current user's role-specific profile to get profile photo
+      final currentUser = authProvider.currentUser;
+      if (currentUser != null) {
+        final role = currentUser.role;
+        if (role == UserRoles.skilledPerson || role == 'skilled_user') {
+          await userProvider.loadProfile(currentUser.uid);
+        } else if (role == UserRoles.customer) {
+          await userProvider.loadCustomerProfile(currentUser.uid);
+        } else if (role == UserRoles.company) {
+          await userProvider.loadCompanyProfile(currentUser.uid);
+        }
+
+        // Auto-sync: if users collection has no photo but role profile does, sync it
+        if (currentUser.profilePhoto == null || currentUser.profilePhoto!.isEmpty) {
+          String? rolePhoto;
+          if (userProvider.skilledProfile?.profilePicture != null &&
+              userProvider.skilledProfile!.profilePicture!.isNotEmpty) {
+            rolePhoto = userProvider.skilledProfile!.profilePicture;
+          } else if (userProvider.customerProfile?.profilePicture != null &&
+              userProvider.customerProfile!.profilePicture!.isNotEmpty) {
+            rolePhoto = userProvider.customerProfile!.profilePicture;
+          } else if (userProvider.companyProfile?.logoUrl != null &&
+              userProvider.companyProfile!.logoUrl!.isNotEmpty) {
+            rolePhoto = userProvider.companyProfile!.logoUrl;
+          }
+          if (rolePhoto != null) {
+            try {
+              await FirestoreService().updateUserProfilePhoto(currentUser.uid, rolePhoto);
+              final updatedUser = currentUser.copyWith(profilePhoto: rolePhoto);
+              await authProvider.updateProfile(updatedUser);
+            } catch (_) {}
+          }
+        }
+      }
     } catch (e) {
-      print('Error loading data: $e');
+      debugPrint('Error loading data: $e');
     }
   }
 
@@ -108,20 +137,24 @@ class _HomeScreenState extends State<HomeScreen> {
     final userProvider = Provider.of<UserProvider>(context);
     final currentUser = authProvider.currentUser;
     final userRole = authProvider.userRole ?? UserRoles.customer;
+
+    // Resolve profile photo: users collection → role-specific profile → null
+    String? profilePhotoUrl = currentUser?.profilePhoto;
+    if (profilePhotoUrl == null || profilePhotoUrl.isEmpty) {
+      profilePhotoUrl = userProvider.skilledProfile?.profilePicture
+          ?? userProvider.customerProfile?.profilePicture
+          ?? userProvider.companyProfile?.logoUrl;
+    }
     
-    // Role-based title and subtitle
-    String screenTitle = 'SkillShare';
-    String screenSubtitle = '';
-    
-    if (userRole == UserRoles.skilledPerson) {
-      screenTitle = 'Dashboard';
-      screenSubtitle = 'View your performance & opportunities';
-    } else if (userRole == UserRoles.company) {
-      screenTitle = 'Find Talent';
-      screenSubtitle = 'Hire skilled professionals for your projects';
+    // Role-based greeting
+    String greeting = 'Welcome';
+    final hour = DateTime.now().hour;
+    if (hour < 12) {
+      greeting = 'Good Morning';
+    } else if (hour < 17) {
+      greeting = 'Good Afternoon';
     } else {
-      screenTitle = 'Discover Skills';
-      screenSubtitle = 'Find experts for your needs';
+      greeting = 'Good Evening';
     }
 
     return Scaffold(
@@ -130,72 +163,24 @@ class _HomeScreenState extends State<HomeScreen> {
           onRefresh: _loadData,
           child: CustomScrollView(
             slivers: [
-              // App Bar with gradient background
+              // Compact App Bar — title + avatar only
               SliverAppBar(
-                expandedHeight: 200,
-                floating: false,
+                expandedHeight: 0,
+                floating: true,
                 pinned: true,
+                toolbarHeight: 56,
                 flexibleSpace: Container(
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Color(0xFF9C27B0), Color(0xFFE91E63)],
+                      colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
                   ),
-                  child: FlexibleSpaceBar(
-                    title: Text(
-                      screenTitle,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    background: Padding(
-                      padding: const EdgeInsets.only(top: 60, left: 16, right: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Search Bar
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(30),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.1),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: TextField(
-                              controller: _searchController,
-                              decoration: InputDecoration(
-                                hintText: 'Search skills, categories...',
-                                border: InputBorder.none,
-                                icon: const Icon(Icons.search, color: Colors.grey),
-                                suffixIcon: _searchQuery.isNotEmpty
-                                    ? IconButton(
-                                        icon: const Icon(Icons.clear, color: Colors.grey),
-                                        onPressed: () {
-                                          _searchController.clear();
-                                        },
-                                      )
-                                    : null,
-                              ),
-                              onSubmitted: (value) {
-                                setState(() {
-                                  _searchQuery = value.toLowerCase();
-                                });
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                ),
+                title: const Text(
+                  'SkillShare',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 20),
                 ),
                 actions: [
                   IconButton(
@@ -204,47 +189,146 @@ class _HomeScreenState extends State<HomeScreen> {
                       // TODO: Navigate to notifications
                     },
                   ),
-                  IconButton(
-                    icon: CircleAvatar(
-                      radius: 16,
-                      backgroundColor: Colors.white,
-                      child: currentUser?.profilePhoto != null
-                          ? ClipOval(
-                              child: CachedNetworkImage(
-                                imageUrl: currentUser!.profilePhoto!,
-                                width: 32,
-                                height: 32,
-                                fit: BoxFit.cover,
-                                errorWidget: (context, url, error) => Text(
-                                  currentUser.name[0].toUpperCase(),
-                                  style: const TextStyle(
-                                    color: Color(0xFF9C27B0),
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            )
-                          : Text(
-                              currentUser?.name[0].toUpperCase() ?? 'U',
-                              style: const TextStyle(
-                                color: Color(0xFF9C27B0),
-                                fontWeight: FontWeight.bold,
-                              ),
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: GestureDetector(
+                      onTap: () {
+                        if (currentUser != null) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ProfileScreen(userId: currentUser.uid),
                             ),
+                          );
+                        }
+                      },
+                      child: WebImageLoader.loadAvatar(
+                        imageUrl: profilePhotoUrl,
+                        radius: 18,
+                        fallbackText: currentUser?.name ?? 'U',
+                        backgroundColor: Colors.white,
+                        textColor: const Color(0xFF6A11CB),
+                      ),
                     ),
-                    onPressed: () {
-                      if (currentUser != null) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ProfileScreen(userId: currentUser.uid),
-                          ),
-                        );
-                      }
-                    },
                   ),
                 ],
               ),
+
+              // Welcome + Search Section (always visible)
+              SliverToBoxAdapter(
+                child: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '$greeting, ${(currentUser?.name ?? 'there').split(' ').first}!',
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          userRole == UserRoles.skilledPerson
+                              ? 'Manage your profile and connect with clients'
+                              : 'Find skilled professionals near you',
+                          style: const TextStyle(fontSize: 14, color: Colors.white70),
+                        ),
+                        const SizedBox(height: 16),
+                        // Search bar — persistent, not inside FlexibleSpaceBar
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(30),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.1),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: TextField(
+                            controller: _searchController,
+                            decoration: InputDecoration(
+                              hintText: 'Search skills, categories...',
+                              border: InputBorder.none,
+                              icon: const Icon(Icons.search, color: Colors.grey),
+                              suffixIcon: _searchQuery.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear, color: Colors.grey),
+                                      onPressed: () => _searchController.clear(),
+                                    )
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // Skilled Person Quick Stats Dashboard
+              if (userRole == UserRoles.skilledPerson && userProvider.skilledProfile != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Your Dashboard', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            _buildStatChip(Icons.star, userProvider.skilledProfile!.rating.toStringAsFixed(1), 'Rating', Colors.amber),
+                            const SizedBox(width: 8),
+                            _buildStatChip(Icons.rate_review, '${userProvider.skilledProfile!.reviewCount}', 'Reviews', const Color(0xFF2196F3)),
+                            const SizedBox(width: 8),
+                            _buildStatChip(Icons.work, '${userProvider.skilledProfile!.projectCount}', 'Projects', const Color(0xFF4CAF50)),
+                            const SizedBox(width: 8),
+                            _buildStatChip(Icons.photo_library, '${userProvider.skilledProfile!.portfolioImages.length}', 'Portfolio', const Color(0xFF9C27B0)),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(
+                              userProvider.skilledProfile!.visibility == 'public' ? Icons.visibility : Icons.visibility_off,
+                              size: 14,
+                              color: userProvider.skilledProfile!.visibility == 'public' ? Colors.green : Colors.orange,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Profile: ${userProvider.skilledProfile!.visibility == 'public' ? 'Public' : 'Private'}',
+                              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                            ),
+                            const SizedBox(width: 12),
+                            Icon(
+                              userProvider.skilledProfile!.isVerified ? Icons.verified : Icons.pending,
+                              size: 14,
+                              color: userProvider.skilledProfile!.isVerified ? Colors.green : Colors.orange,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              userProvider.skilledProfile!.isVerified ? 'Verified' : 'Not Verified',
+                              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        const Divider(),
+                      ],
+                    ),
+                  ),
+                ),
 
               // Categories with Filter
               SliverToBoxAdapter(
@@ -559,6 +643,27 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildStatChip(IconData icon, String value, String label, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(height: 4),
+            Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: color)),
+            Text(label, style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildGridCard(SkilledUserProfile profile) {
     return GestureDetector(
       onTap: () {
@@ -597,9 +702,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         backgroundColor: Colors.white,
                         child: CircleAvatar(
                           radius: 42,
-                          backgroundImage: (profile.profilePicture != null && profile.profilePicture!.isNotEmpty)
-                              ? CachedNetworkImageProvider(profile.profilePicture!)
-                              : null,
+                          backgroundImage: WebImageLoader.getImageProvider(profile.profilePicture),
                           child: (profile.profilePicture == null || profile.profilePicture!.isEmpty)
                               ? const Icon(Icons.person, size: 40, color: Colors.grey)
                               : null,
@@ -629,7 +732,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      profile.category ?? 'Professional',
+                      profile.name ?? 'Professional',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
@@ -637,6 +740,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    if (profile.category != null)
+                      Text(
+                        profile.category!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     const SizedBox(height: 4),
                     Row(
                       children: [

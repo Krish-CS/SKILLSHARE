@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/auth_provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../providers/auth_provider.dart' as app_auth;
+import '../../providers/user_provider.dart';
 import '../../utils/user_roles.dart';
+import '../../models/product_model.dart';
+import '../../services/firestore_service.dart';
+import '../../utils/web_image_loader.dart';
+import '../shop/add_product_screen.dart';
+import '../shop/product_detail_screen.dart';
 
 /// My Shop Screen - For Skilled Persons Only
 /// Skilled persons can manage their online shop here
@@ -15,11 +22,19 @@ class MyShopScreen extends StatefulWidget {
 
 class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final FirestoreService _firestoreService = FirestoreService();
+  List<ProductModel> _products = [];
+  bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _loadProducts();
   }
 
   @override
@@ -28,33 +43,60 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
     super.dispose();
   }
 
+  Future<void> _loadProducts() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      if (userId != null) {
+        final products = await _firestoreService.getUserProducts(userId);
+        setState(() {
+          _products = products;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error loading products: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
+    final authProvider = Provider.of<app_auth.AuthProvider>(context);
     
-    // STRICT ROLE CHECK: Only skilled persons can access this
+    // CRITICAL: Only skilled persons can manage shop
     if (!authProvider.isSkilledPerson) {
       return _buildAccessDenied();
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Shop'),
-        backgroundColor: Colors.orange,
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Products', icon: Icon(Icons.inventory)),
-            Tab(text: 'Orders', icon: Icon(Icons.shopping_cart)),
-            Tab(text: 'Analytics', icon: Icon(Icons.analytics)),
-          ],
-        ),
+        title: const Text('My Shop', style: TextStyle(color: Colors.white)),
+        backgroundColor: const Color(0xFFE91E63),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () => _openShopSettings(context),
           ),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          indicatorColor: Colors.white,
+          tabs: const [
+            Tab(text: 'Products', icon: Icon(Icons.inventory_2)),
+            Tab(text: 'Orders', icon: Icon(Icons.list_alt)),
+            Tab(text: 'Analytics', icon: Icon(Icons.analytics)),
+          ],
+        ),
       ),
       body: TabBarView(
         controller: _tabController,
@@ -67,7 +109,7 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
       floatingActionButton: _tabController.index == 0
           ? FloatingActionButton.extended(
               onPressed: () => _addProduct(context),
-              backgroundColor: Colors.orange,
+              backgroundColor: const Color(0xFFE91E63),
               icon: const Icon(Icons.add),
               label: const Text('Add Product'),
             )
@@ -82,187 +124,206 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
         backgroundColor: Colors.red,
       ),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.store_mall_directory_outlined, size: 80, color: Colors.red),
-            const SizedBox(height: 20),
-            const Text(
-              'Shop Access Restricted',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 40),
-              child: Text(
-                'Only skilled persons can manage their shop. Customers and companies can browse the Shop section to purchase products.',
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.block, size: 80, color: Colors.red),
+              const SizedBox(height: 20),
+              const Text(
+                'Access Denied',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Only skilled persons can manage their shop. Customers and companies can browse the shop instead.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildProductsTab() {
-    return CustomScrollView(
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.all(16),
-          sliver: SliverToBoxAdapter(
-            child: Card(
-              color: Colors.orange.shade50,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.store, color: Colors.orange),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Shop Management',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.orange.shade900,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      '• Add products you want to sell\n'
-                      '• Upload quality product images\n'
-                      '• Set competitive prices\n'
-                      '• Manage inventory and stock levels\n'
-                      '• Respond to customer inquiries',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                  ],
-                ),
-              ),
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFFE91E63)),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 60, color: Colors.red),
+            const SizedBox(height: 16),
+            Text(_errorMessage!, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _loadProducts,
+              child: const Text('Retry'),
             ),
-          ),
+          ],
         ),
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) => _buildProductCard(index),
-              childCount: 5, // TODO: Replace with actual products
+      );
+    }
+
+    if (_products.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.store_outlined, size: 80, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No products in your shop yet',
+              style: TextStyle(fontSize: 18, color: Colors.grey[600]),
             ),
-          ),
+            const SizedBox(height: 8),
+            Text(
+              'Tap the + button to add your first product',
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+            ),
+          ],
         ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
-      ],
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadProducts,
+      color: const Color(0xFFE91E63),
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _products.length,
+        itemBuilder: (context, index) => _buildProductCard(_products[index]),
+      ),
     );
   }
 
-  Widget _buildProductCard(int index) {
-    final isAvailable = index % 2 == 0;
-    
+  Widget _buildProductCard(ProductModel product) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
-        leading: Container(
-          width: 60,
-          height: 60,
-          color: Colors.grey.shade300,
-          child: Icon(
-            Icons.shopping_bag,
-            size: 30,
-            color: Colors.grey.shade500,
-          ),
+        contentPadding: const EdgeInsets.all(12),
+        leading: product.images.isNotEmpty
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: WebImageLoader.loadImage(
+                  imageUrl: product.images.first,
+                  width: 80,
+                  height: 80,
+                  fit: BoxFit.cover,
+                ),
+              )
+            : Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.image, color: Colors.grey[600]),
+              ),
+        title: Text(
+          product.name,
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        title: Text('Product ${index + 1}'),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('₹${(index + 1) * 100}'),
             const SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(
-                  isAvailable ? Icons.check_circle : Icons.cancel,
-                  size: 14,
-                  color: isAvailable ? Colors.green : Colors.red,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  isAvailable ? 'In Stock' : 'Out of Stock',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isAvailable ? Colors.green : Colors.red,
-                  ),
-                ),
-              ],
+            Text('₹${product.price.toStringAsFixed(2)}'),
+            const SizedBox(height: 2),
+            Text(
+              'Stock: ${product.stock}',
+              style: TextStyle(
+                color: product.stock > 0 ? Colors.green : Colors.red,
+                fontSize: 12,
+              ),
             ),
           ],
         ),
-        trailing: PopupMenuButton(
-          itemBuilder: (context) => [
-            const PopupMenuItem(value: 'edit', child: Text('Edit')),
-            const PopupMenuItem(value: 'stock', child: Text('Manage Stock')),
-            const PopupMenuItem(value: 'delete', child: Text('Delete')),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.edit, color: Color(0xFFE91E63)),
+              onPressed: () => _editProduct(product),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.red),
+              onPressed: () => _deleteProduct(product),
+            ),
           ],
-          onSelected: (value) {
-            // TODO: Handle product actions
-          },
         ),
+        onTap: () => _viewProduct(product),
       ),
     );
   }
 
   Widget _buildOrdersTab() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _buildOrderCard('Order #1001', 'Pending', Colors.orange),
-        const SizedBox(height: 12),
-        _buildOrderCard('Order #1002', 'Processing', Colors.blue),
-        const SizedBox(height: 12),
-        _buildOrderCard('Order #1003', 'Shipped', Colors.purple),
-        const SizedBox(height: 12),
-        _buildOrderCard('Order #1004', 'Delivered', Colors.green),
-      ],
-    );
-  }
-
-  Widget _buildOrderCard(String orderId, String status, Color color) {
-    return Card(
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: color.withOpacity(0.1),
-          child: Icon(Icons.shopping_cart, color: color),
-        ),
-        title: Text(orderId),
-        subtitle: Text('Customer: John Doe\nTotal: ₹599'),
-        trailing: Chip(
-          label: Text(status),
-          backgroundColor: color.withOpacity(0.2),
-          labelStyle: TextStyle(color: color, fontWeight: FontWeight.bold),
-        ),
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.shopping_cart_outlined, size: 80, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          Text(
+            'Orders Management',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.grey[700]),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Order tracking coming soon',
+            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildAnalyticsTab() {
+    final totalProducts = _products.length;
+    final totalStock = _products.fold<int>(0, (sum, product) => sum + product.stock);
+    final averagePrice = _products.isEmpty
+        ? 0.0
+        : _products.fold<double>(0, (sum, product) => sum + product.price) / _products.length;
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _buildAnalyticsCard('Total Products', '15', Icons.inventory, Colors.blue),
+        _buildAnalyticsCard(
+          'Total Products',
+          '$totalProducts',
+          Icons.inventory,
+          const Color(0xFFE91E63),
+        ),
         const SizedBox(height: 12),
-        _buildAnalyticsCard('Total Sales', '₹12,500', Icons.attach_money, Colors.green),
+        _buildAnalyticsCard(
+          'Total Stock',
+          '$totalStock',
+          Icons.store,
+          Colors.blue,
+        ),
         const SizedBox(height: 12),
-        _buildAnalyticsCard('Pending Orders', '3', Icons.pending, Colors.orange),
+        _buildAnalyticsCard(
+          'Average Price',
+          '₹${averagePrice.toStringAsFixed(2)}',
+          Icons.currency_rupee,
+          Colors.green,
+        ),
         const SizedBox(height: 12),
-        _buildAnalyticsCard('Completed Orders', '24', Icons.check_circle, Colors.teal),
-        const SizedBox(height: 12),
-        _buildAnalyticsCard('Shop Views', '1,245', Icons.visibility, Colors.purple),
+        _buildAnalyticsCard(
+          'Products Out of Stock',
+          '${_products.where((p) => p.stock == 0).length}',
+          Icons.warning,
+          Colors.orange,
+        ),
       ],
     );
   }
@@ -278,7 +339,7 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
         trailing: Text(
           value,
           style: TextStyle(
-            fontSize: 20,
+            fontSize: 24,
             fontWeight: FontWeight.bold,
             color: color,
           ),
@@ -287,22 +348,143 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
     );
   }
 
-  void _addProduct(BuildContext context) {
-    // TODO: Navigate to add product screen
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Add product feature - Coming soon'),
-        backgroundColor: Colors.orange,
+  void _addProduct(BuildContext context) async {
+    // SECURITY: Check if user is verified before allowing shop/product creation
+    final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+
+    // Load profile if not already loaded
+    if (userProvider.currentProfile == null && authProvider.currentUser != null) {
+      await userProvider.loadProfile(authProvider.currentUser!.uid);
+    }
+
+    // Check verification status
+    if (userProvider.currentProfile?.isVerified != true) {
+      if (!context.mounted) return;
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.security, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Verification Required'),
+            ],
+          ),
+          content: const Text(
+            'You must verify your Aadhaar to open a shop and sell products. This ensures buyer safety and platform integrity.\n\n'
+            'Please complete your identity verification from your profile setup.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                // Navigate to verification screen
+                Navigator.pushNamed(context, '/skilled-setup');
+              },
+              child: const Text('Verify Now'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    // Verified - proceed to add product
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AddProductScreen(),
+      ),
+    );
+
+    if (result == true) {
+      _loadProducts(); // Refresh the list
+    }
+  }
+
+  void _editProduct(ProductModel product) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProductDetailScreen(product: product),
+      ),
+    );
+    if (result == true) {
+      _loadProducts();
+    }
+  }
+
+  void _viewProduct(ProductModel product) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProductDetailScreen(product: product),
       ),
     );
   }
 
+  Future<void> _deleteProduct(ProductModel product) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Product'),
+        content: Text('Are you sure you want to delete "${product.name}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await _firestoreService.deleteProduct(product.id);
+        _loadProducts();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Product deleted successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error deleting product: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   void _openShopSettings(BuildContext context) {
-    // TODO: Navigate to shop settings
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Shop settings - Coming soon'),
-        backgroundColor: Colors.orange,
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Shop Settings'),
+        content: const Text('Shop settings and customization coming soon!'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
       ),
     );
   }

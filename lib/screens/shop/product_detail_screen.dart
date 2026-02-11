@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../models/product_model.dart';
 import '../../models/user_model.dart';
 import '../../services/firestore_service.dart';
+import '../../utils/web_image_loader.dart';
 import '../profile/profile_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
@@ -132,19 +132,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               onTap: () => _viewFullscreenImage(index),
                               child: Hero(
                                 tag: 'product_${widget.product.id}_$index',
-                                child: CachedNetworkImage(
+                                child: WebImageLoader.loadImage(
                                   imageUrl: widget.product.images[index],
                                   fit: BoxFit.cover,
-                                  placeholder: (context, url) => Container(
-                                    color: Colors.grey[300],
-                                    child: const Center(
-                                      child: CircularProgressIndicator(),
-                                    ),
-                                  ),
-                                  errorWidget: (context, url, error) => Container(
-                                    color: Colors.grey[300],
-                                    child: const Icon(Icons.image_not_supported),
-                                  ),
                                 ),
                               ),
                             );
@@ -385,12 +375,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             children: [
                               CircleAvatar(
                                 radius: 30,
-                              backgroundImage: _seller!.profilePhoto != null
-                                  ? CachedNetworkImageProvider(_seller!.profilePhoto!)
-                                  : null,
-                              child: _seller!.profilePhoto == null
+                                backgroundImage: WebImageLoader.getImageProvider(_seller!.profilePhoto),
+                                child: _seller!.profilePhoto == null || _seller!.profilePhoto!.isEmpty
                                     ? Text(
-                                        _seller!.name[0].toUpperCase(),
+                                        _seller!.name.isNotEmpty ? _seller!.name[0].toUpperCase() : 'S',
                                         style: const TextStyle(fontSize: 24),
                                       )
                                     : null,
@@ -587,15 +575,9 @@ class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {
             child: Center(
               child: Hero(
                 tag: 'product_fullscreen_$index',
-                child: CachedNetworkImage(
+                child: WebImageLoader.loadImage(
                   imageUrl: widget.images[index],
                   fit: BoxFit.contain,
-                  placeholder: (context, url) => const Center(
-                    child: CircularProgressIndicator(color: Colors.white),
-                  ),
-                  errorWidget: (context, url, error) => const Center(
-                    child: Icon(Icons.error, color: Colors.white, size: 48),
-                  ),
                 ),
               ),
             ),

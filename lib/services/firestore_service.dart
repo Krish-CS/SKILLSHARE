@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/skilled_user_profile.dart';
+import '../models/customer_profile.dart';
+import '../models/company_profile.dart';
 import '../models/service_model.dart';
 import '../models/product_model.dart';
 import '../models/job_model.dart';
@@ -111,6 +113,66 @@ class FirestoreService {
         .toList();
   }
 
+  // ===== Customer Profile =====
+
+  Future<void> updateCustomerProfile(CustomerProfile profile) async {
+    await _firestore
+        .collection(AppConstants.customerProfilesCollection)
+        .doc(profile.userId)
+        .set(profile.toMap(), SetOptions(merge: true));
+  }
+
+  Future<CustomerProfile?> getCustomerProfile(String userId) async {
+    final doc = await _firestore
+        .collection(AppConstants.customerProfilesCollection)
+        .doc(userId)
+        .get();
+
+    if (!doc.exists) return null;
+    return CustomerProfile.fromMap(doc.data()!, userId);
+  }
+
+  Stream<CustomerProfile?> customerProfileStream(String userId) {
+    return _firestore
+        .collection(AppConstants.customerProfilesCollection)
+        .doc(userId)
+        .snapshots()
+        .map((doc) {
+      if (!doc.exists) return null;
+      return CustomerProfile.fromMap(doc.data()!, userId);
+    });
+  }
+
+  // ===== Company Profile =====
+
+  Future<void> updateCompanyProfile(CompanyProfile profile) async {
+    await _firestore
+        .collection(AppConstants.companyProfilesCollection)
+        .doc(profile.userId)
+        .set(profile.toMap(), SetOptions(merge: true));
+  }
+
+  Future<CompanyProfile?> getCompanyProfile(String userId) async {
+    final doc = await _firestore
+        .collection(AppConstants.companyProfilesCollection)
+        .doc(userId)
+        .get();
+
+    if (!doc.exists) return null;
+    return CompanyProfile.fromMap(doc.data()!, userId);
+  }
+
+  Stream<CompanyProfile?> companyProfileStream(String userId) {
+    return _firestore
+        .collection(AppConstants.companyProfilesCollection)
+        .doc(userId)
+        .snapshots()
+        .map((doc) {
+      if (!doc.exists) return null;
+      return CompanyProfile.fromMap(doc.data()!, userId);
+    });
+  }
+
   // ===== Services =====
 
   Future<String> createService(ServiceModel service) async {
@@ -132,6 +194,45 @@ class FirestoreService {
         .toList();
   }
 
+  Future<void> updateService(ServiceModel service) async {
+    await _firestore
+        .collection('services')
+        .doc(service.id)
+        .update(service.toMap());
+  }
+
+  Future<void> deleteService(String serviceId) async {
+    await _firestore
+        .collection('services')
+        .doc(serviceId)
+        .delete();
+  }
+
+  // ===== Custom Skills (global suggestions) =====
+
+  Future<void> addCustomSkill(String skill) async {
+    final normalized = skill.trim();
+    if (normalized.isEmpty) return;
+    // Use skill as doc ID (lowercase) to avoid duplicates
+    await _firestore
+        .collection('custom_skills')
+        .doc(normalized.toLowerCase())
+        .set({
+      'name': normalized,
+      'addedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<List<String>> getCustomSkills() async {
+    final snapshot = await _firestore
+        .collection('custom_skills')
+        .orderBy('name')
+        .get();
+    return snapshot.docs
+        .map((doc) => doc.data()['name'] as String? ?? doc.id)
+        .toList();
+  }
+
   // ===== Products =====
 
   Future<String> createProduct(ProductModel product) async {
@@ -148,10 +249,9 @@ class FirestoreService {
           .where('userId', isEqualTo: userId)
           .get();
 
-      // Filter and sort in memory to avoid index requirement
+      // Show ALL products for the owner (including unavailable ones)
       final products = snapshot.docs
           .map((doc) => ProductModel.fromMap(doc.data(), doc.id))
-          .where((product) => product.isAvailable)
           .toList();
       
       // Sort by createdAt descending
@@ -296,15 +396,16 @@ class FirestoreService {
 
   Future<List<ReviewModel>> getUserReviews(String userId, {int limit = 10}) async {
     final snapshot = await _firestore
-        .collection(AppConstants.reviewsCollection)
-        .where('skilledUserId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .get();
+      .collection(AppConstants.reviewsCollection)
+      .where('skilledUserId', isEqualTo: userId)
+      .get();
 
-    return snapshot.docs
-        .map((doc) => ReviewModel.fromMap(doc.data(), doc.id))
-        .toList();
+    final reviews = snapshot.docs
+      .map((doc) => ReviewModel.fromMap(doc.data(), doc.id))
+      .toList();
+
+    reviews.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return reviews.take(limit).toList();
   }
 
   // ===== Service Requests =====

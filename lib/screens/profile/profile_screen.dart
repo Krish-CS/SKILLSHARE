@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
@@ -8,11 +7,17 @@ import 'package:share_plus/share_plus.dart';
 import '../../services/firestore_service.dart';
 import '../../services/chat_service.dart';
 import '../../models/skilled_user_profile.dart';
+import '../../models/customer_profile.dart';
+import '../../models/company_profile.dart';
 import '../../models/review_model.dart';
+import '../../models/service_model.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../utils/app_constants.dart';
+import '../../utils/web_image_loader.dart';
 import 'skilled_user_setup_screen.dart';
+import 'customer_setup_screen.dart';
+import 'company_setup_screen.dart';
 import '../shop/add_product_screen.dart';
 import '../chat/chat_detail_screen.dart';
 
@@ -31,8 +36,11 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   late TabController _tabController;
   
   SkilledUserProfile? _profile;
+  CustomerProfile? _customerProfile;
+  CompanyProfile? _companyProfile;
   List<ReviewModel> _reviews = [];
   UserModel? _userData;
+  String? _userRole;
   bool _isLoading = true;
   
   // Check if user is viewing their own profile
@@ -57,21 +65,28 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     });
 
     try {
-      _profile = await _firestoreService.getSkilledUserProfile(widget.userId);
-      
       // Load user basic info
       try {
         _userData = await _firestoreService.getUserById(widget.userId);
+        _userRole = _userData?.role;
       } catch (e) {
         print('Could not load user data: $e');
       }
-      
-      // Try to load reviews, but don't fail if reviews collection doesn't exist or has permission issues
-      try {
-        _reviews = await _firestoreService.getUserReviews(widget.userId);
-      } catch (reviewError) {
-        print('Could not load reviews: $reviewError');
-        _reviews = []; // Set empty list if reviews fail
+
+      if (_userRole == AppConstants.roleCustomer) {
+        _customerProfile = await _firestoreService.getCustomerProfile(widget.userId);
+      } else if (_userRole == AppConstants.roleCompany) {
+        _companyProfile = await _firestoreService.getCompanyProfile(widget.userId);
+      } else {
+        _profile = await _firestoreService.getSkilledUserProfile(widget.userId);
+
+        // Try to load reviews, but don't fail if reviews collection doesn't exist or has permission issues
+        try {
+          _reviews = await _firestoreService.getUserReviews(widget.userId);
+        } catch (reviewError) {
+          print('Could not load reviews: $reviewError');
+          _reviews = []; // Set empty list if reviews fail
+        }
       }
 
       setState(() {
@@ -94,20 +109,72 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       );
     }
 
+    if (_userRole == AppConstants.roleCustomer) {
+      if (_customerProfile == null) {
+        if (isOwnProfile) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => CustomerSetupScreen(userId: widget.userId)),
+            );
+          });
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        return _buildProfileNotFound(
+          message: 'This customer has not set up their profile yet',
+        );
+      }
+
+      return _buildCustomerProfileView();
+    }
+
+    if (_userRole == AppConstants.roleCompany) {
+      if (_companyProfile == null) {
+        if (isOwnProfile) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => CompanySetupScreen(userId: widget.userId)),
+            );
+          });
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        return _buildProfileNotFound(
+          message: 'This company has not set up their profile yet',
+        );
+      }
+
+      return _buildCompanyProfileView();
+    }
+
     if (_profile == null) {
-      // If it's own profile and user is a skilled user, redirect to setup
+      // If it's own profile, redirect to role-specific setup
       if (isOwnProfile) {
         final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
         final currentUser = authProvider.currentUser;
         
-        // Check if user is a skilled user
-        if (currentUser?.role == AppConstants.roleSkilledUser) {
-          // Redirect to profile setup for skilled users
+        if (currentUser != null) {
+          // Redirect to role-specific profile setup
           WidgetsBinding.instance.addPostFrameCallback((_) {
+            Widget setupScreen;
+            
+            if (currentUser.role == AppConstants.roleSkilledUser) {
+              setupScreen = SkilledUserSetupScreen(userId: widget.userId);
+            } else if (currentUser.role == AppConstants.roleCustomer) {
+              setupScreen = CustomerSetupScreen(userId: widget.userId);
+            } else if (currentUser.role == AppConstants.roleCompany) {
+              setupScreen = CompanySetupScreen(userId: widget.userId);
+            } else {
+              // Fallback to skilled setup
+              setupScreen = SkilledUserSetupScreen(userId: widget.userId);
+            }
+            
             Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (_) => SkilledUserSetupScreen(userId: widget.userId),
-              ),
+              MaterialPageRoute(builder: (_) => setupScreen),
             );
           });
           return const Scaffold(
@@ -116,47 +183,11 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         }
       }
       
-      // For other users or non-skilled users
-      return Scaffold(
-        appBar: AppBar(title: const Text('Profile')),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.person_off, size: 64, color: Colors.grey),
-              const SizedBox(height: 16),
-              const Text(
-                'Profile not found',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                isOwnProfile 
-                  ? 'Complete your profile to get started'
-                  : 'This user has not set up their profile yet',
-                style: const TextStyle(color: Colors.grey),
-              ),
-              if (isOwnProfile) ...{
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(
-                        builder: (_) => SkilledUserSetupScreen(userId: widget.userId),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.edit),
-                  label: const Text('Complete Profile'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2196F3),
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              },
-            ],
-          ),
-        ),
+      // For other users or error case
+      return _buildProfileNotFound(
+        message: isOwnProfile
+            ? 'Complete your profile to get started'
+            : 'This user has not set up their profile yet',
       );
     }
 
@@ -172,11 +203,20 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                 IconButton(
                   icon: const Icon(Icons.edit, color: Colors.white),
                   onPressed: () async {
+                    final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
+                    final currentUser = authProvider.currentUser;
+                    
+                    Widget editScreen = SkilledUserSetupScreen(userId: widget.userId);
+                    
+                    if (currentUser?.role == AppConstants.roleCustomer) {
+                      editScreen = CustomerSetupScreen(userId: widget.userId);
+                    } else if (currentUser?.role == AppConstants.roleCompany) {
+                      editScreen = CompanySetupScreen(userId: widget.userId);
+                    }
+                    
                     await Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (context) => SkilledUserSetupScreen(userId: widget.userId),
-                      ),
+                      MaterialPageRoute(builder: (context) => editScreen),
                     );
                     _loadProfile();
                   },
@@ -265,15 +305,11 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                               ),
                             ],
                           ),
-                          child: CircleAvatar(
+                          child: WebImageLoader.loadAvatar(
+                            imageUrl: _profile!.profilePicture,
                             radius: 55,
+                            fallbackText: _userData?.name,
                             backgroundColor: Colors.grey[300],
-                            backgroundImage: (_profile!.profilePicture != null && _profile!.profilePicture!.isNotEmpty)
-                                ? CachedNetworkImageProvider(_profile!.profilePicture!)
-                                : null,
-                            child: (_profile!.profilePicture == null || _profile!.profilePicture!.isEmpty)
-                                ? const Icon(Icons.person, size: 60, color: Colors.white)
-                                : null,
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -702,6 +738,230 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
+  Widget _buildProfileNotFound({required String message}) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Profile')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.person_off, size: 64, color: Colors.grey),
+            const SizedBox(height: 16),
+            const Text(
+              'Profile not found',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              style: const TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCustomerProfileView() {
+    final profile = _customerProfile!;
+    final imageUrl = profile.profilePicture?.isNotEmpty == true
+        ? profile.profilePicture
+        : _userData?.profilePhoto;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Customer Profile'),
+        actions: [
+          if (isOwnProfile)
+            IconButton(
+              icon: const Icon(Icons.edit),
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CustomerSetupScreen(userId: widget.userId),
+                  ),
+                );
+                _loadProfile();
+              },
+            ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: WebImageLoader.loadAvatar(
+                imageUrl: imageUrl,
+                radius: 60,
+                fallbackText: _userData?.name,
+                backgroundColor: Colors.grey[300],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: Text(
+                _userData?.name ?? 'Customer',
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (profile.location != null && profile.location!.isNotEmpty)
+              Center(
+                child: Text(
+                  profile.location!,
+                  style: const TextStyle(color: Colors.grey),
+                ),
+              ),
+            const SizedBox(height: 24),
+            const Text(
+              'About',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(profile.bio.isEmpty ? 'No bio available' : profile.bio),
+            const SizedBox(height: 16),
+            const Text(
+              'Interests',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            if (profile.interests.isEmpty)
+              const Text('No interests added')
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: profile.interests
+                    .map((interest) => Chip(label: Text(interest)))
+                    .toList(),
+              ),
+            const SizedBox(height: 16),
+            const Text(
+              'Looking For',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            if (profile.lookingFor.isEmpty)
+              const Text('No services selected')
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: profile.lookingFor
+                    .map((category) => Chip(label: Text(category)))
+                    .toList(),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompanyProfileView() {
+    final profile = _companyProfile!;
+    final imageUrl = profile.logoUrl?.isNotEmpty == true
+        ? profile.logoUrl
+        : _userData?.profilePhoto;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Company Profile'),
+        actions: [
+          if (isOwnProfile)
+            IconButton(
+              icon: const Icon(Icons.edit),
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CompanySetupScreen(userId: widget.userId),
+                  ),
+                );
+                _loadProfile();
+              },
+            ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: WebImageLoader.loadAvatar(
+                imageUrl: imageUrl,
+                radius: 60,
+                fallbackText: profile.companyName,
+                backgroundColor: Colors.grey[300],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: Text(
+                profile.companyName.isNotEmpty ? profile.companyName : 'Company',
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (profile.industry.isNotEmpty)
+              Center(
+                child: Text(
+                  profile.industry,
+                  style: const TextStyle(color: Colors.grey),
+                ),
+              ),
+            const SizedBox(height: 24),
+            const Text(
+              'About',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(profile.description.isEmpty ? 'No description available' : profile.description),
+            const SizedBox(height: 16),
+            if (profile.website != null && profile.website!.isNotEmpty) ...[
+              const Text(
+                'Website',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(profile.website!),
+              const SizedBox(height: 16),
+            ],
+            if (profile.headOfficeLocation != null && profile.headOfficeLocation!.isNotEmpty) ...[
+              const Text(
+                'Head Office',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(profile.headOfficeLocation!),
+              const SizedBox(height: 16),
+            ],
+            if (profile.employeeCount != null && profile.employeeCount!.isNotEmpty) ...[
+              const Text(
+                'Company Size',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text('${profile.employeeCount} employees'),
+              const SizedBox(height: 16),
+            ],
+            if (profile.gstNumber != null && profile.gstNumber!.isNotEmpty) ...[
+              const Text(
+                'GST Number',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(profile.gstNumber!),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildPortfolioTab() {
     if (_profile!.portfolioImages.isEmpty) {
       return Center(
@@ -751,19 +1011,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: CachedNetworkImage(
+                child: WebImageLoader.loadImage(
                   imageUrl: _profile!.portfolioImages[index],
                   fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(
-                    color: Colors.grey[300],
-                    child: const Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    color: Colors.grey[300],
-                    child: const Icon(Icons.error),
-                  ),
                 ),
               ),
             ),
@@ -785,7 +1035,100 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   }
 
   Widget _buildServicesTab() {
-    return const Center(child: Text('Services - Coming Soon'));
+    return FutureBuilder<List<ServiceModel>>(
+      future: _firestoreService.getUserServices(widget.userId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text('Error loading services: ${snapshot.error}'));
+        }
+        final services = snapshot.data ?? [];
+        if (services.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.miscellaneous_services, size: 64, color: Colors.grey[400]),
+                const SizedBox(height: 16),
+                Text('No services listed yet', style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+              ],
+            ),
+          );
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: services.length,
+          itemBuilder: (context, index) {
+            final service = services[index];
+            return Card(
+              elevation: 2,
+              margin: const EdgeInsets.only(bottom: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            service.title,
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: service.isActive ? Colors.green.withValues(alpha: 0.1) : Colors.grey.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            service.isActive ? 'Active' : 'Inactive',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: service.isActive ? Colors.green : Colors.grey,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      service.description,
+                      style: TextStyle(color: Colors.grey[700], fontSize: 14),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.currency_rupee, size: 16, color: Color(0xFF4CAF50)),
+                          Text(
+                            '${service.priceMin.toStringAsFixed(0)} - ${service.priceMax.toStringAsFixed(0)} ${service.priceUnit}',
+                            style: const TextStyle(color: Color(0xFF4CAF50), fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Widget _buildStatCard({
@@ -846,11 +1189,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                 Row(
                   children: [
                     CircleAvatar(
-                      backgroundImage: review.reviewerPhoto != null
-                          ? CachedNetworkImageProvider(review.reviewerPhoto!)
-                          : null,
-                      child: review.reviewerPhoto == null
-                          ? Text(review.reviewerName[0].toUpperCase())
+                      backgroundImage: WebImageLoader.getImageProvider(review.reviewerPhoto),
+                      child: review.reviewerPhoto == null || review.reviewerPhoto!.isEmpty
+                          ? Text(review.reviewerName.isNotEmpty ? review.reviewerName[0].toUpperCase() : 'U')
                           : null,
                     ),
                     const SizedBox(width: 12),
@@ -977,23 +1318,26 @@ class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {
         },
         itemBuilder: (context, index) {
           return Center(
-            child: Hero(
-              tag: 'portfolio_$index',
-              child: InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 4.0,
-                child: CachedNetworkImage(
-                  imageUrl: widget.images[index],
-                  fit: BoxFit.contain,
-                  placeholder: (context, url) => const Center(
-                    child: CircularProgressIndicator(color: Colors.white),
+            child: index == _currentIndex
+              ? Hero(
+                  tag: 'portfolio_$index',
+                  child: InteractiveViewer(
+                    minScale: 0.5,
+                    maxScale: 4.0,
+                    child: WebImageLoader.loadImage(
+                      imageUrl: widget.images[index],
+                      fit: BoxFit.contain,
+                    ),
                   ),
-                  errorWidget: (context, url, error) => const Center(
-                    child: Icon(Icons.error, color: Colors.white, size: 48),
+                )
+              : InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 4.0,
+                  child: WebImageLoader.loadImage(
+                    imageUrl: widget.images[index],
+                    fit: BoxFit.contain,
                   ),
                 ),
-              ),
-            ),
           );
         },
       ),

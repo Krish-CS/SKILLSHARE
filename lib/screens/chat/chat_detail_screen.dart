@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../models/chat_model.dart';
 import '../../services/chat_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../../utils/app_helpers.dart';
+import '../../utils/web_image_loader.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   final String chatId;
@@ -225,12 +225,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           children: [
             CircleAvatar(
               radius: 18,
-              backgroundImage: widget.otherUserPhoto != null
-                  ? CachedNetworkImageProvider(widget.otherUserPhoto!)
-                  : null,
-              child: widget.otherUserPhoto == null
+              backgroundImage: WebImageLoader.getImageProvider(widget.otherUserPhoto),
+              child: widget.otherUserPhoto == null || widget.otherUserPhoto!.isEmpty
                   ? Text(
-                      widget.otherUserName[0].toUpperCase(),
+                      widget.otherUserName.isNotEmpty ? widget.otherUserName[0].toUpperCase() : 'U',
                       style: const TextStyle(fontSize: 16),
                     )
                   : null,
@@ -479,24 +477,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       onTap: () => _showImagePreview(message.mediaUrl!),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: CachedNetworkImage(
-                          imageUrl: message.mediaUrl!,
+                        child: WebImageLoader.loadImage(
+                          imageUrl: message.mediaUrl,
                           width: 200,
                           fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            width: 200,
-                            height: 200,
-                            color: Colors.grey[300],
-                            child: const Center(
-                              child: CircularProgressIndicator(),
-                            ),
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            width: 200,
-                            height: 200,
-                            color: Colors.grey[300],
-                            child: const Icon(Icons.error),
-                          ),
                         ),
                       ),
                     )
@@ -551,15 +535,9 @@ class _ImagePreviewScreen extends StatelessWidget {
         child: InteractiveViewer(
           minScale: 0.5,
           maxScale: 4.0,
-          child: CachedNetworkImage(
+          child: WebImageLoader.loadImage(
             imageUrl: imageUrl,
             fit: BoxFit.contain,
-            placeholder: (context, url) => const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            ),
-            errorWidget: (context, url, error) => const Center(
-              child: Icon(Icons.error, color: Colors.white, size: 48),
-            ),
           ),
         ),
       ),

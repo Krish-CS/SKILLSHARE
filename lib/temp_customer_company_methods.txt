@@ -1,0 +1,59 @@
+  // ===== Customer Profile =====
+
+  Future<void> updateCustomerProfile(CustomerProfile profile) async {
+    await _firestore
+        .collection(AppConstants.customerProfilesCollection)
+        .doc(profile.userId)
+        .set(profile.toMap(), SetOptions(merge: true));
+  }
+
+  Future<CustomerProfile?> getCustomerProfile(String userId) async {
+    final doc = await _firestore
+        .collection(AppConstants.customerProfilesCollection)
+        .doc(userId)
+        .get();
+
+    if (!doc.exists) return null;
+    return CustomerProfile.fromMap(doc.data()!, userId);
+  }
+
+  Stream<CustomerProfile?> customerProfileStream(String userId) {
+    return _firestore
+        .collection(AppConstants.customerProfilesCollection)
+        .doc(userId)
+        .snapshots()
+        .map((doc) {
+      if (!doc.exists) return null;
+      return CustomerProfile.fromMap(doc.data()!, userId);
+    });
+  }
+
+  // ===== Company Profile =====
+
+  Future<void> updateCompanyProfile(CompanyProfile profile) async {
+    await _firestore
+        .collection(AppConstants.companyProfilesCollection)
+        .doc(profile.userId)
+        .set(profile.toMap(), SetOptions(merge: true));
+  }
+
+  Future<CompanyProfile?> getCompanyProfile(String userId) async {
+    final doc = await _firestore
+        .collection(AppConstants.companyProfilesCollection)
+        .doc(userId)
+        .get();
+
+    if (!doc.exists) return null;
+    return CompanyProfile.fromMap(doc.data()!, userId);
+  }
+
+  Stream<CompanyProfile?> companyProfileStream(String userId) {
+    return _firestore
+        .collection(AppConstants.companyProfilesCollection)
+        .doc(userId)
+        .snapshots()
+        .map((doc) {
+      if (!doc.exists) return null;
+      return CompanyProfile.fromMap(doc.data()!, userId);
+    });
+  }

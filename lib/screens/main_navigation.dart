@@ -29,6 +29,11 @@ class _MainNavigationState extends State<MainNavigation> {
     final screens = _getScreensForRole(userRole);
     final navItems = _getNavItemsForRole(userRole);
 
+    // Bounds-check currentIndex when role changes (screen count may differ)
+    if (_currentIndex >= screens.length) {
+      _currentIndex = 0;
+    }
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
