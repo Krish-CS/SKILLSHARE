@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/user_roles.dart';
 
 class UserModel {
   final String uid;
@@ -24,11 +25,14 @@ class UserModel {
   });
 
   factory UserModel.fromMap(Map<String, dynamic> map, String uid) {
+    final rawRole = (map['role'] as String?) ?? '';
+    final normalizedRole = UserRoles.normalizeRole(rawRole) ?? rawRole;
+
     return UserModel(
       uid: uid,
       email: map['email'] ?? '',
       name: map['name'] ?? '',
-      role: map['role'] ?? '',
+      role: normalizedRole,
       phone: map['phone'],
       profilePhoto: map['profilePhoto'],
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),

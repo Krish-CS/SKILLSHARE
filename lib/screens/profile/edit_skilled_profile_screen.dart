@@ -434,8 +434,8 @@ class _EditSkilledProfileScreenState extends State<EditSkilledProfileScreen> {
                             const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
                           ],
                           onSelected: (v) {
-                            if (v == 'edit') _showAddServiceDialog(existing: service);
-                            else if (v == 'delete') _deleteService(service);
+                            if (v == 'edit') { _showAddServiceDialog(existing: service); }
+                            else if (v == 'delete') { _deleteService(service); }
                           },
                         ),
                       ),

@@ -12,7 +12,7 @@ class UserProvider with ChangeNotifier {
   SkilledUserProfile? _skilledProfile;
   CustomerProfile? _customerProfile;
   CompanyProfile? _companyProfile;
-  
+
   List<SkilledUserProfile> _verifiedUsers = [];
   List<ReviewModel> _reviews = [];
   bool _isLoading = false;
@@ -22,10 +22,10 @@ class UserProvider with ChangeNotifier {
   SkilledUserProfile? get skilledProfile => _skilledProfile;
   CustomerProfile? get customerProfile => _customerProfile;
   CompanyProfile? get companyProfile => _companyProfile;
-  
+
   // Legacy getter for backward compatibility
   SkilledUserProfile? get currentProfile => _skilledProfile;
-  
+
   List<SkilledUserProfile> get verifiedUsers => _verifiedUsers;
   List<ReviewModel> get reviews => _reviews;
   bool get isLoading => _isLoading;
@@ -35,6 +35,9 @@ class UserProvider with ChangeNotifier {
   Future<void> loadProfile(String userId) async {
     try {
       _isLoading = true;
+      _error = null;
+      _customerProfile = null;
+      _companyProfile = null;
       notifyListeners();
 
       _skilledProfile = await _firestoreService.getSkilledUserProfile(userId);
@@ -52,6 +55,9 @@ class UserProvider with ChangeNotifier {
   Future<bool> updateProfile(SkilledUserProfile profile) async {
     try {
       _isLoading = true;
+      _error = null;
+      _customerProfile = null;
+      _companyProfile = null;
       notifyListeners();
 
       await _firestoreService.updateSkilledUserProfile(profile);
@@ -72,6 +78,9 @@ class UserProvider with ChangeNotifier {
   Future<void> loadCustomerProfile(String userId) async {
     try {
       _isLoading = true;
+      _error = null;
+      _skilledProfile = null;
+      _companyProfile = null;
       notifyListeners();
 
       _customerProfile = await _firestoreService.getCustomerProfile(userId);
@@ -89,6 +98,9 @@ class UserProvider with ChangeNotifier {
   Future<bool> updateCustomerProfile(CustomerProfile profile) async {
     try {
       _isLoading = true;
+      _error = null;
+      _skilledProfile = null;
+      _companyProfile = null;
       notifyListeners();
 
       await _firestoreService.updateCustomerProfile(profile);
@@ -109,6 +121,9 @@ class UserProvider with ChangeNotifier {
   Future<void> loadCompanyProfile(String userId) async {
     try {
       _isLoading = true;
+      _error = null;
+      _skilledProfile = null;
+      _customerProfile = null;
       notifyListeners();
 
       _companyProfile = await _firestoreService.getCompanyProfile(userId);
@@ -126,6 +141,9 @@ class UserProvider with ChangeNotifier {
   Future<bool> updateCompanyProfile(CompanyProfile profile) async {
     try {
       _isLoading = true;
+      _error = null;
+      _skilledProfile = null;
+      _customerProfile = null;
       notifyListeners();
 
       await _firestoreService.updateCompanyProfile(profile);
@@ -143,7 +161,8 @@ class UserProvider with ChangeNotifier {
   }
 
   // Load verified skilled users
-  Future<void> loadVerifiedUsers({String? category, List<String>? skills}) async {
+  Future<void> loadVerifiedUsers(
+      {String? category, List<String>? skills}) async {
     try {
       _isLoading = true;
       notifyListeners();
@@ -189,6 +208,25 @@ class UserProvider with ChangeNotifier {
   }
 
   void clearError() {
+    _error = null;
+    notifyListeners();
+  }
+
+  void clearRoleProfiles() {
+    _skilledProfile = null;
+    _customerProfile = null;
+    _companyProfile = null;
+    _error = null;
+    notifyListeners();
+  }
+
+  void clearAllData() {
+    _skilledProfile = null;
+    _customerProfile = null;
+    _companyProfile = null;
+    _verifiedUsers = [];
+    _reviews = [];
+    _isLoading = false;
     _error = null;
     notifyListeners();
   }

@@ -1,9 +1,9 @@
-/// User Role Constants and Utilities
-/// 
-/// This file defines the three distinct user types in the application:
-/// - CUSTOMER: Regular users who can browse, hire skilled persons, and purchase products
-/// - COMPANY: Organizations that can post jobs and hire skilled persons
-/// - SKILLED_PERSON: Service providers who showcase work, offer services, and sell products
+// User Role Constants and Utilities
+//
+// This file defines the three distinct user types in the application:
+// - CUSTOMER: Regular users who can browse, chat, review, and purchase products
+// - COMPANY: Organizations that can post jobs and create direct hire requests
+// - SKILLED_PERSON: Service providers who showcase work, offer services, and sell products
 
 class UserRoles {
   // Role constants
@@ -20,6 +20,31 @@ class UserRoles {
     admin,
   ];
 
+  // Legacy aliases supported for existing Firebase users
+  static const Set<String> _skilledAliases = {
+    'skilled_user',
+    'skilled-person',
+    'skilled person',
+    'service_provider',
+    'service-provider',
+  };
+
+  /// Normalize role values from legacy/new data into supported constants.
+  static String? normalizeRole(String? role) {
+    if (role == null) return null;
+    final normalized = role.trim().toLowerCase();
+    if (normalized.isEmpty) return null;
+
+    if (normalized == customer) return customer;
+    if (normalized == company) return company;
+    if (normalized == admin) return admin;
+    if (normalized == skilledPerson || _skilledAliases.contains(normalized)) {
+      return skilledPerson;
+    }
+
+    return normalized;
+  }
+
   // Display names for roles
   static const Map<String, String> roleDisplayNames = {
     customer: 'Customer',
@@ -30,41 +55,46 @@ class UserRoles {
 
   // Get display name for a role
   static String getDisplayName(String role) {
-    return roleDisplayNames[role] ?? 'Unknown';
+    final normalized = normalizeRole(role);
+    return roleDisplayNames[normalized] ?? 'Unknown';
   }
 
   // Check if role is valid
   static bool isValidRole(String role) {
-    return allRoles.contains(role);
+    final normalized = normalizeRole(role);
+    return normalized != null && allRoles.contains(normalized);
   }
 
   // Role permission checks
   static bool canPostJobs(String role) {
-    return role == company || role == customer;
+    final normalized = normalizeRole(role);
+    return normalized == company;
   }
 
   static bool canApplyToJobs(String role) {
-    return role == skilledPerson;
+    return normalizeRole(role) == skilledPerson;
   }
 
   static bool canSellProducts(String role) {
-    return role == skilledPerson;
+    return normalizeRole(role) == skilledPerson;
   }
 
   static bool canBuyProducts(String role) {
-    return role == customer || role == company;
+    final normalized = normalizeRole(role);
+    return normalized == customer || normalized == company;
   }
 
   static bool canUploadPortfolio(String role) {
-    return role == skilledPerson;
+    return normalizeRole(role) == skilledPerson;
   }
 
   static bool canHireSkilledPersons(String role) {
-    return role == customer || role == company;
+    final normalized = normalizeRole(role);
+    return normalized == company;
   }
 
   static bool canBeHired(String role) {
-    return role == skilledPerson;
+    return normalizeRole(role) == skilledPerson;
   }
 
   static bool canInitiateChat(String role) {
@@ -73,15 +103,16 @@ class UserRoles {
   }
 
   static bool isCustomerOrCompany(String role) {
-    return role == customer || role == company;
+    final normalized = normalizeRole(role);
+    return normalized == customer || normalized == company;
   }
 
   static bool isSkilledPerson(String role) {
-    return role == skilledPerson;
+    return normalizeRole(role) == skilledPerson;
   }
 
   static bool isAdmin(String role) {
-    return role == admin;
+    return normalizeRole(role) == admin;
   }
 }
 
@@ -92,9 +123,7 @@ class RoleFeatures {
     UserRoles.customer: [
       'browse_skilled_persons',
       'view_portfolios',
-      'hire_skilled_persons',
       'buy_products',
-      'post_jobs',
       'chat',
       'write_reviews',
       'search_services',
@@ -126,12 +155,14 @@ class RoleFeatures {
 
   // Check if user has access to a feature
   static bool hasFeature(String role, String feature) {
-    return roleFeatures[role]?.contains(feature) ?? false;
+    final normalized = UserRoles.normalizeRole(role);
+    return roleFeatures[normalized]?.contains(feature) ?? false;
   }
 
   // Get all features for a role
   static List<String> getFeaturesForRole(String role) {
-    return roleFeatures[role] ?? [];
+    final normalized = UserRoles.normalizeRole(role);
+    return roleFeatures[normalized] ?? [];
   }
 }
 
@@ -155,7 +186,8 @@ class RoleNavigation {
     ],
     UserRoles.skilledPerson: [
       NavigationItem(id: 'home', label: 'Home', icon: 'home'),
-      NavigationItem(id: 'portfolio', label: 'Portfolio', icon: 'photo_library'),
+      NavigationItem(
+          id: 'portfolio', label: 'Portfolio', icon: 'photo_library'),
       NavigationItem(id: 'my_shop', label: 'My Shop', icon: 'store'),
       NavigationItem(id: 'chats', label: 'Chats', icon: 'chat'),
       NavigationItem(id: 'profile', label: 'Profile', icon: 'person'),
@@ -163,7 +195,9 @@ class RoleNavigation {
   };
 
   static List<NavigationItem> getNavigationForRole(String role) {
-    return roleNavigationItems[role] ?? roleNavigationItems[UserRoles.customer]!;
+    final normalized = UserRoles.normalizeRole(role);
+    return roleNavigationItems[normalized] ??
+        roleNavigationItems[UserRoles.customer]!;
   }
 }
 

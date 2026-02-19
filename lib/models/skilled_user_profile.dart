@@ -54,17 +54,35 @@ class SkilledUserProfile {
   });
 
   factory SkilledUserProfile.fromMap(Map<String, dynamic> map, String userId) {
+    final mappedUserId = (map['userId'] as String?)?.trim() ??
+        (map['uid'] as String?)?.trim() ??
+        (map['userUid'] as String?)?.trim() ??
+        (map['ownerId'] as String?)?.trim() ??
+        (map['createdBy'] as String?)?.trim() ??
+        '';
+    final effectiveUserId = mappedUserId.isNotEmpty ? mappedUserId : userId;
+
+    List<String> asStringList(dynamic value) {
+      if (value is List) {
+        return value
+            .map((item) => item?.toString().trim() ?? '')
+            .where((item) => item.isNotEmpty)
+            .toList();
+      }
+      return const <String>[];
+    }
+
     return SkilledUserProfile(
-      userId: userId,
+      userId: effectiveUserId,
       name: map['name'],
       bio: map['bio'] ?? '',
-      skills: List<String>.from(map['skills'] ?? []),
+      skills: asStringList(map['skills']),
       category: map['category'],
       profilePicture: map['profilePicture'],
       verificationStatus: map['verificationStatus'] ?? 'pending',
       visibility: map['visibility'] ?? 'private',
-      portfolioImages: List<String>.from(map['portfolioImages'] ?? []),
-      portfolioVideos: List<String>.from(map['portfolioVideos'] ?? []),
+      portfolioImages: asStringList(map['portfolioImages']),
+      portfolioVideos: asStringList(map['portfolioVideos']),
       latitude: map['latitude']?.toDouble(),
       longitude: map['longitude']?.toDouble(),
       address: map['address'],
@@ -84,6 +102,7 @@ class SkilledUserProfile {
 
   Map<String, dynamic> toMap() {
     return {
+      'userId': userId,
       if (name != null) 'name': name,
       'bio': bio,
       'skills': skills,

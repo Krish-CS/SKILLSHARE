@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../providers/user_provider.dart';
-import '../../utils/user_roles.dart';
 import '../../models/product_model.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/web_image_loader.dart';
@@ -123,20 +122,20 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
         title: const Text('My Shop'),
         backgroundColor: Colors.red,
       ),
-      body: Center(
+      body: const Center(
         child: Padding(
-          padding: const EdgeInsets.all(32),
+          padding: EdgeInsets.all(32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.block, size: 80, color: Colors.red),
-              const SizedBox(height: 20),
-              const Text(
+              Icon(Icons.block, size: 80, color: Colors.red),
+              SizedBox(height: 20),
+              Text(
                 'Access Denied',
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 10),
-              const Text(
+              SizedBox(height: 10),
+              Text(
                 'Only skilled persons can manage their shop. Customers and companies can browse the shop instead.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16, color: Colors.grey),
@@ -332,7 +331,7 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
     return Card(
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: color.withOpacity(0.1),
+          backgroundColor: color.withValues(alpha: 0.1),
           child: Icon(icon, color: color),
         ),
         title: Text(title),
@@ -352,6 +351,7 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
     // SECURITY: Check if user is verified before allowing shop/product creation
     final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
     final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final nav = Navigator.of(context);
 
     // Load profile if not already loaded
     if (userProvider.currentProfile == null && authProvider.currentUser != null) {
@@ -395,14 +395,13 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
     }
 
     // Verified - proceed to add product
-    final result = await Navigator.push(
-      context,
+    final result = await nav.push(
       MaterialPageRoute(
         builder: (context) => const AddProductScreen(),
       ),
     );
 
-    if (result == true) {
+    if (result == true && mounted) {
       _loadProducts(); // Refresh the list
     }
   }

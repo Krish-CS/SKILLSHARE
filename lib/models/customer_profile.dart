@@ -16,6 +16,8 @@ class CustomerProfile {
   final double? longitude;
   final List<String> preferredCategories; // Skill categories they frequently search for
   final Map<String, dynamic>? preferences; // Additional preferences (budget range, distance, etc.)
+  /// Projects assigned by this customer (request IDs or project titles).
+  final List<Map<String, dynamic>> assignedProjects;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -32,6 +34,7 @@ class CustomerProfile {
     this.longitude,
     this.preferredCategories = const [],
     this.preferences,
+    this.assignedProjects = const [],
     required this.createdAt,
     required this.updatedAt,
   });
@@ -50,6 +53,9 @@ class CustomerProfile {
       longitude: map['longitude']?.toDouble(),
       preferredCategories: List<String>.from(map['preferredCategories'] ?? []),
       preferences: map['preferences'],
+      assignedProjects: (map['assignedProjects'] as List<dynamic>? ?? [])
+          .map((e) => Map<String, dynamic>.from(e is Map ? e : {}))
+          .toList(),
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -68,6 +74,7 @@ class CustomerProfile {
       'longitude': longitude,
       'preferredCategories': preferredCategories,
       'preferences': preferences,
+      'assignedProjects': assignedProjects,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -85,6 +92,7 @@ class CustomerProfile {
     double? longitude,
     List<String>? preferredCategories,
     Map<String, dynamic>? preferences,
+    List<Map<String, dynamic>>? assignedProjects,
   }) {
     return CustomerProfile(
       userId: userId,
@@ -99,6 +107,7 @@ class CustomerProfile {
       longitude: longitude ?? this.longitude,
       preferredCategories: preferredCategories ?? this.preferredCategories,
       preferences: preferences ?? this.preferences,
+      assignedProjects: assignedProjects ?? this.assignedProjects,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );

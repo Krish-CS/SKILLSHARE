@@ -32,9 +32,22 @@ class ProductModel {
   });
 
   factory ProductModel.fromMap(Map<String, dynamic> map, String id) {
+    String normalizeId(dynamic value) => value?.toString().trim() ?? '';
+    final userId = normalizeId(map['userId']);
+    final sellerId = normalizeId(map['sellerId']);
+    final ownerId = normalizeId(map['ownerId']);
+    final uid = normalizeId(map['uid']);
+    final resolvedUserId = userId.isNotEmpty
+        ? userId
+        : sellerId.isNotEmpty
+            ? sellerId
+            : ownerId.isNotEmpty
+                ? ownerId
+                : uid;
+
     return ProductModel(
       id: id,
-      userId: map['userId'] ?? '',
+      userId: resolvedUserId,
       name: map['name'] ?? '',
       description: map['description'] ?? '',
       price: (map['price'] ?? 0).toDouble(),

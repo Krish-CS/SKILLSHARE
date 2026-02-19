@@ -616,6 +616,8 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: (currentUser?.role == AppConstants.roleAdmin)
           ? FloatingActionButton.extended(
               onPressed: () async {
+                final nav = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
                 showDialog(
                   context: context,
                   barrierDismissible: false,
@@ -625,8 +627,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
                 await DummyDataSeeder.seedDatabase();
                 if (mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  nav.pop();
+                  messenger.showSnackBar(
                     const SnackBar(
                       content: Text('Dummy profiles added successfully!'),
                       backgroundColor: Colors.green,

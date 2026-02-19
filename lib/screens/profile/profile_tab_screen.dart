@@ -266,13 +266,13 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                   if (_currentUser == null) return;
                   Widget editScreen;
                   if (_currentUser!.role == UserRoles.skilledPerson) {
-                    editScreen = EditSkilledProfileScreen();
+                    editScreen = const EditSkilledProfileScreen();
                   } else if (_currentUser!.role == UserRoles.customer) {
                     editScreen = CustomerSetupScreen(userId: _currentUser!.uid);
                   } else if (_currentUser!.role == UserRoles.company) {
                     editScreen = CompanySetupScreen(userId: _currentUser!.uid);
                   } else {
-                    editScreen = EditSkilledProfileScreen();
+                    editScreen = const EditSkilledProfileScreen();
                   }
                   await Navigator.push(
                     context,
@@ -348,7 +348,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF9C27B0).withOpacity(0.3),
+                        color: const Color(0xFF9C27B0).withValues(alpha: 0.3),
                         blurRadius: 8,
                         offset: const Offset(0, 4),
                       ),
@@ -394,7 +394,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: const Color(0xFF9C27B0).withOpacity(0.1),
+          color: const Color(0xFF9C27B0).withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(icon, color: const Color(0xFF9C27B0)),

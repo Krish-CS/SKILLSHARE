@@ -1,0 +1,417 @@
+================================================================================
+                        SKILLSHARE APP - COMPLETE OVERVIEW
+================================================================================
+
+App Name    : SkillShare
+Version     : 1.0.0+1
+Platform    : Flutter (Android, iOS, Web, Windows, Linux, macOS)
+Framework   : Flutter (Dart) with Firebase Backend
+Description : A platform for skilled professionals to showcase their work,
+              sell products, find jobs, and connect with customers and companies.
+
+================================================================================
+                              USER ROLES
+================================================================================
+
+The app supports 4 distinct user types:
+
+1. CUSTOMER
+   - Regular users who browse skilled professionals
+   - Can chat with skilled users
+   - Can purchase products from the shop
+   - Can leave reviews and ratings
+   - Can post service requests
+
+2. SKILLED PERSON (skilled_person)
+   - Service providers / freelancers
+   - Can create a portfolio to showcase their work
+   - Can list and sell products in the shop
+   - Can apply for jobs posted by companies
+   - Can receive service requests from customers
+   - Must complete Aadhaar (ID) verification to go public
+
+3. COMPANY
+   - Organizations / businesses
+   - Can post job listings
+   - Can directly hire skilled professionals
+   - Can chat with skilled persons for hiring
+
+4. ADMIN
+   - Platform administrator
+   - Manages verifications, appeals, and platform moderation
+
+================================================================================
+                              APP MODULES / SCREENS
+================================================================================
+
+--- 1. AUTH MODULE (lib/screens/auth/) ---
+   * login_screen.dart
+     - Email & password login
+     - Redirects to role-based home after login
+
+   * signup_screen.dart
+     - New user registration
+     - Role selection (Customer / Skilled Person / Company)
+     - Name, email, phone, and password fields
+
+--- 2. SPLASH SCREEN (lib/screens/splash_screen.dart) ---
+   - Displayed on app launch
+   - Checks Firebase auth state
+   - Routes to login or home based on session
+
+--- 3. MAIN NAVIGATION (lib/screens/main_navigation.dart / main_screen.dart) ---
+   - Bottom navigation bar
+   - Tabs: Home, Shop, Jobs, Chat, Profile
+   - Role-aware tab visibility
+
+--- 4. HOME MODULE (lib/screens/home/) ---
+   * home_screen.dart
+     - Dashboard for all roles
+     - Shows categories, featured skilled users
+     - Quick access to services
+
+   * explore_screen.dart
+     - Browse and search skilled professionals
+     - Filter by category, location, rating
+     - Shows expert cards with skills and ratings
+
+--- 5. SHOP MODULE (lib/screens/shop/) ---
+   * shop_screen.dart
+     - Browse all products listed by skilled users
+     - Filter by category
+     - Add to cart functionality
+
+   * product_detail_screen.dart
+     - Full product details (images, description, price)
+     - Add to cart, buy now options
+     - Seller info and contact
+
+   * add_product_screen.dart
+     - Skilled users list new products
+     - Upload product images via Cloudinary
+     - Set price, description, category
+
+--- 6. JOBS MODULE (lib/screens/jobs/) ---
+   * jobs_screen.dart
+     - Browse open job listings
+     - Filter by category and location
+     - Companies and customers post jobs here
+
+   * job_detail_screen.dart
+     - Full job description
+     - Apply for job (Skilled Person)
+     - View applicants (Company/Customer)
+
+   * create_job_screen.dart
+     - Companies post new job listings
+     - Set title, description, budget, category, location
+
+--- 7. CHAT MODULE (lib/screens/chat/) ---
+   * chats_screen.dart
+     - List of all active conversations
+     - Shows unread message count
+     - Sorted by latest message
+
+   * chat_detail_screen.dart
+     - Real-time messaging with another user
+     - Text messages
+     - Work request integration (request/accept/reject work in chat)
+     - Block/unblock user option
+
+--- 8. PORTFOLIO MODULE (lib/screens/portfolio/) ---
+   * portfolio_screen.dart
+     - Display a skilled user's portfolio items
+     - Viewable by all users
+
+   * add_portfolio_item_screen.dart
+     - Skilled users add portfolio entries
+     - Upload images, set title, description, category
+
+   * my_shop_screen.dart
+     - Skilled user's own shop management
+     - View, edit, delete own products
+
+--- 9. PROFILE MODULE (lib/screens/profile/) ---
+   * profile_screen.dart
+     - View own profile
+     - Edit profile info, profile photo
+     - View portfolio and shop
+
+   * profile_tab_screen.dart
+     - Profile page as a bottom nav tab
+     - Includes settings, logout
+
+   * skilled_user_setup_screen.dart
+     - Initial profile setup for Skilled Persons
+     - Add skills, bio, location, Aadhaar for verification
+
+   * customer_setup_screen.dart
+     - Initial profile setup for Customers
+     - Add name, location, preferences
+
+   * company_setup_screen.dart
+     - Initial profile setup for Companies
+     - Add company name, description, location, industry
+
+   * edit_skilled_profile_screen.dart
+     - Edit existing skilled user profile
+     - Update skills, bio, rates, visibility
+
+================================================================================
+                              DATA MODELS (lib/models/)
+================================================================================
+
+   user_model.dart            - Core user (uid, email, name, role, phone, photo)
+   skilled_user_profile.dart  - Extended profile for skilled persons (skills,
+                                bio, location, Aadhaar, verification status,
+                                rating, portfolio, visibility)
+   customer_profile.dart      - Extended profile for customers
+   company_profile.dart       - Extended profile for companies (company name,
+                                industry, location, job posts)
+   product_model.dart         - Product listing (title, price, images, category,
+                                sellerId, stock)
+   cart_item_model.dart       - Shopping cart item (productId, qty, price)
+   order_model.dart           - Order details (items, total, status, timestamps)
+   job_model.dart             - Job posting (title, description, budget, status,
+                                category, location, applicants)
+   service_model.dart         - Service offered by a skilled user
+   service_request_model.dart - Service request from customer to skilled person
+   chat_model.dart            - Chat conversation and message data
+   review_model.dart          - Rating and review (stars, comment, reviewer)
+   portfolio_model.dart       - Portfolio item (title, images, description)
+   appeal_model.dart          - Appeal filed by a user (for bans/rejections)
+
+================================================================================
+                              SERVICES (lib/services/)
+================================================================================
+
+   auth_service.dart
+     - Firebase Authentication (Sign Up, Login, Logout)
+     - Email/password auth with retry logic
+     - User creation in Firestore on signup
+
+   firestore_service.dart
+     - Centralized Firestore database operations
+     - CRUD for profiles, products, jobs, reviews, orders
+     - Cart management (add, remove, clear)
+     - Service requests (create, accept, reject)
+     - Aadhaar verification and registry management
+     - Block/unblock users
+     - Appeals handling
+     - Job applications
+
+   chat_service.dart
+     - Real-time chat using Firestore streams
+     - Create/get chat rooms between users
+     - Send and receive messages
+     - Work request messages in chat
+     - Block check before allowing messages
+
+   cloudinary_service.dart
+     - Upload images to Cloudinary CDN
+     - Supports File upload (mobile) and Bytes upload (web)
+     - Used for profile photos, portfolio, products, chat media
+
+   portfolio_service.dart
+     - Portfolio CRUD operations
+     - Fetch portfolio for a skilled user
+
+================================================================================
+                             PROVIDERS (lib/providers/)
+================================================================================
+
+   auth_provider.dart
+     - Manages Firebase auth state across the app
+     - Exposes current user, login/logout methods
+
+   user_provider.dart
+     - Manages full user profile data (role-based)
+     - Loads SkilledUserProfile / CustomerProfile / CompanyProfile
+     - Exposes user data to all screens via Provider
+
+================================================================================
+                              WIDGETS (lib/widgets/)
+================================================================================
+
+   expert_card.dart     - Card widget to display a skilled professional
+                          (photo, name, skill, rating, location)
+   product_card.dart    - Card for product listing (image, title, price)
+   job_card.dart        - Card for job listing (title, company, budget)
+   category_card.dart   - Category filter chip/card (icon + label)
+
+================================================================================
+                              UTILS (lib/utils/)
+================================================================================
+
+   app_constants.dart     - All app-wide constants (role names, Firestore
+                            collection names, storage paths, categories,
+                            job/request/verification statuses, pagination,
+                            file size limits, search radius)
+
+   app_theme.dart         - App color palette, text styles, button themes,
+                            and overall Material theme configuration
+
+   app_helpers.dart       - Utility/helper functions used across screens
+
+   user_roles.dart        - User role constants, normalization logic,
+                            display names, and legacy alias support
+
+   cloudinary_config.dart - Cloudinary cloud name and upload preset config
+
+   web_image_loader.dart  - Cross-platform image loading utility (handles
+                            web vs mobile image display differences)
+
+   add_dummy_profiles.dart - Development utility to seed test data
+
+================================================================================
+                         FLUTTER PACKAGES / DEPENDENCIES
+================================================================================
+
+FIREBASE (Backend):
+   firebase_core: ^3.6.0         - Firebase initialization
+   firebase_auth: ^5.3.1         - User authentication (email/password)
+   cloud_firestore: ^5.4.4       - NoSQL cloud database (real-time sync)
+
+STATE MANAGEMENT:
+   provider: ^6.1.1              - InheritedWidget-based state management
+
+UI COMPONENTS:
+   cupertino_icons: ^1.0.6       - iOS-style icons
+   google_fonts: ^6.1.0          - Custom Google fonts in UI
+   cached_network_image: ^3.3.0  - Efficient network image loading with cache
+   flutter_rating_bar: ^4.0.1    - Star rating UI component
+   shimmer: ^3.0.0               - Loading shimmer/skeleton effect
+
+IMAGE HANDLING & UPLOAD:
+   image_picker: ^1.0.5          - Pick images from gallery or camera
+   cloudinary_public: ^0.21.0    - Upload images to Cloudinary CDN
+   http: ^1.1.0                  - HTTP client for REST API calls
+
+LOCATION:
+   geolocator: ^10.1.0           - Get device GPS location
+   geocoding: ^2.1.1             - Convert coordinates <-> addresses
+
+CHAT & FORMATTING:
+   intl: ^0.18.1                 - Internationalization, date/time formatting
+
+UTILS:
+   url_launcher: ^6.2.2          - Open URLs, emails, phone links in browser
+   share_plus: ^10.0.3           - Share content via native share sheet
+
+DEV DEPENDENCIES:
+   flutter_test                  - Flutter unit and widget testing framework
+   flutter_lints: ^3.0.1         - Recommended Flutter lint rules
+   flutter_launcher_icons: ^0.13.1 - Auto-generate app launcher icons
+
+================================================================================
+                           FIREBASE COLLECTIONS (Firestore)
+================================================================================
+
+   users                  - All registered users (base info + role)
+   skilled_users          - Skilled person profiles + verification data
+   customer_profiles      - Customer profile data
+   company_profiles       - Company profile data
+   jobs                   - Job postings by companies/customers
+   products               - Products listed by skilled users
+   carts                  - User cart items (per user)
+   orders                 - Completed orders
+   chats                  - Chat room documents (participants, last message)
+   messages               - Sub-collection inside each chat room
+   requests               - Service requests (customer -> skilled user)
+   reviews                - Reviews and ratings
+   appeals                - User appeals (bans, rejections)
+   aadhaar_registry       - Registered Aadhaar numbers (for uniqueness check)
+   blocked_users          - Block records between users
+   reports                - User/content reports
+   support_tickets        - Customer support tickets
+
+================================================================================
+                           CLOUDINARY (Media Storage)
+================================================================================
+
+   Cloudinary is used as the image CDN for all media uploads.
+
+   Folders used in Cloudinary:
+   - profiles/            Profile photos
+   - portfolios/          Portfolio images (skilled users)
+   - products/            Product listing images
+   - chat_media/          Images shared in chat
+   - verification_docs/   Identity verification documents
+
+================================================================================
+                          SKILL CATEGORIES SUPPORTED
+================================================================================
+
+   Baking, Carpentry, Plumbing, Electrical, Painting, Tailoring,
+   Handicrafts, Artwork, Beauty Services, Furniture Making,
+   Home Decor, Catering, Photography, Other
+
+================================================================================
+                          VERIFICATION SYSTEM
+================================================================================
+
+   Skilled users must go through a verification process:
+   - Submit Aadhaar number (Indian national ID)
+   - Aadhaar is checked for uniqueness in the aadhaar_registry collection
+   - Verification statuses: pending -> approved / rejected
+   - Only approved + public profiles appear in explore/search
+   - Rejected users can file appeals
+
+================================================================================
+                          KEY FEATURES SUMMARY
+================================================================================
+
+   [*] Role-based access (Customer, Skilled Person, Company, Admin)
+   [*] Email/password authentication via Firebase Auth
+   [*] Real-time chat messaging (Firestore streams)
+   [*] Portfolio showcase for skilled professionals
+   [*] Product shop with cart and order management
+   [*] Job board - post and apply for jobs
+   [*] Aadhaar-based identity verification
+   [*] Cloudinary CDN for all image uploads
+   [*] GPS-based location and geocoding
+   [*] Star ratings and reviews
+   [*] User blocking and reporting
+   [*] Appeals system for rejected profiles
+   [*] Offline data persistence (Firestore cache)
+   [*] Cross-platform: Android, iOS, Web, Desktop
+   [*] Shimmer loading skeletons for smooth UX
+   [*] Cached network images for performance
+   [*] Share content via native OS share sheet
+
+================================================================================
+                             PROJECT FILE STRUCTURE
+================================================================================
+
+lib/
+  main.dart                        App entry point, Firebase init, theme setup
+  firebase_options.dart            Auto-generated Firebase config per platform
+
+  models/                          Data model classes (Dart objects <-> Firestore)
+  providers/                       State management (auth + user data)
+  screens/
+    auth/                          Login and Signup screens
+    home/                          Home dashboard and Explore screen
+    shop/                          Product listing, detail, add product
+    jobs/                          Job board, job detail, create job
+    chat/                          Chat list and chat messages
+    portfolio/                     Portfolio view, add item, my shop
+    profile/                       Profile view, setup screens (per role), edit
+    splash_screen.dart             App launch screen
+    main_navigation.dart           Bottom nav bar controller
+    main_screen.dart               Root screen wrapper
+  services/                        Firebase/Cloudinary service classes
+  utils/                           Constants, theme, helpers, config
+  widgets/                         Reusable UI components
+
+android/                           Android-specific config and google-services
+ios/                               iOS-specific config
+web/                               Web-specific index.html
+windows/ linux/ macos/             Desktop platform configs
+assets/
+  images/                          App images
+  icons/                           App launcher icon
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

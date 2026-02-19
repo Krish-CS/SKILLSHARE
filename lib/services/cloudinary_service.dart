@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:http/http.dart' as http;
@@ -29,7 +28,7 @@ class CloudinaryService {
           resourceType: CloudinaryResourceType.Image,
         ),
       );
-      
+
       return response.secureUrl;
     } catch (e) {
       debugPrint('Error uploading image to Cloudinary: $e');
@@ -58,7 +57,8 @@ class CloudinaryService {
         http.MultipartFile.fromBytes(
           'file',
           bytes,
-          filename: filename ?? 'image_${DateTime.now().millisecondsSinceEpoch}.jpg',
+          filename:
+              filename ?? 'image_${DateTime.now().millisecondsSinceEpoch}.jpg',
         ),
       );
 
@@ -70,7 +70,8 @@ class CloudinaryService {
         return data['secure_url'] as String?;
       }
 
-      debugPrint('Cloudinary upload failed: ${response.statusCode} ${response.body}');
+      debugPrint(
+          'Cloudinary upload failed: ${response.statusCode} ${response.body}');
       return null;
     } catch (e) {
       debugPrint('Error uploading image bytes to Cloudinary: $e');
@@ -80,7 +81,8 @@ class CloudinaryService {
 
   /// Upload video to Cloudinary
   /// Returns the secure URL of the uploaded video or null if failed
-  Future<String?> uploadVideo(File videoFile, {String folder = 'uploads'}) async {
+  Future<String?> uploadVideo(File videoFile,
+      {String folder = 'uploads'}) async {
     try {
       CloudinaryResponse response = await _cloudinary.uploadFile(
         CloudinaryFile.fromFile(
@@ -89,7 +91,7 @@ class CloudinaryService {
           resourceType: CloudinaryResourceType.Video,
         ),
       );
-      
+
       return response.secureUrl;
     } catch (e) {
       debugPrint('Error uploading video to Cloudinary: $e');
@@ -106,7 +108,7 @@ class CloudinaryService {
     String folder = 'uploads',
   }) async {
     List<String> urls = [];
-    
+
     for (var imageFile in imageFiles) {
       try {
         final url = await uploadImage(imageFile, folder: folder);
@@ -114,10 +116,11 @@ class CloudinaryService {
           urls.add(url);
         }
       } catch (e) {
-        print('Error uploading image: $e');
+        debugPrint('Error uploading image: $e');
       }
     }
-    
+
     return urls;
   }
 }
+

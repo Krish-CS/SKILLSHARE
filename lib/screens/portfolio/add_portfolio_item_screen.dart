@@ -30,8 +30,8 @@ class _AddPortfolioItemScreenState extends State<AddPortfolioItemScreen> {
   List<String> _skills = [];
   List<String> _imageUrls = [];
   List<String> _videoUrls = [];
-  List<File> _selectedImages = [];
-  List<File> _selectedVideos = [];
+  final List<File> _selectedImages = [];
+  final List<File> _selectedVideos = [];
   bool _isLoading = false;
   bool _isUploading = false;
 

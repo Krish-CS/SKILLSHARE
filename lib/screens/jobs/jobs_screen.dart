@@ -143,11 +143,6 @@ class _JobsScreenState extends State<JobsScreen> {
            _currentUser?.role == UserRoles.customer;
   }
   
-  bool get _canApplyToJobs {
-    // Only skilled persons can apply to jobs
-    return _currentUser?.role == UserRoles.skilledPerson;
-  }
-
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<app_auth.AuthProvider>(context);
@@ -207,7 +202,7 @@ class _JobsScreenState extends State<JobsScreen> {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),

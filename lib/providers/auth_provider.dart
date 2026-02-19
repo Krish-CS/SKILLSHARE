@@ -7,7 +7,7 @@ import '../utils/user_roles.dart';
 
 class AuthProvider with ChangeNotifier {
   final AuthService _authService = AuthService();
-  
+
   UserModel? _currentUser;
   bool _isLoading = false;
   String? _error;
@@ -16,22 +16,29 @@ class AuthProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isAuthenticated => _currentUser != null;
-  
+
   // Role-based getters for easy access
-  String? get userRole => _currentUser?.role;
-  bool get isCustomer => _currentUser?.role == UserRoles.customer;
-  bool get isCompany => _currentUser?.role == UserRoles.company;
-  bool get isSkilledPerson => _currentUser?.role == UserRoles.skilledPerson;
-  bool get isAdmin => _currentUser?.role == UserRoles.admin;
-  
+  String? get userRole => UserRoles.normalizeRole(_currentUser?.role);
+  bool get isCustomer => userRole == UserRoles.customer;
+  bool get isCompany => userRole == UserRoles.company;
+  bool get isSkilledPerson => userRole == UserRoles.skilledPerson;
+  bool get isAdmin => userRole == UserRoles.admin;
+
   // Check if user can perform specific actions
-  bool get canPostJobs => _currentUser != null && UserRoles.canPostJobs(_currentUser!.role);
-  bool get canApplyToJobs => _currentUser != null && UserRoles.canApplyToJobs(_currentUser!.role);
-  bool get canSellProducts => _currentUser != null && UserRoles.canSellProducts(_currentUser!.role);
-  bool get canBuyProducts => _currentUser != null && UserRoles.canBuyProducts(_currentUser!.role);
-  bool get canUploadPortfolio => _currentUser != null && UserRoles.canUploadPortfolio(_currentUser!.role);
-  bool get canHireSkilledPersons => _currentUser != null && UserRoles.canHireSkilledPersons(_currentUser!.role);
-  bool get canBeHired => _currentUser != null && UserRoles.canBeHired(_currentUser!.role);
+  bool get canPostJobs =>
+      _currentUser != null && UserRoles.canPostJobs(userRole ?? '');
+  bool get canApplyToJobs =>
+      _currentUser != null && UserRoles.canApplyToJobs(userRole ?? '');
+  bool get canSellProducts =>
+      _currentUser != null && UserRoles.canSellProducts(userRole ?? '');
+  bool get canBuyProducts =>
+      _currentUser != null && UserRoles.canBuyProducts(userRole ?? '');
+  bool get canUploadPortfolio =>
+      _currentUser != null && UserRoles.canUploadPortfolio(userRole ?? '');
+  bool get canHireSkilledPersons =>
+      _currentUser != null && UserRoles.canHireSkilledPersons(userRole ?? '');
+  bool get canBeHired =>
+      _currentUser != null && UserRoles.canBeHired(userRole ?? '');
 
   AuthProvider() {
     _initialize();
@@ -49,7 +56,7 @@ class AuthProvider with ChangeNotifier {
         }
       });
     } catch (e) {
-      print('Auth provider initialization error: $e');
+      debugPrint('Auth provider initialization error: $e');
       _error = e.toString();
       notifyListeners();
     }
@@ -65,7 +72,9 @@ class AuthProvider with ChangeNotifier {
           _currentUser = UserModel(
             uid: uid,
             email: firebaseUser.email ?? '',
-            name: firebaseUser.displayName ?? firebaseUser.email?.split('@').first ?? 'User',
+            name: firebaseUser.displayName ??
+                firebaseUser.email?.split('@').first ??
+                'User',
             role: 'customer',
             profilePhoto: firebaseUser.photoURL,
             createdAt: DateTime.now(),
@@ -189,3 +198,4 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 }
+

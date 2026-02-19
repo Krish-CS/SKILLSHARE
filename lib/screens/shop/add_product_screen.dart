@@ -29,9 +29,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final ImagePicker _picker = ImagePicker();
   
   String? _selectedCategory;
-  List<String> _imageUrls = [];
-  List<XFile> _selectedImages = [];
-  List<Uint8List> _selectedImageBytes = [];
+  final List<String> _imageUrls = [];
+  final List<XFile> _selectedImages = [];
+  final List<Uint8List> _selectedImageBytes = [];
   bool _isLoading = false;
   bool _isUploading = false;
 

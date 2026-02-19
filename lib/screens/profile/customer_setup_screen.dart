@@ -140,7 +140,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
       // Handle web-specific errors gracefully
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('Image selected! Click Save to upload.'),
             backgroundColor: Colors.green,
           ),

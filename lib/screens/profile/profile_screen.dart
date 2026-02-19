@@ -70,7 +70,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         _userData = await _firestoreService.getUserById(widget.userId);
         _userRole = _userData?.role;
       } catch (e) {
-        print('Could not load user data: $e');
+        debugPrint('Could not load user data: $e');
       }
 
       if (_userRole == AppConstants.roleCustomer) {
@@ -84,7 +84,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         try {
           _reviews = await _firestoreService.getUserReviews(widget.userId);
         } catch (reviewError) {
-          print('Could not load reviews: $reviewError');
+          debugPrint('Could not load reviews: $reviewError');
           _reviews = []; // Set empty list if reviews fail
         }
       }
@@ -93,7 +93,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading profile: $e');
+      debugPrint('Error loading profile: $e');
       setState(() {
         _isLoading = false;
         _profile = null;
@@ -471,6 +471,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                           child: ElevatedButton.icon(
                             onPressed: () async {
                               // Create or get existing chat and navigate to chat screen
+                              final nav = Navigator.of(context);
+                              final messenger = ScaffoldMessenger.of(context);
                               try {
                                 final currentUser = FirebaseAuth.instance.currentUser;
                                 if (currentUser == null) return;
@@ -481,8 +483,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                 
                                 // Show loading
                                 if (!mounted) return;
+                                // ignore: use_build_context_synchronously
                                 showDialog(
-                                  context: context,
+                                  context: context, // ignore: use_build_context_synchronously
                                   barrierDismissible: false,
                                   builder: (_) => const Center(child: CircularProgressIndicator()),
                                 );
@@ -501,13 +504,10 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                   },
                                 );
                                 
-                                // Close loading
+                                // Close loading and navigate
                                 if (!mounted) return;
-                                Navigator.of(context).pop();
-                                
-                                // Navigate to chat detail screen
-                                if (!mounted) return;
-                                Navigator.of(context).push(
+                                nav.pop();
+                                nav.push(
                                   MaterialPageRoute(
                                     builder: (_) => ChatDetailScreen(
                                       chatId: chatId,
@@ -520,11 +520,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                               } catch (e) {
                                 // Close loading if still showing
                                 if (!mounted) return;
-                                Navigator.of(context).pop();
-                                
-                                // Show error
-                                if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                nav.pop();
+                                messenger.showSnackBar(
                                   SnackBar(content: Text('Failed to start chat: $e')),
                                 );
                               }
@@ -854,6 +851,16 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     .map((category) => Chip(label: Text(category)))
                     .toList(),
               ),
+            // Assigned Projects
+            if (profile.assignedProjects.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              const Text(
+                'Assigned Projects',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              ...profile.assignedProjects.map((project) => _buildProjectCard(project)),
+            ],
           ],
         ),
       ),
@@ -955,6 +962,99 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               ),
               const SizedBox(height: 8),
               Text(profile.gstNumber!),
+            ],
+            // Assigned Projects
+            if (profile.assignedProjects.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              const Text(
+                'Assigned Projects',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              ...profile.assignedProjects.map((project) => _buildProjectCard(project)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProjectCard(Map<String, dynamic> project) {
+    final title = (project['title'] as String?) ?? 'Unnamed Project';
+    final description = (project['description'] as String?) ?? '';
+    final status = (project['status'] as String?) ?? 'accepted';
+    final assignedAt = (project['assignedAt'] as String?) ?? '';
+
+    Color statusColor;
+    switch (status) {
+      case 'completed':
+        statusColor = Colors.blue;
+        break;
+      case 'accepted':
+        statusColor = Colors.green;
+        break;
+      default:
+        statusColor = Colors.orange;
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.assignment, size: 18, color: Colors.deepPurple),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 14),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: statusColor.withValues(alpha: 0.4)),
+                  ),
+                  child: Text(
+                    status[0].toUpperCase() + status.substring(1),
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: statusColor,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            if (description.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                description,
+                style:
+                    const TextStyle(fontSize: 13, color: Colors.black54),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+            if (assignedAt.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Assigned: $assignedAt',
+                style:
+                    const TextStyle(fontSize: 11, color: Colors.grey),
+              ),
             ],
           ],
         ),

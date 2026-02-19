@@ -256,7 +256,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withValues(alpha: 0.1),
                     blurRadius: 8,
                     offset: const Offset(0, 4),
                   ),
@@ -272,7 +272,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.3),
+                      color: Colors.white.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -348,7 +348,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: _statusColor.withOpacity(0.1),
+                          color: _statusColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
@@ -421,10 +421,10 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF2196F3).withOpacity(0.1),
+                          color: const Color(0xFF2196F3).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                            color: const Color(0xFF2196F3).withOpacity(0.3),
+                            color: const Color(0xFF2196F3).withValues(alpha: 0.3),
                           ),
                         ),
                         child: Text(
@@ -492,6 +492,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                               IconButton(
                                 onPressed: () async {
                                   // Start chat with employer
+                                  final nav = Navigator.of(context);
+                                  final messenger = ScaffoldMessenger.of(context);
                                   try {
                                     final currentUser = FirebaseAuth.instance.currentUser;
                                     if (currentUser == null || _employer == null) return;
@@ -520,11 +522,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                     
                                     // Close loading
                                     if (!mounted) return;
-                                    Navigator.of(context).pop();
-                                    
-                                    // Navigate to chat detail screen
-                                    if (!mounted) return;
-                                    Navigator.of(context).push(
+                                    nav.pop();
+                                    nav.push(
                                       MaterialPageRoute(
                                         builder: (_) => ChatDetailScreen(
                                           chatId: chatId,
@@ -537,11 +536,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                   } catch (e) {
                                     // Close loading if still showing
                                     if (!mounted) return;
-                                    Navigator.of(context).pop();
-                                    
-                                    // Show error
-                                    if (!mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
+                                    nav.pop();
+                                    messenger.showSnackBar(
                                       SnackBar(content: Text('Failed to start chat: $e')),
                                     );
                                   }
@@ -575,7 +571,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF2196F3).withOpacity(0.1),
+                            color: const Color(0xFF2196F3).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -684,6 +680,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                 onPressed: () async {
                                   // Start chat with applicant
                                   if (applicantUser == null || _currentUser == null) return;
+                                  final nav = Navigator.of(context);
+                                  final messenger = ScaffoldMessenger.of(context);
                                   
                                   try {
                                     final currentUser = FirebaseAuth.instance.currentUser;
@@ -713,11 +711,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                     
                                     // Close loading
                                     if (!mounted) return;
-                                    Navigator.of(context).pop();
-                                    
-                                    // Navigate to chat detail screen
-                                    if (!mounted) return;
-                                    Navigator.of(context).push(
+                                    nav.pop();
+                                    nav.push(
                                       MaterialPageRoute(
                                         builder: (_) => ChatDetailScreen(
                                           chatId: chatId,
@@ -730,11 +725,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                   } catch (e) {
                                     // Close loading if still showing
                                     if (!mounted) return;
-                                    Navigator.of(context).pop();
-                                    
-                                    // Show error
-                                    if (!mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
+                                    nav.pop();
+                                    messenger.showSnackBar(
                                       SnackBar(content: Text('Failed to start chat: $e')),
                                     );
                                   }
@@ -766,7 +758,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, -2),
             ),

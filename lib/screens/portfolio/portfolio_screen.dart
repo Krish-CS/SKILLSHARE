@@ -108,18 +108,18 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
         title: const Text('Portfolio'),
         backgroundColor: Colors.red,
       ),
-      body: Center(
+      body: const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.block, size: 80, color: Colors.red),
-            const SizedBox(height: 20),
-            const Text(
+            Icon(Icons.block, size: 80, color: Colors.red),
+            SizedBox(height: 20),
+            Text(
               'Access Denied',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 10),
-            const Padding(
+            SizedBox(height: 10),
+            Padding(
               padding: EdgeInsets.symmetric(horizontal: 40),
               child: Text(
                 'Only skilled persons can manage their portfolio. Please switch to a skilled person account.',
@@ -340,7 +340,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
         const SizedBox(height: 12),
         _buildStatCard(
           'Average Likes per Work',
-          totalWorks > 0 ? '${(totalLikes / totalWorks).toStringAsFixed(1)}' : '0',
+          totalWorks > 0 ? (totalLikes / totalWorks).toStringAsFixed(1) : '0',
           Icons.trending_up,
           Colors.orange,
         ),
@@ -352,7 +352,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
     return Card(
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: color.withOpacity(0.1),
+          backgroundColor: color.withValues(alpha: 0.1),
           child: Icon(icon, color: color),
         ),
         title: Text(title),
@@ -372,6 +372,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
     // SECURITY: Check if user is verified before allowing portfolio item creation
     final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
     final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final nav = Navigator.of(context);
     
     // Load profile if not already loaded
     if (userProvider.currentProfile == null && authProvider.currentUser != null) {
@@ -415,14 +416,13 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
     }
     
     // Verified - proceed to add portfolio item
-    final result = await Navigator.push(
-      context,
+    final result = await nav.push(
       MaterialPageRoute(
         builder: (context) => const AddPortfolioItemScreen(),
       ),
     );
 
-    if (result == true) {
+    if (result == true && mounted) {
       _loadPortfolio(); // Refresh the list
     }
   }

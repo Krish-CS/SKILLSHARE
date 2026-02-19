@@ -59,7 +59,7 @@ class AuthService {
           lastError = e;
           retries--;
           if (retries > 0) {
-            await Future.delayed(Duration(seconds: 2));
+            await Future.delayed(const Duration(seconds: 2));
           }
         }
       }
@@ -71,7 +71,7 @@ class AuthService {
       final user = userCredential.user;
       if (user == null) return null;
 
-      print('User created in Firebase Auth: ${user.uid}');
+      debugPrint('User created in Firebase Auth: ${user.uid}');
 
       // Create user document in Firestore
       final userModel = UserModel(
@@ -84,21 +84,21 @@ class AuthService {
         updatedAt: DateTime.now(),
       );
 
-      print('Attempting to write to Firestore collection: ${AppConstants.usersCollection}');
+      debugPrint('Attempting to write to Firestore collection: ${AppConstants.usersCollection}');
       try {
         await _firestore
             .collection(AppConstants.usersCollection)
             .doc(user.uid)
             .set(userModel.toMap());
-        print('User document created successfully');
+        debugPrint('User document created successfully');
       } catch (firestoreError) {
-        print('Firestore write error: $firestoreError');
+        debugPrint('Firestore write error: $firestoreError');
         throw 'Failed to create user profile: $firestoreError';
       }
 
       // If skilled user, create empty profile
       if (role == AppConstants.roleSkilledUser) {
-        print('Creating skilled user profile');
+        debugPrint('Creating skilled user profile');
         try {
           await _firestore
               .collection(AppConstants.skilledUsersCollection)
@@ -117,9 +117,9 @@ class AuthService {
             'createdAt': FieldValue.serverTimestamp(),
             'updatedAt': FieldValue.serverTimestamp(),
           });
-          print('Skilled user profile created successfully');
+          debugPrint('Skilled user profile created successfully');
         } catch (firestoreError) {
-          print('Skilled user profile error: $firestoreError');
+          debugPrint('Skilled user profile error: $firestoreError');
           // Don't throw - user doc was created
         }
       }
@@ -128,8 +128,8 @@ class AuthService {
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
     } catch (e, stackTrace) {
-      print('Signup error: $e');
-      print('Stack trace: $stackTrace');
+      debugPrint('Signup error: $e');
+      debugPrint('Stack trace: $stackTrace');
       throw 'Signup failed: ${e.toString()}';
     }
   }
@@ -158,7 +158,7 @@ class AuthService {
 
       if (!doc.exists) {
         // User authenticated but no Firestore doc - create one
-        print('Creating user document for ${user.uid}');
+        debugPrint('Creating user document for ${user.uid}');
         final userModel = UserModel(
           uid: user.uid,
           email: email,
@@ -182,14 +182,14 @@ class AuthService {
         throw 'User data is empty';
       }
 
-      print('User data: $data');
+      debugPrint('User data: $data');
       return UserModel.fromMap(data, user.uid);
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
     } catch (e, stackTrace) {
       // Print actual error for debugging
-      print('Login error: $e');
-      print('Stack trace: $stackTrace');
+      debugPrint('Login error: $e');
+      debugPrint('Stack trace: $stackTrace');
       throw 'Login failed: ${e.toString()}';
     }
   }
@@ -273,3 +273,4 @@ class AuthService {
     }
   }
 }
+

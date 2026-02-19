@@ -24,6 +24,8 @@ class CompanyProfile {
   final double rating; // Rating as an employer
   final int reviewCount; // Number of reviews from employees/candidates
   final DateTime? verifiedAt;
+  /// Projects assigned by this company (request IDs or project metadata).
+  final List<Map<String, dynamic>> assignedProjects;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -48,6 +50,7 @@ class CompanyProfile {
     this.rating = 0.0,
     this.reviewCount = 0,
     this.verifiedAt,
+    this.assignedProjects = const [],
     required this.createdAt,
     required this.updatedAt,
   });
@@ -74,6 +77,9 @@ class CompanyProfile {
       rating: (map['rating'] ?? 0.0).toDouble(),
       reviewCount: map['reviewCount'] ?? 0,
       verifiedAt: (map['verifiedAt'] as Timestamp?)?.toDate(),
+      assignedProjects: (map['assignedProjects'] as List<dynamic>? ?? [])
+          .map((e) => Map<String, dynamic>.from(e is Map ? e : {}))
+          .toList(),
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -100,6 +106,7 @@ class CompanyProfile {
       'rating': rating,
       'reviewCount': reviewCount,
       'verifiedAt': verifiedAt != null ? Timestamp.fromDate(verifiedAt!) : null,
+      'assignedProjects': assignedProjects,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -125,6 +132,7 @@ class CompanyProfile {
     double? rating,
     int? reviewCount,
     DateTime? verifiedAt,
+    List<Map<String, dynamic>>? assignedProjects,
   }) {
     return CompanyProfile(
       userId: userId,
@@ -147,6 +155,7 @@ class CompanyProfile {
       rating: rating ?? this.rating,
       reviewCount: reviewCount ?? this.reviewCount,
       verifiedAt: verifiedAt ?? this.verifiedAt,
+      assignedProjects: assignedProjects ?? this.assignedProjects,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );

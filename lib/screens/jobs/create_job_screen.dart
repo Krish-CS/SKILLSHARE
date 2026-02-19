@@ -25,7 +25,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   
   String? _selectedJobType;
-  List<String> _requiredSkills = [];
+  final List<String> _requiredSkills = [];
   DateTime? _selectedDeadline;
   bool _isLoading = false;
 
@@ -473,7 +473,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                             label: Text(skill),
                             deleteIcon: const Icon(Icons.close, size: 18),
                             onDeleted: () => _removeSkill(skill),
-                            backgroundColor: const Color(0xFF2196F3).withOpacity(0.1),
+                            backgroundColor: const Color(0xFF2196F3).withValues(alpha: 0.1),
                             labelStyle: const TextStyle(
                               color: Color(0xFF2196F3),
                             ),

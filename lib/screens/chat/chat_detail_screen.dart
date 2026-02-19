@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../models/chat_model.dart';
 import '../../services/chat_service.dart';
+import '../../services/firestore_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../../utils/app_helpers.dart';
 import '../../utils/web_image_loader.dart';
+import '../../utils/user_roles.dart';
+import '../../providers/auth_provider.dart' as app_auth;
+import '../../widgets/chat/chat_work_request_section.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   final String chatId;
@@ -29,19 +34,30 @@ class ChatDetailScreen extends StatefulWidget {
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final ChatService _chatService = ChatService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
+  final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _picker = ImagePicker();
   
   String? _currentUserId;
+  String? _currentUserRole;
   bool _isLoading = false;
   bool _isSending = false;
+  late final Stream<List<MessageModel>> _messageStream;
 
   @override
   void initState() {
     super.initState();
     _currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    _messageStream = _chatService.getMessages(widget.chatId);
     _markMessagesAsRead();
+    // Load role after frame so Provider is available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final auth = Provider.of<app_auth.AuthProvider>(context, listen: false);
+        setState(() => _currentUserRole = auth.userRole);
+      }
+    });
   }
 
   @override
@@ -217,8 +233,195 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 
+  void _showAskWorkDialog(BuildContext context) {
+    final titleController = TextEditingController();
+    final descController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    bool submitting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return StatefulBuilder(builder: (_, setSheetState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
+            ),
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF9C27B0), Color(0xFFE91E63)],
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.work_outline,
+                            color: Colors.white, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Ask for Work / Project',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              'Send a work request to this skilled person',
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  TextFormField(
+                    controller: titleController,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: InputDecoration(
+                      labelText: 'Project / Work Title *',
+                      hintText: 'e.g. Build a mobile app, Design a logo...',
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(Icons.title),
+                    ),
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Please enter a title'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: descController,
+                    maxLines: 3,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: InputDecoration(
+                      labelText: 'Description *',
+                      hintText: 'Describe what needs to be done...',
+                      alignLabelWithHint: true,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Padding(
+                        padding: EdgeInsets.only(bottom: 40),
+                        child: Icon(Icons.description_outlined),
+                      ),
+                    ),
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Please enter a description'
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF9C27B0), Color(0xFFE91E63)],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: ElevatedButton.icon(
+                        onPressed: submitting
+                            ? null
+                            : () async {
+                                // Dismiss keyboard before any UI changes to avoid
+                                // Flutter Web 'targetElement == domElement' assertion.
+                                FocusScope.of(sheetCtx).unfocus();
+                                if (!formKey.currentState!.validate()) return;
+                                setSheetState(() => submitting = true);
+                                final messenger = ScaffoldMessenger.of(context);
+                                try {
+                                  await _firestoreService.createChatWorkRequest(
+                                    chatId: widget.chatId,
+                                    customerId: _currentUserId!,
+                                    skilledUserId: widget.otherUserId,
+                                    title: titleController.text.trim(),
+                                    description: descController.text.trim(),
+                                  );
+                                  if (sheetCtx.mounted) {
+                                    FocusScope.of(sheetCtx).unfocus();
+                                    Navigator.pop(sheetCtx);
+                                  }
+                                  if (mounted) {
+                                    messenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            '✅ Work request sent! Waiting for approval.'),
+                                        backgroundColor: Colors.green,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                          content: Text('Error: $e'),
+                                          backgroundColor: Colors.red),
+                                    );
+                                  }
+                                } finally {
+                                  if (sheetCtx.mounted) {
+                                    setSheetState(() => submitting = false);
+                                  }
+                                }
+                              },
+                        icon: submitting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.send, color: Colors.white),
+                        label: Text(
+                          submitting ? 'Sending...' : 'Send Request',
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 16),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        });
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isCustomer = _currentUserRole == UserRoles.customer;
+    final isSkilledPerson = _currentUserRole == UserRoles.skilledPerson;
+    final isCompany = _currentUserRole == UserRoles.company;
+    // Both customers and companies can ask for work
+    final canAskForWork = (isCustomer || isCompany) && _currentUserId != null;
+
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -247,6 +450,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             ),
           ],
         ),
+        actions: [
+          if (canAskForWork)
+            IconButton(
+              icon: const Icon(Icons.work_outline, color: Colors.white),
+              tooltip: 'Ask for Work / Project',
+              onPressed: () => _showAskWorkDialog(context),
+            ),
+        ],
         flexibleSpace: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
@@ -259,10 +470,20 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       ),
       body: Column(
         children: [
+          // Work Requests section at top
+          if (_currentUserId != null)
+            ChatWorkRequestSection(
+              chatId: widget.chatId,
+              currentUserId: _currentUserId!,
+              otherUserId: widget.otherUserId,
+              otherUserName: widget.otherUserName,
+              isCurrentUserCustomer: isCustomer || isCompany,
+              isCurrentUserSkilledPerson: isSkilledPerson,
+            ),
           // Messages List
           Expanded(
             child: StreamBuilder<List<MessageModel>>(
-              stream: _chatService.getMessages(widget.chatId),
+              stream: _messageStream,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());

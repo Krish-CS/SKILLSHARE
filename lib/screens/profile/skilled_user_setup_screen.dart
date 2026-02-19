@@ -46,8 +46,8 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
   File? _profileImage;
   Uint8List? _profileImageBytes;
   String? _profileImageUrl;
-  List<File> _portfolioImages = [];
-  List<Uint8List> _portfolioImageBytes = [];
+  final List<File> _portfolioImages = [];
+  final List<Uint8List> _portfolioImageBytes = [];
   List<String> _portfolioImageUrls = [];
 
   final List<String> _categories = [
@@ -381,8 +381,12 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       _uploadStatusMessage = 'Saving profile...';
     });
 
+    final messenger = ScaffoldMessenger.of(context);
+    final nav = Navigator.of(context);
+
     try {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final currentProfile = userProvider.currentProfile;
       
       String? finalProfileUrl = _profileImageUrl;
@@ -443,7 +447,6 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       setState(() => _uploadStatusMessage = 'Saving to database...');
 
       // Get user name to denormalize into skilled_users collection
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final userName = authProvider.currentUser?.name;
 
       final profile = SkilledUserProfile(
@@ -480,7 +483,6 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
             await FirestoreService().updateUserProfilePhoto(widget.userId, finalProfileUrl);
             
             // Also update via auth provider to keep local state in sync
-            final authProvider = Provider.of<AuthProvider>(context, listen: false);
             if (authProvider.currentUser != null) {
               final updatedUser = authProvider.currentUser!.copyWith(
                 profilePhoto: finalProfileUrl,
@@ -493,7 +495,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
           debugPrint('Error updating user profile photo: $e');
         }
         
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text('Profile saved successfully!'),
             backgroundColor: Colors.green,
@@ -503,7 +505,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
         // Navigate to main navigation after successful save
         await Future.delayed(const Duration(milliseconds: 500));
         if (mounted) {
-          Navigator.of(context).pushAndRemoveUntil(
+          nav.pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => const MainNavigation()),
             (route) => false,
           );
@@ -513,7 +515,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text('Error: $e'),
             backgroundColor: Colors.red,

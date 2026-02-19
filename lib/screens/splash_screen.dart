@@ -36,7 +36,7 @@ class _SplashScreenState extends State<SplashScreen> {
         );
       }
     } catch (e) {
-      print('Splash screen navigation error: $e');
+      debugPrint('Splash screen navigation error: $e');
       // If there's an error, default to login screen
       if (mounted) {
         Navigator.of(context).pushReplacement(

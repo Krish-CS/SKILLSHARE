@@ -1,7 +1,8 @@
 class AppConstants {
   // User Roles - DEPRECATED: Use UserRoles class instead
   // Keeping for backward compatibility only
-  static const String roleSkilledUser = 'skilled_person'; // Changed to match UserRoles
+  static const String roleSkilledUser =
+      'skilled_person'; // Changed to match UserRoles
   static const String roleCustomer = 'customer';
   static const String roleCompany = 'company';
   static const String roleAdmin = 'admin';
@@ -39,6 +40,12 @@ class AppConstants {
   static const String requestsCollection = 'requests';
   static const String appealsCollection = 'appeals';
   static const String productsCollection = 'products';
+  static const String aadhaarRegistryCollection = 'aadhaar_registry';
+  static const String cartsCollection = 'carts';
+  static const String ordersCollection = 'orders';
+  static const String reportsCollection = 'reports';
+  static const String blockedUsersCollection = 'blocked_users';
+  static const String supportTicketsCollection = 'support_tickets';
 
   // Storage Paths
   static const String profilePhotosPath = 'profile_photos';
@@ -49,7 +56,7 @@ class AppConstants {
 
   // Aadhaar Pattern (for validation)
   static const String aadhaarPattern = r'^\d{4}\s\d{4}\s\d{4}$';
-  
+
   // Max file sizes (in bytes)
   static const int maxImageSize = 5 * 1024 * 1024; // 5MB
   static const int maxVideoSize = 50 * 1024 * 1024; // 50MB
