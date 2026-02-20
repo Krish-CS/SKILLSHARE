@@ -18,6 +18,8 @@ class CustomerProfile {
   final Map<String, dynamic>? preferences; // Additional preferences (budget range, distance, etc.)
   /// Projects assigned by this customer (request IDs or project titles).
   final List<Map<String, dynamic>> assignedProjects;
+  /// Banner customisation data (image or styled text).
+  final Map<String, dynamic>? bannerData;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -35,6 +37,7 @@ class CustomerProfile {
     this.preferredCategories = const [],
     this.preferences,
     this.assignedProjects = const [],
+    this.bannerData,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -56,6 +59,9 @@ class CustomerProfile {
       assignedProjects: (map['assignedProjects'] as List<dynamic>? ?? [])
           .map((e) => Map<String, dynamic>.from(e is Map ? e : {}))
           .toList(),
+      bannerData: map['bannerData'] is Map
+          ? Map<String, dynamic>.from(map['bannerData'] as Map)
+          : null,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -75,6 +81,7 @@ class CustomerProfile {
       'preferredCategories': preferredCategories,
       'preferences': preferences,
       'assignedProjects': assignedProjects,
+      if (bannerData != null) 'bannerData': bannerData,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -93,6 +100,8 @@ class CustomerProfile {
     List<String>? preferredCategories,
     Map<String, dynamic>? preferences,
     List<Map<String, dynamic>>? assignedProjects,
+    Map<String, dynamic>? bannerData,
+    bool clearBanner = false,
   }) {
     return CustomerProfile(
       userId: userId,
@@ -108,6 +117,7 @@ class CustomerProfile {
       preferredCategories: preferredCategories ?? this.preferredCategories,
       preferences: preferences ?? this.preferences,
       assignedProjects: assignedProjects ?? this.assignedProjects,
+      bannerData: clearBanner ? null : (bannerData ?? this.bannerData),
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );

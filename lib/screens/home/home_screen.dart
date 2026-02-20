@@ -3,11 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/user_provider.dart';
-import '../../models/order_model.dart';
-import '../../models/service_request_model.dart';
 import '../../models/skilled_user_profile.dart';
 import '../../utils/app_constants.dart';
-import '../../utils/app_helpers.dart';
 import '../../utils/user_roles.dart';
 import '../../utils/add_dummy_profiles.dart';
 import '../../utils/web_image_loader.dart';
@@ -174,187 +171,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return filtered;
   }
 
-  Future<List<_HomeNotificationItem>> _loadNotificationsForUser(
-    String userId,
-  ) async {
-    final notifications = <_HomeNotificationItem>[];
-    final results = await Future.wait([
-      _firestoreService.getLatestUserWorkRequests(userId, limit: 15),
-      _firestoreService.getLatestOrdersForUser(userId, limit: 15),
-    ]);
-
-    final requests = results[0] as List<ServiceRequestModel>;
-    final orders = results[1] as List<OrderModel>;
-
-    for (final request in requests) {
-      notifications.add(
-        _HomeNotificationItem(
-          title: 'Work request: ${request.title}',
-          subtitle:
-              'Status: ${request.status.toUpperCase()} • ${request.description}',
-          createdAt: request.updatedAt,
-          icon: request.status == AppConstants.requestStatusAccepted
-              ? Icons.check_circle
-              : request.status == AppConstants.requestStatusRejected
-                  ? Icons.cancel
-                  : Icons.work_outline,
-          color: request.status == AppConstants.requestStatusAccepted
-              ? Colors.green
-              : request.status == AppConstants.requestStatusRejected
-                  ? Colors.red
-                  : Colors.orange,
-        ),
-      );
-    }
-
-    for (final order in orders) {
-      final isBuyer = order.buyerId == userId;
-      final actorLabel = isBuyer ? 'Your order' : 'Sale update';
-      final timeline = order.statusTimeline.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-      final latestTimeline = timeline.isNotEmpty
-          ? '${timeline.first.key} at ${AppHelpers.formatDateTime(timeline.first.value)}'
-          : 'status updated';
-
-      notifications.add(
-        _HomeNotificationItem(
-          title: '$actorLabel: ${order.productName}',
-          subtitle: 'Order ${order.status.toUpperCase()} • $latestTimeline',
-          createdAt: order.updatedAt,
-          icon: isBuyer ? Icons.shopping_bag : Icons.store,
-          color: isBuyer ? const Color(0xFF2196F3) : const Color(0xFF6A11CB),
-        ),
-      );
-    }
-
-    notifications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return notifications.take(25).toList();
-  }
-
-  void _showNotificationsSheet(BuildContext context, String userId) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => FractionallySizedBox(
-        heightFactor: 0.85,
-        child: FutureBuilder<List<_HomeNotificationItem>>(
-          future: _loadNotificationsForUser(userId),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            if (snapshot.hasError) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Text(
-                    'Failed to load notifications: ${snapshot.error}',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              );
-            }
-
-            final notifications =
-                snapshot.data ?? const <_HomeNotificationItem>[];
-            if (notifications.isEmpty) {
-              return const Center(child: Text('No notifications yet'));
-            }
-
-            return Column(
-              children: [
-                Container(
-                  width: 44,
-                  height: 5,
-                  margin: const EdgeInsets.only(top: 10, bottom: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[400],
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-                const Text(
-                  'Notifications',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                    itemCount: notifications.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final item = notifications[index];
-                      return Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.05),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            CircleAvatar(
-                              radius: 18,
-                              backgroundColor:
-                                  item.color.withValues(alpha: 0.15),
-                              child:
-                                  Icon(item.icon, color: item.color, size: 18),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item.title,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    item.subtitle,
-                                    style: TextStyle(
-                                      color: Colors.grey[700],
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    AppHelpers.getRelativeTime(item.createdAt),
-                                    style: TextStyle(
-                                      color: Colors.grey[500],
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
@@ -415,8 +231,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       padding: const EdgeInsets.only(right: 4),
                       child: NotificationBell(
                         userId: currentUser.uid,
-                        onTap: () =>
-                            _showNotificationsSheet(context, currentUser.uid),
                         color: Colors.white,
                       ),
                     ),
@@ -1305,20 +1119,4 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-}
-
-class _HomeNotificationItem {
-  final String title;
-  final String subtitle;
-  final DateTime createdAt;
-  final IconData icon;
-  final Color color;
-
-  const _HomeNotificationItem({
-    required this.title,
-    required this.subtitle,
-    required this.createdAt,
-    required this.icon,
-    required this.color,
-  });
 }

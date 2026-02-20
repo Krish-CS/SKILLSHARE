@@ -1,106 +1,472 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/app_constants.dart';
+import '../utils/app_helpers.dart';
+import '../utils/notification_helpers.dart';
+import '../services/firestore_service.dart';
+import '../screens/notifications/notifications_screen.dart';
 
-/// A bell icon with an animated badge showing pending notification count.
+/// Bell icon that shows an unread-count badge and, on tap, a compact dropdown
+/// panel with recent notifications positioned directly below it.
 ///
-/// Usage:
-/// ```dart
-/// NotificationBell(
-///   userId: currentUser.uid,
-///   color: Colors.white,
-///   onTap: () => _showNotificationsSheet(context, currentUser.uid),
-/// )
-/// ```
-class NotificationBell extends StatelessWidget {
+/// When the panel opens, all current notifications are stamped "seen" so the
+/// badge count resets to 0 immediately. Tapping "View all notifications"
+/// navigates to the full [NotificationsScreen].
+class NotificationBell extends StatefulWidget {
   const NotificationBell({
     super.key,
     required this.userId,
-    required this.onTap,
     this.color = Colors.white,
     this.size = 24.0,
+    // Legacy onTap kept for API compatibility but now unused internally
+    this.onTap,
   });
 
   final String userId;
-  final VoidCallback onTap;
   final Color color;
   final double size;
+  final VoidCallback? onTap;
 
-  /// Stream the count of pending notifications (work requests + recent orders)
-  Stream<int> _notificationCountStream() {
-    // Stream pending work requests involving this user
-    return FirebaseFirestore.instance
-        .collection(AppConstants.requestsCollection)
-        .where('participants', arrayContains: userId)
-        .where('status', isEqualTo: AppConstants.requestStatusPending)
+  @override
+  State<NotificationBell> createState() => _NotificationBellState();
+}
+
+class _NotificationBellState extends State<NotificationBell> {
+  final _firestore = FirebaseFirestore.instance;
+  final _firestoreService = FirestoreService();
+  final _layerLink = LayerLink();
+
+  final _countCtrl = StreamController<int>.broadcast();
+  StreamSubscription? _userSub;
+  StreamSubscription? _requestSub;
+
+  DateTime? _lastSeen;
+  QuerySnapshot? _lastRequestSnap;
+
+  OverlayEntry? _overlayEntry;
+  bool _isOpen = false;
+
+  // ─── Lifecycle ────────────────────────────────────────────────────────────
+
+  @override
+  void initState() {
+    super.initState();
+    _startListening();
+  }
+
+  void _startListening() {
+    // Re-compute badge whenever the user's lastNotificationSeenAt changes
+    _userSub = _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(widget.userId)
         .snapshots()
-        .map((snap) => snap.docs.length);
+        .listen((doc) {
+      if (!doc.exists) return;
+      final ts = doc.data()?['lastNotificationSeenAt'];
+      _lastSeen = ts != null ? (ts as Timestamp).toDate() : null;
+      _recount();
+    });
+
+    // Re-compute badge whenever the requests collection changes
+    _requestSub = _firestore
+        .collection(AppConstants.requestsCollection)
+        .where('participants', arrayContains: widget.userId)
+        .snapshots()
+        .listen((snap) {
+      _lastRequestSnap = snap;
+      _recount();
+    });
+  }
+
+  void _recount() {
+    final snap = _lastRequestSnap;
+    if (snap == null) {
+      if (!_countCtrl.isClosed) _countCtrl.add(0);
+      return;
+    }
+    int count = 0;
+    for (final doc in snap.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final Timestamp? ts = data['updatedAt'] as Timestamp?;
+      if (ts == null) continue;
+      if (_lastSeen == null || ts.toDate().isAfter(_lastSeen!)) count++;
+    }
+    if (!_countCtrl.isClosed) _countCtrl.add(count);
+  }
+
+  @override
+  void dispose() {
+    _closeDropdown();
+    _userSub?.cancel();
+    _requestSub?.cancel();
+    _countCtrl.close();
+    super.dispose();
+  }
+
+  // ─── Dropdown ─────────────────────────────────────────────────────────────
+
+  void _toggle(BuildContext context) =>
+      _isOpen ? _closeDropdown() : _openDropdown(context);
+
+  void _openDropdown(BuildContext context) {
+    // Stamp notifications as seen → badge resets to 0
+    _firestoreService.markNotificationsSeen(widget.userId);
+
+    _overlayEntry = OverlayEntry(
+      builder: (_) => _NotificationDropdown(
+        layerLink: _layerLink,
+        userId: widget.userId,
+        onClose: _closeDropdown,
+        onViewAll: () {
+          _closeDropdown();
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => NotificationsScreen(userId: widget.userId),
+            ),
+          );
+        },
+      ),
+    );
+    Overlay.of(context).insert(_overlayEntry!);
+    setState(() => _isOpen = true);
+  }
+
+  void _closeDropdown() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+    if (mounted) setState(() => _isOpen = false);
+  }
+
+  // ─── Build ────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: StreamBuilder<int>(
+        stream: _countCtrl.stream,
+        initialData: 0,
+        builder: (context, snapshot) {
+          final count = snapshot.data ?? 0;
+          return GestureDetector(
+            onTap: () => _toggle(context),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    count > 0
+                        ? Icons.notifications
+                        : Icons.notifications_outlined,
+                    color: widget.color,
+                    size: widget.size,
+                  ),
+                  if (count > 0)
+                    Positioned(
+                      top: -4,
+                      right: -4,
+                      child: AnimatedScale(
+                        scale: 1.0,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.elasticOut,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          constraints: const BoxConstraints(
+                              minWidth: 16, minHeight: 16),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFFF6B6B), Color(0xFFFF3D3D)],
+                            ),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFFF6B6B)
+                                    .withValues(alpha: 0.5),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            count > 99 ? '99+' : '$count',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ─── Dropdown panel widget ────────────────────────────────────────────────────
+
+class _NotificationDropdown extends StatefulWidget {
+  const _NotificationDropdown({
+    required this.layerLink,
+    required this.userId,
+    required this.onClose,
+    required this.onViewAll,
+  });
+
+  final LayerLink layerLink;
+  final String userId;
+  final VoidCallback onClose;
+  final VoidCallback onViewAll;
+
+  @override
+  State<_NotificationDropdown> createState() => _NotificationDropdownState();
+}
+
+class _NotificationDropdownState extends State<_NotificationDropdown>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animCtrl;
+  late final Animation<double> _fadeAnim;
+  late final Animation<double> _scaleAnim;
+  late final Future<List<NotificationItem>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = loadNotificationsForUser(widget.userId, limit: 6);
+    _animCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    )..forward();
+    _fadeAnim =
+        CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
+    _scaleAnim = Tween<double>(begin: 0.92, end: 1.0).animate(
+      CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animCtrl.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<int>(
-      stream: _notificationCountStream(),
-      builder: (context, snapshot) {
-        final count = snapshot.data ?? 0;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cardWidth = screenWidth < 420 ? screenWidth - 24.0 : 340.0;
 
-        return GestureDetector(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(
-                  count > 0
-                      ? Icons.notifications
-                      : Icons.notifications_outlined,
-                  color: color,
-                  size: size,
-                ),
-                if (count > 0)
-                  Positioned(
-                    top: -4,
-                    right: -4,
-                    child: AnimatedScale(
-                      scale: 1.0,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.elasticOut,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        constraints: const BoxConstraints(
-                            minWidth: 16, minHeight: 16),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFFF6B6B), Color(0xFFFF3D3D)],
+    return Stack(
+      children: [
+        // Tap-outside barrier
+        Positioned.fill(
+          child: GestureDetector(
+            onTap: widget.onClose,
+            behavior: HitTestBehavior.translucent,
+          ),
+        ),
+
+        // Dropdown card — follows the bell icon using the LayerLink
+        Positioned(
+          width: cardWidth,
+          child: CompositedTransformFollower(
+            link: widget.layerLink,
+            showWhenUnlinked: false,
+            targetAnchor: Alignment.bottomRight,
+            followerAnchor: Alignment.topRight,
+            offset: const Offset(8, 4),
+            child: FadeTransition(
+              opacity: _fadeAnim,
+              child: ScaleTransition(
+                scale: _scaleAnim,
+                alignment: Alignment.topRight,
+                child: Material(
+                  color: Colors.transparent,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.13),
+                          blurRadius: 24,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // ── Header
+                        Padding(
+                          padding:
+                              const EdgeInsets.fromLTRB(16, 14, 8, 8),
+                          child: Row(
+                            children: [
+                              const Text(
+                                'Notifications',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const Spacer(),
+                              GestureDetector(
+                                onTap: widget.onClose,
+                                child: const Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: Icon(Icons.close, size: 18,
+                                      color: Colors.grey),
+                                ),
+                              ),
+                            ],
                           ),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFFF6B6B)
-                                  .withValues(alpha: 0.5),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1),
+                        ),
+                        const Divider(height: 1),
+
+                        // ── Notification list (scrollable, max ~5 items)
+                        _buildList(),
+
+                        const Divider(height: 1),
+
+                        // ── View all button
+                        InkWell(
+                          onTap: widget.onViewAll,
+                          borderRadius: const BorderRadius.vertical(
+                              bottom: Radius.circular(16)),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 13),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'View all notifications',
+                                  style: TextStyle(
+                                    color: Color(0xFF6A11CB),
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                SizedBox(width: 4),
+                                Icon(Icons.arrow_forward_ios,
+                                    size: 12, color: Color(0xFF6A11CB)),
+                              ],
                             ),
-                          ],
-                        ),
-                        child: Text(
-                          count > 99 ? '99+' : '$count',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
                           ),
-                          textAlign: TextAlign.center,
                         ),
-                      ),
+                      ],
                     ),
                   ),
-              ],
+                ),
+              ),
             ),
           ),
-        );
-      },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildList() {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 310),
+      child: FutureBuilder<List<NotificationItem>>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            );
+          }
+
+          final items = snapshot.data ?? const [];
+          if (items.isEmpty) {
+            return const Padding(
+              padding:
+                  EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+              child: Center(
+                child: Text(
+                  'No notifications yet',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            );
+          }
+
+          return ListView.separated(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            shrinkWrap: true,
+            itemCount: items.length,
+            separatorBuilder: (_, __) =>
+                const Divider(height: 1, indent: 14, endIndent: 14),
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return Padding(
+                padding: const EdgeInsets.symmetric(
+                    vertical: 9, horizontal: 14),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor:
+                          item.color.withValues(alpha: 0.15),
+                      child: Icon(item.icon,
+                          color: item.color, size: 16),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.title,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            item.subtitle,
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 12,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            AppHelpers.getRelativeTime(item.createdAt),
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

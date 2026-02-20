@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
@@ -21,6 +20,8 @@ import 'customer_setup_screen.dart';
 import 'company_setup_screen.dart';
 import '../shop/add_product_screen.dart';
 import '../chat/chat_detail_screen.dart';
+import '../../widgets/banner_display.dart';
+import 'banner_editor_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String userId;
@@ -446,6 +447,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _openBannerEditor() async {
+    final existing = _profile?.bannerData ?? _customerProfile?.bannerData ?? _companyProfile?.bannerData;
+    final List<Color> defaultColors = _profile != null
+        ? _getCoverGradient(_profile!.category)
+        : _companyProfile != null
+            ? const [Color(0xFF1565C0), Color(0xFF42A5F5)]
+            : const [Color(0xFF9C27B0), Color(0xFFE91E63)];
+
+    final result = await Navigator.push<Map<String, dynamic>?>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BannerEditorScreen(
+          initialData: existing,
+          defaultColors: defaultColors,
+        ),
+      ),
+    );
+
+    if (result == null || !mounted) return;
+    await FirestoreService().saveBannerData(
+      userId: widget.userId,
+      role: _userRole ?? '',
+      bannerData: result,
+    );
+    _loadProfile();
+  }
+
   Future<void> _showAddReviewDialog() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null || _userData == null) return;
@@ -664,6 +692,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
       body: CustomScrollView(
+        clipBehavior: Clip.none,
         slivers: [
           // ── Pinned app-bar overlay (transparent → fills as you scroll) ──
           SliverAppBar(
@@ -796,105 +825,75 @@ class _ProfileScreenState extends State<ProfileScreen> {
     const overlapFromBanner = 40.0;
     const avatarRadius = 52.0;
     const avatarBorder = 3.0;
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        // Gradient fill
-        Positioned.fill(
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: colors,
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+
+    return BannerDisplay(
+      bannerData: _profile?.bannerData ?? {
+        'type': 'text',
+        'text': _userData?.name ?? '',
+        'fontKey': 'default',
+        'textColor': 0xFFFFFFFF,
+        'fontSize': 28.0,
+        'animation': 'none',
+      },
+      defaultColors: colors,
+      height: height,
+      child: Stack(
+        fit: StackFit.expand,
+        clipBehavior: Clip.none,
+        children: [
+          // Edit banner button (own profile only)
+          if (isOwnProfile)
+            Positioned(
+              bottom: 12,
+              right: 12,
+              child: GestureDetector(
+                onTap: _openBannerEditor,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.edit_rounded,
+                      color: Colors.white, size: 18),
+                ),
               ),
             ),
-          ),
-        ),
-        // Decorative blobs
-        Positioned(
-          top: -40,
-          right: -40,
-          child: _blob(200, Colors.white.withValues(alpha: 0.08)),
-        ),
-        Positioned(
-          top: 20,
-          left: -50,
-          child: _blob(160, Colors.white.withValues(alpha: 0.06)),
-        ),
-        Positioned(
-          bottom: 30,
-          right: 60,
-          child: _blob(80, Colors.white.withValues(alpha: 0.05)),
-        ),
-        // Category pill — upper centre of banner
-        Positioned(
-          top: 70,
-          left: 0,
-          right: 0,
-          child: Center(
+          // Avatar straddling the banner bottom
+          Positioned(
+            bottom: -overlapFromBanner,
+            left: 20,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.22),
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.45), width: 1.2),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.star_rounded,
-                      color: Colors.white, size: 14),
-                  const SizedBox(width: 6),
-                  Text(
-                    _profile!.category ?? 'Skilled Professional',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                      letterSpacing: 0.5,
-                    ),
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                    colors: colors,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight),
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.last.withValues(alpha: 0.45),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                    offset: const Offset(0, 6),
                   ),
                 ],
               ),
-            ),
-          ),
-        ),
-        // Avatar straddling the banner bottom
-        Positioned(
-          bottom: -overlapFromBanner,
-          left: 20,
-          child: Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                  colors: colors,
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight),
-              boxShadow: [
-                BoxShadow(
-                  color: colors.last.withValues(alpha: 0.45),
-                  blurRadius: 20,
-                  spreadRadius: 2,
-                  offset: const Offset(0, 6),
+              padding: const EdgeInsets.all(avatarBorder),
+              child: CircleAvatar(
+                radius: avatarRadius,
+                backgroundColor: Colors.white,
+                child: WebImageLoader.loadAvatar(
+                  imageUrl: _profile!.profilePicture,
+                  radius: avatarRadius - 1,
+                  fallbackText: _userData?.name,
+                  backgroundColor: Colors.grey[100],
                 ),
-              ],
-            ),
-            padding: const EdgeInsets.all(avatarBorder),
-            child: CircleAvatar(
-              radius: avatarRadius,
-              backgroundColor: Colors.white,
-              child: WebImageLoader.loadAvatar(
-                imageUrl: _profile!.profilePicture,
-                radius: avatarRadius - 1,
-                fallbackText: _userData?.name,
-                backgroundColor: Colors.grey[100],
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -906,143 +905,116 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildProfileIdentitySection(
       double avatarRadius, List<Color> coverColors) {
-    return Transform.translate(
-      offset: const Offset(0, -40),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Column(
+    const overlapFromBanner = 40.0;
+    const avatarBorder = 3.0;
+    final avatarDiameter = 2 * (avatarRadius + avatarBorder); // 110
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, overlapFromBanner + 12, 16, 0),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                // Avatar with border
+          // Stats row — sits to the right of the overlapping avatar
+          Row(
+            children: [
+              SizedBox(width: avatarDiameter + 10),
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _miniStat(_profile!.rating.toStringAsFixed(1),
+                        'Rating', Icons.star_rounded, Colors.amber),
+                    _miniStat(_profile!.reviewCount.toString(), 'Reviews',
+                        Icons.reviews_rounded, const Color(0xFF2196F3)),
+                    _miniStat(_profile!.projectCount.toString(), 'Projects',
+                        Icons.work_rounded, const Color(0xFF4CAF50)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Name
+          Text(
+            _userData?.name ?? 'User',
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1A1A2E),
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 4),
+          // Location + Verified badge row
+          Row(
+            children: [
+              if (_profile!.city != null || _profile!.address != null) ...[
+                const Icon(Icons.location_on_rounded,
+                    size: 14, color: Color(0xFF9E9E9E)),
+                const SizedBox(width: 3),
+                Text(
+                  _profile!.city ?? _profile!.address ?? '',
+                  style: const TextStyle(
+                      color: Color(0xFF9E9E9E), fontSize: 13),
+                ),
+                const SizedBox(width: 8),
+              ],
+              if (_profile!.isVerified) ...[
                 Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                        colors: coverColors,
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight),
-                    boxShadow: [
-                      BoxShadow(
-                        color: coverColors.last.withValues(alpha: 0.4),
-                        blurRadius: 20,
-                        spreadRadius: 2,
-                        offset: const Offset(0, 6),
-                      ),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.verified_rounded,
+                          size: 12, color: Colors.white),
+                      SizedBox(width: 4),
+                      Text('Verified Expert',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold)),
                     ],
                   ),
-                  padding: const EdgeInsets.all(3),
-                  child: CircleAvatar(
-                    radius: avatarRadius,
-                    backgroundColor: Colors.white,
-                    child: WebImageLoader.loadAvatar(
-                      imageUrl: _profile!.profilePicture,
-                      radius: avatarRadius - 3,
-                      fallbackText: _userData?.name,
-                      backgroundColor: Colors.grey[100],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                // Stats row beside avatar
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _miniStat(_profile!.rating.toStringAsFixed(1),
-                            'Rating', Icons.star_rounded, Colors.amber),
-                        _miniStat(_profile!.reviewCount.toString(), 'Reviews',
-                            Icons.reviews_rounded, const Color(0xFF2196F3)),
-                        _miniStat(_profile!.projectCount.toString(), 'Projects',
-                            Icons.work_rounded, const Color(0xFF4CAF50)),
-                      ],
-                    ),
-                  ),
                 ),
               ],
-            ),
-            const SizedBox(height: 12),
-            // Name
-            Text(
-              _userData?.name ?? 'User',
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1A1A2E),
-                letterSpacing: -0.3,
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Star rating bar
+          Row(
+            children: [
+              RatingBarIndicator(
+                rating: _profile!.rating,
+                itemBuilder: (_, __) =>
+                    const Icon(Icons.star_rounded, color: Colors.amber),
+                itemCount: 5,
+                itemSize: 18,
               ),
-            ),
-            const SizedBox(height: 4),
-            // Location + Verified badge row
-            Row(
-              children: [
-                if (_profile!.city != null || _profile!.address != null) ...[
-                  const Icon(Icons.location_on_rounded,
-                      size: 14, color: Color(0xFF9E9E9E)),
-                  const SizedBox(width: 3),
-                  Text(
-                    _profile!.city ?? _profile!.address ?? '',
-                    style:
-                        const TextStyle(color: Color(0xFF9E9E9E), fontSize: 13),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                if (_profile!.isVerified) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.verified_rounded,
-                            size: 12, color: Colors.white),
-                        SizedBox(width: 4),
-                        Text('Verified Expert',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 8),
-            // Star rating bar
-            Row(
-              children: [
-                RatingBarIndicator(
-                  rating: _profile!.rating,
-                  itemBuilder: (_, __) =>
-                      const Icon(Icons.star_rounded, color: Colors.amber),
-                  itemCount: 5,
-                  itemSize: 18,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '${_profile!.rating.toStringAsFixed(1)}  •  ${_profile!.reviewCount} reviews',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500),
-                ),
-              ],
-            ),
-          ],
-        ),
+              const SizedBox(width: 6),
+              Text(
+                '${_profile!.rating.toStringAsFixed(1)}  •  ${_profile!.reviewCount} reviews',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ],
       ),
-    );
+    ),
+  ],
+  );
   }
 
   Widget _miniStat(
@@ -1084,7 +1056,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onTap: () async {
                 final nav = Navigator.of(context);
                 final messenger = ScaffoldMessenger.of(context);
-                final ctx = context;
                 try {
                   final currentUser = FirebaseAuth.instance.currentUser;
                   if (currentUser == null) return;
@@ -1093,7 +1064,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   if (currentUserData == null || _userData == null) return;
                   if (!mounted) return;
                   showDialog(
-                    context: ctx,
+                    context: context,
                     barrierDismissible: false,
                     builder: (_) =>
                         const Center(child: CircularProgressIndicator()),
@@ -1770,7 +1741,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     const coverHeight = 200.0;
     const avatarRadius = 52.0;
     const avatarBorder = 3.0;
-    const avatarTotal = avatarRadius + avatarBorder; // 55
     const overlapFromBanner = 40.0;
 
     // Build location string cleanly – filter out blanks / single chars
@@ -1792,6 +1762,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
       body: CustomScrollView(
+        clipBehavior: Clip.none,
         slivers: [
           SliverAppBar(
             pinned: true,
@@ -1862,114 +1833,94 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
             flexibleSpace: FlexibleSpaceBar(
               collapseMode: CollapseMode.pin,
-              background: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  // Gradient fill
-                  Positioned.fill(
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                            colors: coverColors,
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight),
-                      ),
-                    ),
-                  ),
-                  // Decorative blobs
-                  Positioned(
-                      top: -40,
-                      right: -40,
-                      child: _blob(200, Colors.white.withValues(alpha: 0.08))),
-                  Positioned(
-                      top: 20,
-                      left: -50,
-                      child: _blob(160, Colors.white.withValues(alpha: 0.06))),
-                  Positioned(
-                      bottom: 30,
-                      right: 60,
-                      child: _blob(80, Colors.white.withValues(alpha: 0.05))),
-                  // Role pill — centred, in the upper portion of the banner
-                  Positioned(
-                    top: 70,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.22),
-                          borderRadius: BorderRadius.circular(30),
-                          border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.45),
-                              width: 1.2),
+              background: BannerDisplay(
+                bannerData: _customerProfile?.bannerData ?? {
+                  'type': 'text',
+                  'text': _userData?.name ?? '',
+                  'fontKey': 'default',
+                  'textColor': 0xFFFFFFFF,
+                  'fontSize': 28.0,
+                  'animation': 'none',
+                },
+                defaultColors: coverColors,
+                height: coverHeight,
+                child: Stack(
+                  fit: StackFit.expand,
+                  clipBehavior: Clip.none,
+                  children: [
+                    // Edit banner button (own profile only)
+                    if (isOwnProfile)
+                      Positioned(
+                        bottom: 12,
+                        right: 12,
+                        child: GestureDetector(
+                          onTap: _openBannerEditor,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.edit_rounded,
+                                color: Colors.white, size: 18),
+                          ),
                         ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.person_rounded,
-                                color: Colors.white, size: 14),
-                            SizedBox(width: 6),
-                            Text('Customer',
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
-                                    letterSpacing: 0.5)),
+                      ),
+                    // Avatar straddling the banner bottom
+                    Positioned(
+                      bottom: -overlapFromBanner,
+                      left: 20,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const LinearGradient(
+                              colors: coverColors,
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight),
+                          boxShadow: [
+                            BoxShadow(
+                                color: coverColors.last.withValues(alpha: 0.45),
+                                blurRadius: 20,
+                                spreadRadius: 2,
+                                offset: const Offset(0, 6))
                           ],
                         ),
-                      ),
-                    ),
-                  ),
-                  // Avatar — placed so it straddles the banner bottom
-                  Positioned(
-                    bottom: -overlapFromBanner,
-                    left: 20,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                            colors: coverColors,
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight),
-                        boxShadow: [
-                          BoxShadow(
-                              color: coverColors.last.withValues(alpha: 0.45),
-                              blurRadius: 20,
-                              spreadRadius: 2,
-                              offset: const Offset(0, 6))
-                        ],
-                      ),
-                      padding: const EdgeInsets.all(avatarBorder),
-                      child: CircleAvatar(
-                        radius: avatarRadius,
-                        backgroundColor: Colors.white,
-                        child: WebImageLoader.loadAvatar(
-                          imageUrl: imageUrl,
-                          radius: avatarRadius - 1,
-                          fallbackText: _userData?.name,
-                          backgroundColor: const Color(0xFFF3E5F5),
+                        padding: const EdgeInsets.all(avatarBorder),
+                        child: CircleAvatar(
+                          radius: avatarRadius,
+                          backgroundColor: Colors.white,
+                          child: WebImageLoader.loadAvatar(
+                            imageUrl: imageUrl,
+                            radius: avatarRadius - 1,
+                            fallbackText: _userData?.name,
+                            backgroundColor: const Color(0xFFF3E5F5),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
 
           // ── Identity row (name + action button) ──
           SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                  20, overlapFromBanner + 12, 16, 0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Name + location
-                  Expanded(
-                    child: Column(
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      20, overlapFromBanner + 12, 16, 0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Space reserved for avatar
+                      const SizedBox(
+                          width: 2 * (avatarRadius + avatarBorder) + 12),
+                      // Name + location
+                      Expanded(
+                        child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
@@ -2120,7 +2071,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
+          ],
           ),
+        ),
 
           const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
@@ -2314,6 +2267,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
       body: CustomScrollView(
+        clipBehavior: Clip.none,
         slivers: [
           SliverAppBar(
             pinned: true,
@@ -2367,59 +2321,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 clipBehavior: Clip.none,
                 children: [
                   Positioned.fill(
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                            colors: coverColors,
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight),
-                      ),
+                    child: BannerDisplay(
+                      bannerData: profile.bannerData ?? {
+                        'type': 'text',
+                        'text': _userData?.name ?? '',
+                        'fontKey': 'default',
+                        'textColor': 0xFFFFFFFF,
+                        'fontSize': 28.0,
+                        'animation': 'none',
+                      },
+                      defaultColors: coverColors,
+                      height: coverHeight,
                     ),
                   ),
-                  Positioned(
-                      top: -40,
-                      right: -40,
-                      child: _blob(200, Colors.white.withValues(alpha: 0.08))),
-                  Positioned(
-                      top: 20,
-                      left: -50,
-                      child: _blob(160, Colors.white.withValues(alpha: 0.06))),
-                  Positioned(
-                      bottom: 30,
-                      right: 60,
-                      child: _blob(80, Colors.white.withValues(alpha: 0.05))),
-                  // Industry pill — upper-centre of banner
-                  if (profile.industry.isNotEmpty)
+                  if (isOwnProfile)
                     Positioned(
-                      top: 70,
-                      left: 0,
-                      right: 0,
-                      child: Center(
+                      bottom: 12,
+                      right: 12,
+                      child: GestureDetector(
+                        onTap: _openBannerEditor,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 7),
+                          padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.22),
-                            borderRadius: BorderRadius.circular(30),
-                            border: Border.all(
-                                color:
-                                    Colors.white.withValues(alpha: 0.45),
-                                width: 1.2),
+                            color: Colors.black.withValues(alpha: 0.45),
+                            shape: BoxShape.circle,
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.business_rounded,
-                                  color: Colors.white, size: 14),
-                              const SizedBox(width: 6),
-                              Text(profile.industry,
-                                  style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 13,
-                                      letterSpacing: 0.5)),
-                            ],
-                          ),
+                          child: const Icon(Icons.edit_rounded,
+                              color: Colors.white, size: 18),
                         ),
                       ),
                     ),

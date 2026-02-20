@@ -536,18 +536,6 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
     }
   }
 
-  void _editProduct(ProductModel product) async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ProductDetailScreen(product: product),
-      ),
-    );
-    if (result == true) {
-      _loadProducts();
-    }
-  }
-
   void _viewProduct(ProductModel product) {
     Navigator.push(
       context,

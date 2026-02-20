@@ -23,6 +23,8 @@ class SkilledUserProfile {
   final bool isVerified;
   final DateTime? verifiedAt;
   final String? rejectionReason;
+  /// Banner customisation data (image or styled text).
+  final Map<String, dynamic>? bannerData;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -49,6 +51,7 @@ class SkilledUserProfile {
     this.isVerified = false,
     this.verifiedAt,
     this.rejectionReason,
+    this.bannerData,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -95,6 +98,9 @@ class SkilledUserProfile {
       isVerified: map['isVerified'] ?? false,
       verifiedAt: (map['verifiedAt'] as Timestamp?)?.toDate(),
       rejectionReason: map['rejectionReason'],
+      bannerData: map['bannerData'] is Map
+          ? Map<String, dynamic>.from(map['bannerData'] as Map)
+          : null,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -124,6 +130,7 @@ class SkilledUserProfile {
       'isVerified': isVerified,
       'verifiedAt': verifiedAt != null ? Timestamp.fromDate(verifiedAt!) : null,
       'rejectionReason': rejectionReason,
+      if (bannerData != null) 'bannerData': bannerData,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -151,6 +158,8 @@ class SkilledUserProfile {
     bool? isVerified,
     DateTime? verifiedAt,
     String? rejectionReason,
+    Map<String, dynamic>? bannerData,
+    bool clearBanner = false,
   }) {
     return SkilledUserProfile(
       userId: userId,
@@ -175,6 +184,7 @@ class SkilledUserProfile {
       isVerified: isVerified ?? this.isVerified,
       verifiedAt: verifiedAt ?? this.verifiedAt,
       rejectionReason: rejectionReason ?? this.rejectionReason,
+      bannerData: clearBanner ? null : (bannerData ?? this.bannerData),
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );

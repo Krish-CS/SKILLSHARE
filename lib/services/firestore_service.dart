@@ -180,6 +180,61 @@ class FirestoreService {
     }, SetOptions(merge: true));
   }
 
+  // ===== Notification Seen Tracking =====
+
+  /// Stamps the user document with the current server timestamp so the badge
+  /// count resets once all current notifications are considered "seen".
+  Future<void> markNotificationsSeen(String userId) async {
+    await _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(userId)
+        .set({'lastNotificationSeenAt': FieldValue.serverTimestamp()},
+            SetOptions(merge: true));
+  }
+
+  /// Returns a stream that emits the `lastNotificationSeenAt` timestamp for
+  /// [userId] every time the user document changes.
+  Stream<DateTime?> lastNotificationSeenStream(String userId) {
+    return _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(userId)
+        .snapshots()
+        .map((doc) {
+      if (!doc.exists) return null;
+      final ts = doc.data()?['lastNotificationSeenAt'];
+      if (ts == null) return null;
+      return (ts as Timestamp).toDate();
+    });
+  }
+
+  // ===== Banner Data =====
+
+  /// Saves [bannerData] for a user into both the users collection and the
+  /// role-specific profile collection (customers or skilled_users).
+  Future<void> saveBannerData({
+    required String userId,
+    required String role,
+    required Map<String, dynamic> bannerData,
+  }) async {
+    final batch = _firestore.batch();
+
+    String collection;
+    if (role == AppConstants.roleCustomer) {
+      collection = AppConstants.customerProfilesCollection;
+    } else if (role == AppConstants.roleCompany) {
+      collection = AppConstants.companyProfilesCollection;
+    } else {
+      collection = AppConstants.skilledUsersCollection;
+    }
+
+    batch.set(
+        _firestore.collection(collection).doc(userId),
+        {'bannerData': bannerData, 'updatedAt': FieldValue.serverTimestamp()},
+        SetOptions(merge: true));
+
+    await batch.commit();
+  }
+
   Future<String> submitSupportTicket({
     required String userId,
     required String subject,

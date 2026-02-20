@@ -1,0 +1,107 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/order_model.dart';
+import '../models/service_request_model.dart';
+import '../services/firestore_service.dart';
+import 'app_constants.dart';
+import 'app_helpers.dart';
+
+/// A single notification item (work-request or order update).
+class NotificationItem {
+  final String title;
+  final String subtitle;
+  final DateTime createdAt;
+  final IconData icon;
+  final Color color;
+
+  const NotificationItem({
+    required this.title,
+    required this.subtitle,
+    required this.createdAt,
+    required this.icon,
+    required this.color,
+  });
+}
+
+/// Load up to [limit] recent notifications for [userId].
+Future<List<NotificationItem>> loadNotificationsForUser(
+  String userId, {
+  int limit = 25,
+}) async {
+  final firestoreService = FirestoreService();
+  final notifications = <NotificationItem>[];
+
+  final results = await Future.wait([
+    firestoreService.getLatestUserWorkRequests(userId, limit: limit),
+    firestoreService.getLatestOrdersForUser(userId, limit: limit),
+  ]);
+
+  final requests = results[0] as List<ServiceRequestModel>;
+  final orders = results[1] as List<OrderModel>;
+
+  for (final request in requests) {
+    notifications.add(
+      NotificationItem(
+        title: 'Work request: ${request.title}',
+        subtitle:
+            'Status: ${request.status.toUpperCase()} • ${request.description}',
+        createdAt: request.updatedAt,
+        icon: request.status == AppConstants.requestStatusAccepted
+            ? Icons.check_circle
+            : request.status == AppConstants.requestStatusRejected
+                ? Icons.cancel
+                : Icons.work_outline,
+        color: request.status == AppConstants.requestStatusAccepted
+            ? Colors.green
+            : request.status == AppConstants.requestStatusRejected
+                ? Colors.red
+                : Colors.orange,
+      ),
+    );
+  }
+
+  for (final order in orders) {
+    final isBuyer = order.buyerId == userId;
+    final actorLabel = isBuyer ? 'Your order' : 'Sale update';
+    final timeline = order.statusTimeline.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final latestTimeline = timeline.isNotEmpty
+        ? '${timeline.first.key} at ${AppHelpers.formatDateTime(timeline.first.value)}'
+        : 'status updated';
+
+    notifications.add(
+      NotificationItem(
+        title: '$actorLabel: ${order.productName}',
+        subtitle: 'Order ${order.status.toUpperCase()} • $latestTimeline',
+        createdAt: order.updatedAt,
+        icon: isBuyer ? Icons.shopping_bag : Icons.store,
+        color: isBuyer ? const Color(0xFF2196F3) : const Color(0xFF6A11CB),
+      ),
+    );
+  }
+
+  notifications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  return notifications.take(limit).toList();
+}
+
+/// Stream that returns the count of new notifications since [lastSeenAt].
+Stream<int> newNotificationCountStream(
+  String userId,
+  DateTime? lastSeenAt,
+) {
+  // React to changes in both requests and orders by merging two streams
+  final requestStream = FirebaseFirestore.instance
+      .collection(AppConstants.requestsCollection)
+      .where('participants', arrayContains: userId)
+      .snapshots()
+      .map((s) => s.docs
+          .where((d) {
+            final ts = d.data()['updatedAt'] as Timestamp?;
+            if (ts == null) return false;
+            if (lastSeenAt == null) return true;
+            return ts.toDate().isAfter(lastSeenAt);
+          })
+          .length);
+
+  return requestStream;
+}

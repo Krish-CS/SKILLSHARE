@@ -26,6 +26,8 @@ class CompanyProfile {
   final DateTime? verifiedAt;
   /// Projects assigned by this company (request IDs or project metadata).
   final List<Map<String, dynamic>> assignedProjects;
+  /// Banner customisation data (image or styled text).
+  final Map<String, dynamic>? bannerData;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -51,6 +53,7 @@ class CompanyProfile {
     this.reviewCount = 0,
     this.verifiedAt,
     this.assignedProjects = const [],
+    this.bannerData,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -80,6 +83,7 @@ class CompanyProfile {
       assignedProjects: (map['assignedProjects'] as List<dynamic>? ?? [])
           .map((e) => Map<String, dynamic>.from(e is Map ? e : {}))
           .toList(),
+      bannerData: map['bannerData'] as Map<String, dynamic>?,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -107,6 +111,7 @@ class CompanyProfile {
       'reviewCount': reviewCount,
       'verifiedAt': verifiedAt != null ? Timestamp.fromDate(verifiedAt!) : null,
       'assignedProjects': assignedProjects,
+      'bannerData': bannerData,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };

@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../utils/app_constants.dart';
 import '../utils/user_roles.dart';
 import '../services/firestore_service.dart';
 import 'home/home_screen.dart';
@@ -25,11 +28,99 @@ class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
   final FirestoreService _firestoreService = FirestoreService();
 
+  // ── In-app notification banners ─────────────────────────────────────────
+  StreamSubscription<QuerySnapshot>? _notifSub;
+  int _prevNotifCount = -1; // -1 means "not yet initialised"
+  OverlayEntry? _bannerEntry;
+  Timer? _bannerTimer;
+  String? _watchingUserId;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initBannerStream());
+  }
+
+  void _initBannerStream() {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final uid = auth.currentUser?.uid;
+    if (uid == null || uid == _watchingUserId) return;
+    _watchingUserId = uid;
+    _notifSub?.cancel();
+    _notifSub = FirebaseFirestore.instance
+        .collection(AppConstants.requestsCollection)
+        .where('participants', arrayContains: uid)
+        .snapshots()
+        .listen((snap) {
+      final count = snap.docs.length;
+      if (_prevNotifCount == -1) {
+        // Baseline – don\'t show banner on first load
+        _prevNotifCount = count;
+        return;
+      }
+      if (count > _prevNotifCount) {
+        // New notification arrived
+        final newDocs = snap.docs
+            .where((d) {
+              final ts = d.data()['updatedAt'] as Timestamp?;
+              return ts != null &&
+                  ts.toDate().isAfter(
+                      DateTime.now().subtract(const Duration(minutes: 5)));
+            })
+            .toList();
+        if (newDocs.isNotEmpty) {
+          final data = newDocs.first.data();
+          _showTopBanner(
+            'New notification',
+            (data['title'] as String?) ??
+                (data['description'] as String?) ??
+                'You have a new update',
+          );
+        }
+      }
+      _prevNotifCount = count;
+    });
+  }
+
+  void _showTopBanner(String title, String subtitle) {
+    _bannerTimer?.cancel();
+    _bannerEntry?.remove();
+
+    final overlay = Overlay.of(context);
+    _bannerEntry = OverlayEntry(
+      builder: (_) => _InAppBanner(
+        title: title,
+        subtitle: subtitle,
+        onDismiss: () {
+          _bannerEntry?.remove();
+          _bannerEntry = null;
+        },
+      ),
+    );
+    overlay.insert(_bannerEntry!);
+    _bannerTimer = Timer(const Duration(seconds: 4), () {
+      _bannerEntry?.remove();
+      _bannerEntry = null;
+    });
+  }
+
+  @override
+  void dispose() {
+    _notifSub?.cancel();
+    _bannerTimer?.cancel();
+    _bannerEntry?.remove();
+    super.dispose();
+  }
+  // ────────────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final userRole = authProvider.userRole ?? UserRoles.customer;
     final currentUserId = authProvider.currentUser?.uid;
+
+    // Start/reattach the banner stream when the logged-in user changes
+    _initBannerStream();
 
     // Get role-specific screens and navigation items
     final screens = _getScreensForRole(userRole);
@@ -100,7 +191,7 @@ class _MainNavigationState extends State<MainNavigation> {
             stream: _firestoreService.streamCartItems(userId),
             builder: (context, snapshot) {
               final count = snapshot.data?.fold<int>(
-                      0, (sum, item) => sum + (item.quantity as int)) ??
+                      0, (acc, item) => acc + (item.quantity as int)) ??
                   0;
               if (count <= 0) {
                 return const Icon(Icons.shopping_cart);
@@ -332,5 +423,132 @@ class _MainNavigationState extends State<MainNavigation> {
           return const Color(0xFF9C27B0);
       }
     }
+  }
+}
+
+// ── In-app notification banner widget ───────────────────────────────────
+
+class _InAppBanner extends StatefulWidget {
+  const _InAppBanner({
+    required this.title,
+    required this.subtitle,
+    required this.onDismiss,
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback onDismiss;
+
+  @override
+  State<_InAppBanner> createState() => _InAppBannerState();
+}
+
+class _InAppBannerState extends State<_InAppBanner>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<Offset> _slideAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0, -1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack));
+    _ctrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned(
+          top: MediaQuery.of(context).padding.top + 8,
+          left: 12,
+          right: 12,
+          child: SlideTransition(
+        position: _slideAnim,
+        child: Material(
+          color: Colors.transparent,
+          child: GestureDetector(
+            onTap: widget.onDismiss,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.18),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const CircleAvatar(
+                    radius: 18,
+                    backgroundColor: Colors.white24,
+                    child: Icon(Icons.notifications,
+                        color: Colors.white, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          widget.title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          widget.subtitle,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: widget.onDismiss,
+                    child: const Icon(Icons.close,
+                        color: Colors.white70, size: 18),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+          ),
+        ),
+      ],
+    );
   }
 }
