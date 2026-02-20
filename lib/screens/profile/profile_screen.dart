@@ -696,6 +696,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         slivers: [
           // ── Pinned app-bar overlay (transparent → fills as you scroll) ──
           SliverAppBar(
+            clipBehavior: Clip.none,
             pinned: true,
             expandedHeight: coverHeight,
             backgroundColor: coverColors.first,
@@ -859,39 +860,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
-          // Avatar straddling the banner bottom
-          Positioned(
-            bottom: -overlapFromBanner,
-            left: 20,
-            child: Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                    colors: colors,
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight),
-                boxShadow: [
-                  BoxShadow(
-                    color: colors.last.withValues(alpha: 0.45),
-                    blurRadius: 20,
-                    spreadRadius: 2,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.all(avatarBorder),
-              child: CircleAvatar(
-                radius: avatarRadius,
-                backgroundColor: Colors.white,
-                child: WebImageLoader.loadAvatar(
-                  imageUrl: _profile!.profilePicture,
-                  radius: avatarRadius - 1,
-                  fallbackText: _userData?.name,
-                  backgroundColor: Colors.grey[100],
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -1011,6 +979,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ],
+      ),
+    ),
+    // Avatar straddling the banner bottom
+    Positioned(
+      top: -overlapFromBanner,
+      left: 20,
+      child: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+              colors: coverColors,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight),
+          boxShadow: [
+            BoxShadow(
+              color: coverColors.last.withValues(alpha: 0.45),
+              blurRadius: 20,
+              spreadRadius: 2,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(avatarBorder),
+        child: CircleAvatar(
+          radius: avatarRadius,
+          backgroundColor: Colors.white,
+          child: WebImageLoader.loadAvatar(
+            imageUrl: _profile!.profilePicture,
+            radius: avatarRadius - 1,
+            fallbackText: _userData?.name,
+            backgroundColor: Colors.grey[100],
+          ),
+        ),
       ),
     ),
   ],
@@ -1866,38 +1867,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ),
                       ),
-                    // Avatar straddling the banner bottom
-                    Positioned(
-                      bottom: -overlapFromBanner,
-                      left: 20,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: const LinearGradient(
-                              colors: coverColors,
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight),
-                          boxShadow: [
-                            BoxShadow(
-                                color: coverColors.last.withValues(alpha: 0.45),
-                                blurRadius: 20,
-                                spreadRadius: 2,
-                                offset: const Offset(0, 6))
-                          ],
-                        ),
-                        padding: const EdgeInsets.all(avatarBorder),
-                        child: CircleAvatar(
-                          radius: avatarRadius,
-                          backgroundColor: Colors.white,
-                          child: WebImageLoader.loadAvatar(
-                            imageUrl: imageUrl,
-                            radius: avatarRadius - 1,
-                            fallbackText: _userData?.name,
-                            backgroundColor: const Color(0xFFF3E5F5),
-                          ),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -2069,6 +2038,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                 ],
+              ),
+            ),
+            // Avatar straddling the banner bottom
+            Positioned(
+              top: -overlapFromBanner,
+              left: 20,
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                      colors: coverColors,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight),
+                  boxShadow: [
+                    BoxShadow(
+                        color: coverColors.last.withValues(alpha: 0.45),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                        offset: const Offset(0, 6))
+                  ],
+                ),
+                padding: const EdgeInsets.all(avatarBorder),
+                child: CircleAvatar(
+                  radius: avatarRadius,
+                  backgroundColor: Colors.white,
+                  child: WebImageLoader.loadAvatar(
+                    imageUrl: imageUrl,
+                    radius: avatarRadius - 1,
+                    fallbackText: _userData?.name,
+                    backgroundColor: const Color(0xFFF3E5F5),
+                  ),
+                ),
               ),
             ),
           ],
@@ -2351,38 +2352,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                     ),
-                  // Logo avatar — straddles banner bottom
-                  Positioned(
-                    bottom: -overlapFromBanner,
-                    left: 20,
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                            colors: coverColors,
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight),
-                        boxShadow: [
-                          BoxShadow(
-                              color: Color(0x6642A5F5),
-                              blurRadius: 20,
-                              spreadRadius: 2,
-                              offset: Offset(0, 6))
-                        ],
-                      ),
-                      padding: const EdgeInsets.all(avatarBorder),
-                      child: CircleAvatar(
-                        radius: avatarRadius,
-                        backgroundColor: Colors.white,
-                        child: WebImageLoader.loadAvatar(
-                          imageUrl: imageUrl,
-                          radius: avatarRadius - 1,
-                          fallbackText: profile.companyName,
-                          backgroundColor: const Color(0xFFE3F2FD),
-                        ),
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -2390,63 +2359,69 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           // ── Identity row ──
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  20, overlapFromBanner + 12, 16, 0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Name + industry details
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          profile.companyName.isNotEmpty
-                              ? profile.companyName
-                              : 'Company',
-                          style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1A1A2E),
-                              letterSpacing: -0.3),
-                        ),
-                        const SizedBox(height: 5),
-                        Row(
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      20, overlapFromBanner + 12, 16, 0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Space reserved for avatar
+                      const SizedBox(
+                          width: 2 * (avatarRadius + avatarBorder) + 12),
+                      // Name + industry details
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (locationText.isNotEmpty) ...[
-                              const Icon(Icons.location_on_rounded,
-                                  size: 14, color: Color(0xFF1E88E5)),
-                              const SizedBox(width: 3),
-                              Text(locationText,
-                                  style: const TextStyle(
-                                      color: Color(0xFF777788),
-                                      fontSize: 13)),
-                              const SizedBox(width: 8),
-                            ],
-                            if (profile.isVerified)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                      colors: coverColors),
-                                  borderRadius:
-                                      BorderRadius.circular(20),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.verified_rounded,
-                                        size: 11, color: Colors.white),
-                                    SizedBox(width: 4),
-                                    Text('Verified',
-                                        style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 10,
-                                            fontWeight:
-                                                FontWeight.bold)),
-                                  ],
+                            Text(
+                              profile.companyName.isNotEmpty
+                                  ? profile.companyName
+                                  : 'Company',
+                              style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1A1A2E),
+                                  letterSpacing: -0.3),
+                            ),
+                            const SizedBox(height: 5),
+                            Row(
+                              children: [
+                                if (locationText.isNotEmpty) ...[
+                                  const Icon(Icons.location_on_rounded,
+                                      size: 14, color: Color(0xFF1E88E5)),
+                                  const SizedBox(width: 3),
+                                  Text(locationText,
+                                      style: const TextStyle(
+                                          color: Color(0xFF777788),
+                                          fontSize: 13)),
+                                  const SizedBox(width: 8),
+                                ],
+                                if (profile.isVerified)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                          colors: coverColors),
+                                      borderRadius:
+                                          BorderRadius.circular(20),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.verified_rounded,
+                                            size: 11, color: Colors.white),
+                                        SizedBox(width: 4),
+                                        Text('Verified',
+                                            style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 10,
+                                                fontWeight:
+                                                    FontWeight.bold)),
+                                      ],
                                 ),
                               ),
                           ],
@@ -2602,7 +2577,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
+            // Avatar straddling the banner bottom
+            Positioned(
+              top: -overlapFromBanner,
+              left: 20,
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                      colors: coverColors,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight),
+                  boxShadow: [
+                    BoxShadow(
+                        color: coverColors.last.withValues(alpha: 0.45),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                        offset: const Offset(0, 6))
+                  ],
+                ),
+                padding: const EdgeInsets.all(avatarBorder),
+                child: CircleAvatar(
+                  radius: avatarRadius,
+                  backgroundColor: Colors.white,
+                  child: WebImageLoader.loadAvatar(
+                    imageUrl: imageUrl,
+                    radius: avatarRadius - 1,
+                    fallbackText: profile.companyName,
+                    backgroundColor: const Color(0xFFE3F2FD),
+                  ),
+                ),
+              ),
+            ),
+          ],
           ),
+        ),
 
           const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
