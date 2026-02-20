@@ -4,6 +4,7 @@ import 'package:shimmer/shimmer.dart';
 import '../../models/product_model.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/product_card.dart';
+import '../../widgets/app_popup.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/user_provider.dart';
 import '../../utils/user_roles.dart';
@@ -59,9 +60,8 @@ class _ShopScreenState extends State<ShopScreen> {
     } catch (e) {
       debugPrint('Error loading products: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading products: $e')),
-        );
+        AppPopup.show(context,
+            message: 'Error loading products: $e', type: PopupType.error);
       }
     }
 
@@ -645,12 +645,9 @@ class _ShopScreenState extends State<ShopScreen> {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
 
     if (!authProvider.isSkilledPerson) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Only skilled persons can add products'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      AppPopup.show(context,
+          message: 'Only skilled persons can add products',
+          type: PopupType.warning);
       return;
     }
 

@@ -6,6 +6,7 @@ class AppConstants {
   static const String roleCustomer = 'customer';
   static const String roleCompany = 'company';
   static const String roleAdmin = 'admin';
+  static const String roleDeliveryPartner = 'delivery_partner';
 
   // Verification Status
   static const String verificationPending = 'pending';
@@ -46,6 +47,7 @@ class AppConstants {
   static const String reportsCollection = 'reports';
   static const String blockedUsersCollection = 'blocked_users';
   static const String supportTicketsCollection = 'support_tickets';
+  static const String deliveryAssignmentsCollection = 'delivery_assignments';
 
   // Storage Paths
   static const String profilePhotosPath = 'profile_photos';

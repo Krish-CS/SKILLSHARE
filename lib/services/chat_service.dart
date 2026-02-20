@@ -323,6 +323,8 @@ class ChatService {
         .toList();
     if (refsToUpdate.isEmpty) return;
 
+    final readTimestamp = FieldValue.serverTimestamp();
+
     // Update in chunks to stay under Firestore batch limits.
     const chunkSize = 400;
     for (var i = 0; i < refsToUpdate.length; i += chunkSize) {
@@ -331,10 +333,49 @@ class ChatService {
           : i + chunkSize;
       final batch = _firestore.batch();
       for (final ref in refsToUpdate.sublist(i, end)) {
-        batch.update(ref, {'isRead': true});
+        batch.update(ref, {'isRead': true, 'readAt': readTimestamp});
       }
       await batch.commit();
     }
+  }
+
+  // Report a chat conversation
+  Future<void> reportChat({
+    required String chatId,
+    required String reporterId,
+    required String reportedUserId,
+    required String reason,
+    String? details,
+  }) async {
+    await _firestore.collection(AppConstants.reportsCollection).add({
+      'type': 'chat',
+      'chatId': chatId,
+      'reporterId': reporterId,
+      'reportedUserId': reportedUserId,
+      'reason': reason,
+      'details': details ?? '',
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // Block a user from chat
+  Future<void> blockUserFromChat({
+    required String blockerId,
+    required String blockedUserId,
+  }) async {
+    final docId = '${blockerId}_$blockedUserId';
+    await _firestore
+        .collection(AppConstants.blockedUsersCollection)
+        .doc(docId)
+        .set({
+      'blockerId': blockerId,
+      'blockedUserId': blockedUserId,
+      'isActive': true,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   // Delete chat

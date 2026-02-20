@@ -4,8 +4,11 @@ import 'package:share_plus/share_plus.dart';
 import '../../models/product_model.dart';
 import '../../models/user_model.dart';
 import '../../services/firestore_service.dart';
+import '../../services/chat_service.dart';
 import '../../utils/web_image_loader.dart';
+import '../../widgets/app_popup.dart';
 import '../profile/profile_screen.dart';
+import '../chat/chat_detail_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final ProductModel product;
@@ -21,6 +24,7 @@ class ProductDetailScreen extends StatefulWidget {
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   final FirestoreService _firestoreService = FirestoreService();
+  final ChatService _chatService = ChatService();
   final PageController _imagePageController = PageController();
   int _currentImageIndex = 0;
   UserModel? _seller;
@@ -79,17 +83,89 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         await _firestoreService.deleteProduct(widget.product.id);
         if (mounted) {
           Navigator.pop(context, true); // Signal that product was deleted
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Product deleted successfully')),
-          );
+          AppPopup.show(context,
+              message: 'Product deleted successfully',
+              type: PopupType.success);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error deleting product: $e')),
-          );
+          AppPopup.show(context,
+              message: 'Error deleting product: $e',
+              type: PopupType.error);
         }
       }
+    }
+  }
+
+  Future<void> _contactSeller() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      AppPopup.show(context,
+          message: 'Please sign in to contact the seller',
+          type: PopupType.warning);
+      return;
+    }
+    if (currentUser.uid == widget.product.userId) {
+      AppPopup.show(context,
+          message: 'This is your own product', type: PopupType.info);
+      return;
+    }
+    try {
+      final myUser = await _firestoreService.getUserById(currentUser.uid);
+      if (myUser == null) return;
+      final chatId = await _chatService.getOrCreateChat(
+        currentUser.uid,
+        widget.product.userId,
+        {'name': myUser.name, 'photo': myUser.profilePhoto ?? ''},
+        {
+          'name': _seller?.name ?? 'Seller',
+          'photo': _seller?.profilePhoto ?? ''
+        },
+      );
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatDetailScreen(
+            chatId: chatId,
+            otherUserId: widget.product.userId,
+            otherUserName: _seller?.name ?? 'Seller',
+            otherUserPhoto: _seller?.profilePhoto,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppPopup.show(context, message: 'Error: $e', type: PopupType.error);
+    }
+  }
+
+  Future<void> _addToCart() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      AppPopup.show(context,
+          message: 'Please sign in to add to cart',
+          type: PopupType.warning);
+      return;
+    }
+    if (currentUser.uid == widget.product.userId) {
+      AppPopup.show(context,
+          message: 'You cannot add your own product to cart',
+          type: PopupType.info);
+      return;
+    }
+    try {
+      await _firestoreService.addToCart(
+        userId: currentUser.uid,
+        product: widget.product,
+      );
+      if (!mounted) return;
+      AppPopup.show(context,
+          message: '${widget.product.name} added to cart!',
+          type: PopupType.success);
+    } catch (e) {
+      if (!mounted) return;
+      AppPopup.show(context, message: 'Error adding to cart: $e', type: PopupType.error);
     }
   }
 
@@ -460,13 +536,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               // Contact Seller
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Chat feature coming soon!'),
-                      ),
-                    );
-                  },
+                  onPressed: () => _contactSeller(),
                   icon: const Icon(Icons.chat),
                   label: const Text('Contact'),
                   style: OutlinedButton.styleFrom(
@@ -482,13 +552,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 flex: 2,
                 child: ElevatedButton(
                   onPressed: widget.product.isAvailable && widget.product.stock > 0
-                      ? () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Add to cart feature coming soon!'),
-                            ),
-                          );
-                        }
+                      ? () => _addToCart()
                       : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFE91E63),

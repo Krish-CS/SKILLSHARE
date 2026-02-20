@@ -12,6 +12,7 @@ import '../../utils/web_image_loader.dart';
 import '../../utils/user_roles.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../widgets/chat/chat_work_request_section.dart';
+import '../../widgets/app_popup.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   final String chatId;
@@ -38,7 +39,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _picker = ImagePicker();
-  
+
   String? _currentUserId;
   String? _currentUserRole;
   bool _isLoading = false;
@@ -75,7 +76,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
   Future<void> _sendMessage({String? imageUrl}) async {
     final text = _messageController.text.trim();
-    
+
     if (text.isEmpty && imageUrl == null) return;
     if (_currentUserId == null) return;
 
@@ -92,7 +93,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       );
 
       _messageController.clear();
-      
+
       // Scroll to bottom
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -103,9 +104,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error sending message: $e')),
-        );
+        AppPopup.show(context,
+            message: 'Error sending message: $e', type: PopupType.error);
       }
     } finally {
       if (mounted) {
@@ -140,7 +140,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       }
     } on Exception catch (e) {
       // Only show error for actual errors, not cancellations
-      if (mounted && e.toString().isNotEmpty && !e.toString().contains('cancel')) {
+      if (mounted &&
+          e.toString().isNotEmpty &&
+          !e.toString().contains('cancel')) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error uploading image: $e')),
         );
@@ -178,10 +180,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       }
     } on Exception catch (e) {
       // Only show error for actual errors, not cancellations
-      if (mounted && e.toString().isNotEmpty && !e.toString().contains('cancel')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error taking photo: $e')),
-        );
+      if (mounted &&
+          e.toString().isNotEmpty &&
+          !e.toString().contains('cancel')) {
+        AppPopup.show(context,
+            message: 'Error taking photo: $e', type: PopupType.error);
       }
     } finally {
       if (mounted) {
@@ -203,7 +206,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.photo_library, color: Color(0xFF9C27B0)),
+                leading:
+                    const Icon(Icons.photo_library, color: Color(0xFF9C27B0)),
                 title: const Text('Choose from Gallery'),
                 onTap: () {
                   Navigator.pop(context);
@@ -234,184 +238,157 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   void _showAskWorkDialog(BuildContext context) {
-    final titleController = TextEditingController();
-    final descController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    bool submitting = false;
-
+    // Unfocus any active field before opening the sheet to prevent
+    // Flutter Web 'targetElement == domElement' assertion errors.
+    FocusManager.instance.primaryFocus?.unfocus();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (sheetCtx) {
-        return StatefulBuilder(builder: (_, setSheetState) {
-          return Padding(
-            padding: EdgeInsets.only(
-              left: 20,
-              right: 20,
-              top: 20,
-              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
-            ),
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF9C27B0), Color(0xFFE91E63)],
-                          ),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(Icons.work_outline,
-                            color: Colors.white, size: 20),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Ask for Work / Project',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              'Send a work request to this skilled person',
-                              style: TextStyle(
-                                  fontSize: 12, color: Colors.grey),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  TextFormField(
-                    controller: titleController,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: InputDecoration(
-                      labelText: 'Project / Work Title *',
-                      hintText: 'e.g. Build a mobile app, Design a logo...',
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      prefixIcon: const Icon(Icons.title),
-                    ),
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Please enter a title'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: descController,
-                    maxLines: 3,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(
-                      labelText: 'Description *',
-                      hintText: 'Describe what needs to be done...',
-                      alignLabelWithHint: true,
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      prefixIcon: const Padding(
-                        padding: EdgeInsets.only(bottom: 40),
-                        child: Icon(Icons.description_outlined),
-                      ),
-                    ),
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Please enter a description'
-                        : null,
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF9C27B0), Color(0xFFE91E63)],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: ElevatedButton.icon(
-                        onPressed: submitting
-                            ? null
-                            : () async {
-                                // Dismiss keyboard before any UI changes to avoid
-                                // Flutter Web 'targetElement == domElement' assertion.
-                                FocusScope.of(sheetCtx).unfocus();
-                                if (!formKey.currentState!.validate()) return;
-                                setSheetState(() => submitting = true);
-                                final messenger = ScaffoldMessenger.of(context);
-                                try {
-                                  await _firestoreService.createChatWorkRequest(
-                                    chatId: widget.chatId,
-                                    customerId: _currentUserId!,
-                                    skilledUserId: widget.otherUserId,
-                                    title: titleController.text.trim(),
-                                    description: descController.text.trim(),
-                                  );
-                                  if (sheetCtx.mounted) {
-                                    FocusScope.of(sheetCtx).unfocus();
-                                    Navigator.pop(sheetCtx);
-                                  }
-                                  if (mounted) {
-                                    messenger.showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                            '✅ Work request sent! Waiting for approval.'),
-                                        backgroundColor: Colors.green,
-                                      ),
-                                    );
-                                  }
-                                } catch (e) {
-                                  if (mounted) {
-                                    messenger.showSnackBar(
-                                      SnackBar(
-                                          content: Text('Error: $e'),
-                                          backgroundColor: Colors.red),
-                                    );
-                                  }
-                                } finally {
-                                  if (sheetCtx.mounted) {
-                                    setSheetState(() => submitting = false);
-                                  }
-                                }
-                              },
-                        icon: submitting
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white))
-                            : const Icon(Icons.send, color: Colors.white),
-                        label: Text(
-                          submitting ? 'Sending...' : 'Send Request',
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 16),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          shadowColor: Colors.transparent,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          );
-        });
-      },
+      builder: (_) => _AskWorkSheet(
+        chatId: widget.chatId,
+        currentUserId: _currentUserId!,
+        otherUserId: widget.otherUserId,
+        firestoreService: _firestoreService,
+        parentContext: context,
+      ),
     );
+  }
+
+  void _showReportChatDialog() {
+    final reasons = [
+      'Inappropriate language',
+      'Harassment or bullying',
+      'Spam or scam',
+      'Threatening messages',
+      'Other',
+    ];
+    String? selectedReason = reasons.first;
+    final detailsController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.flag, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Report Chat'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Select reason:',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              ...reasons.map((r) => RadioListTile<String>(
+                    value: r,
+                    groupValue: selectedReason,
+                    title: Text(r),
+                    dense: true,
+                    onChanged: (v) => setDlgState(() => selectedReason = v),
+                  )),
+              const SizedBox(height: 8),
+              TextField(
+                controller: detailsController,
+                decoration: const InputDecoration(
+                  labelText: 'Additional details (optional)',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                if (_currentUserId == null) return;
+                try {
+                  await _chatService.reportChat(
+                    chatId: widget.chatId,
+                    reporterId: _currentUserId!,
+                    reportedUserId: widget.otherUserId,
+                    reason: selectedReason ?? 'Other',
+                    details: detailsController.text.trim(),
+                  );
+                  if (mounted) {
+                    AppPopup.show(context,
+                        message: 'Chat reported. Our team will review it.',
+                        type: PopupType.success);
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    AppPopup.show(context,
+                        message: 'Failed to report: $e',
+                        type: PopupType.error);
+                  }
+                }
+              },
+              child: const Text('Submit',
+                  style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _blockUser() async {
+    if (_currentUserId == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.block, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Block User'),
+          ],
+        ),
+        content: Text(
+            'Block ${widget.otherUserName}? You will no longer receive messages from this user.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child:
+                const Text('Block', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _chatService.blockUserFromChat(
+        blockerId: _currentUserId!,
+        blockedUserId: widget.otherUserId,
+      );
+      if (mounted) {
+        AppPopup.show(context,
+            message: '${widget.otherUserName} has been blocked.',
+            type: PopupType.info);
+        Navigator.of(context).pop(); // go back from chat
+      }
+    } catch (e) {
+      if (mounted) {
+        AppPopup.show(context,
+            message: 'Failed to block user: $e', type: PopupType.error);
+      }
+    }
   }
 
   @override
@@ -428,10 +405,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           children: [
             CircleAvatar(
               radius: 18,
-              backgroundImage: WebImageLoader.getImageProvider(widget.otherUserPhoto),
-              child: widget.otherUserPhoto == null || widget.otherUserPhoto!.isEmpty
+              backgroundImage:
+                  WebImageLoader.getImageProvider(widget.otherUserPhoto),
+              child: widget.otherUserPhoto == null ||
+                      widget.otherUserPhoto!.isEmpty
                   ? Text(
-                      widget.otherUserName.isNotEmpty ? widget.otherUserName[0].toUpperCase() : 'U',
+                      widget.otherUserName.isNotEmpty
+                          ? widget.otherUserName[0].toUpperCase()
+                          : 'U',
                       style: const TextStyle(fontSize: 16),
                     )
                   : null,
@@ -457,6 +438,35 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               tooltip: 'Ask for Work / Project',
               onPressed: () => _showAskWorkDialog(context),
             ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onSelected: (value) {
+              if (value == 'report') _showReportChatDialog();
+              if (value == 'block') _blockUser();
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'report',
+                child: Row(
+                  children: [
+                    Icon(Icons.flag, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Text('Report Chat'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'block',
+                child: Row(
+                  children: [
+                    Icon(Icons.block, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Block User'),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
         flexibleSpace: Container(
           decoration: const BoxDecoration(
@@ -610,7 +620,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.image, color: Color(0xFF9C27B0)),
-                    onPressed: _isLoading || _isSending ? null : _showImageOptions,
+                    onPressed:
+                        _isLoading || _isSending ? null : _showImageOptions,
                   ),
                   Expanded(
                     child: TextField(
@@ -675,7 +686,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           maxWidth: MediaQuery.of(context).size.width * 0.7,
         ),
         child: Column(
-          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          crossAxisAlignment:
+              isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -714,12 +726,27 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     ),
             ),
             const SizedBox(height: 4),
-            Text(
-              AppHelpers.formatTime(message.createdAt),
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey[600],
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  AppHelpers.formatTime(message.createdAt),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                if (isMe) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.done_all,
+                    size: 14,
+                    color: message.isRead
+                        ? Colors.blue
+                        : Colors.grey[400],
+                  ),
+                ],
+              ],
             ),
           ],
         ),
@@ -731,6 +758,194 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     return date1.year == date2.year &&
         date1.month == date2.month &&
         date1.day == date2.day;
+  }
+}
+
+// Image Preview Screen
+class _AskWorkSheet extends StatefulWidget {
+  final String chatId;
+  final String currentUserId;
+  final String otherUserId;
+  final FirestoreService firestoreService;
+  final BuildContext parentContext;
+
+  const _AskWorkSheet({
+    required this.chatId,
+    required this.currentUserId,
+    required this.otherUserId,
+    required this.firestoreService,
+    required this.parentContext,
+  });
+
+  @override
+  State<_AskWorkSheet> createState() => _AskWorkSheetState();
+}
+
+class _AskWorkSheetState extends State<_AskWorkSheet> {
+  final _titleController = TextEditingController();
+  final _descController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    // Capture the parent context before any async gap.
+    final parentCtx = widget.parentContext;
+    // Unfocus ALL fields first so Flutter Web's DOM focus tracking stays clean.
+    FocusManager.instance.primaryFocus?.unfocus();
+    await Future.delayed(const Duration(milliseconds: 50));
+    if (!mounted) return;
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _submitting = true);
+    try {
+      await widget.firestoreService.createChatWorkRequest(
+        chatId: widget.chatId,
+        customerId: widget.currentUserId,
+        skilledUserId: widget.otherUserId,
+        title: _titleController.text.trim(),
+        description: _descController.text.trim(),
+      );
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        AppPopup.show(parentCtx,
+            message: 'Work request sent. Waiting for approval.',
+            type: PopupType.success);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _submitting = false);
+        AppPopup.show(parentCtx,
+            message: 'Error: $e', type: PopupType.error);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF9C27B0), Color(0xFFE91E63)],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.work_outline,
+                      color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Ask for Work / Project',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'Send a work request to this skilled person',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            TextFormField(
+              controller: _titleController,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                labelText: 'Project / Work Title *',
+                hintText: 'e.g. Build a mobile app, Design a logo...',
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                prefixIcon: const Icon(Icons.title),
+              ),
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'Please enter a title'
+                  : null,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _descController,
+              maxLines: 3,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(
+                labelText: 'Description *',
+                hintText: 'Describe what needs to be done...',
+                alignLabelWithHint: true,
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                prefixIcon: const Padding(
+                  padding: EdgeInsets.only(bottom: 40),
+                  child: Icon(Icons.description_outlined),
+                ),
+              ),
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'Please enter a description'
+                  : null,
+            ),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF9C27B0), Color(0xFFE91E63)],
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ElevatedButton.icon(
+                onPressed: _submitting ? null : _submit,
+                icon: _submitting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.send, color: Colors.white),
+                label: Text(
+                  _submitting ? 'Sending...' : 'Send Request',
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

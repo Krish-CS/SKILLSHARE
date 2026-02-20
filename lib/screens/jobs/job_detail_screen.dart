@@ -11,6 +11,7 @@ import '../../utils/app_constants.dart';
 import '../../utils/web_image_loader.dart';
 import '../profile/profile_screen.dart';
 import '../chat/chat_detail_screen.dart';
+import 'create_job_screen.dart';
 
 class JobDetailScreen extends StatefulWidget {
   final JobModel job;
@@ -770,12 +771,17 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Edit feature coming soon!'),
+                        onPressed: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CreateJobScreen(
+                                  existingJob: widget.job),
                             ),
                           );
+                          if (result == true && mounted) {
+                            _loadData();
+                          }
                         },
                         icon: const Icon(Icons.edit),
                         label: const Text('Edit Job'),

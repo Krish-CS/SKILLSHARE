@@ -12,29 +12,30 @@ import 'firebase_options.dart';
 void main() async {
   // Ensure Flutter binding is initialized
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Add error handler
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
     debugPrint('Flutter Error: ${details.exception}');
     debugPrint('Stack trace: ${details.stack}');
   };
-  
+
   bool firebaseInitialized = false;
-  
+
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    
+
     firebaseInitialized = true;
     debugPrint('✅ Firebase initialized successfully');
-    
+
     // Configure Firestore settings based on platform
     if (kIsWeb) {
-      // Web: Use default settings with persistence
+      // Web: keep persistence off to avoid intermittent watch-stream
+      // assertion issues affecting chat listeners.
       FirebaseFirestore.instance.settings = const Settings(
-        persistenceEnabled: true,
+        persistenceEnabled: false,
       );
       debugPrint('✅ Firestore configured for web');
     } else {
@@ -51,13 +52,13 @@ void main() async {
     // Continue running app even if Firebase fails
     // The app will show error states where Firebase is needed
   }
-  
+
   runApp(MyApp(firebaseInitialized: firebaseInitialized));
 }
 
 class MyApp extends StatelessWidget {
   final bool firebaseInitialized;
-  
+
   const MyApp({super.key, this.firebaseInitialized = true});
 
   @override
@@ -98,7 +99,7 @@ class MyApp extends StatelessWidget {
         ),
       );
     }
-    
+
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),

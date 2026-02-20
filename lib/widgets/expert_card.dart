@@ -7,6 +7,7 @@ import '../services/firestore_service.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/chat/chat_detail_screen.dart';
 import '../utils/web_image_loader.dart';
+import 'app_popup.dart';
 
 class ExpertCard extends StatefulWidget {
   final SkilledUserProfile profile;
@@ -268,9 +269,8 @@ class _ExpertCardState extends State<ExpertCard> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error starting chat: $e')),
-      );
+      AppPopup.show(context,
+          message: 'Error starting chat: $e', type: PopupType.error);
     }
   }
 }

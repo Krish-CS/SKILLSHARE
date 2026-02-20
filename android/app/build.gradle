@@ -5,6 +5,9 @@ plugins {
     id "com.google.gms.google-services"
 }
 
+// Redirect app build output to Flutter project root so flutter run can find the APK
+project.layout.buildDirectory.set(project.file("../../build/app"))
+
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file('local.properties')
 if (localPropertiesFile.exists()) {
@@ -25,7 +28,7 @@ if (flutterVersionName == null) {
 
 android {
     namespace "com.skillshare.app"
-    compileSdk 35
+    compileSdk 36
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -43,7 +46,7 @@ android {
     defaultConfig {
         applicationId "com.skillshare.app"
         minSdk 23
-        targetSdk 34
+        targetSdk 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         multiDexEnabled true
@@ -61,5 +64,5 @@ flutter {
 }
 
 dependencies {
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.10"
 }

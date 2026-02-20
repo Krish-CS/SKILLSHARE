@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../screens/home/explore_screen.dart';
 
 class CategoryCard extends StatelessWidget {
   final String title;
@@ -25,7 +26,12 @@ class CategoryCard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            // TODO: Navigate to category
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ExploreScreen(initialCategory: title),
+              ),
+            );
           },
           borderRadius: BorderRadius.circular(16),
           child: Column(

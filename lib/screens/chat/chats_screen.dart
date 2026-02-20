@@ -16,14 +16,18 @@ class ChatsScreen extends StatefulWidget {
 class _ChatsScreenState extends State<ChatsScreen> {
   final ChatService _chatService = ChatService();
   final TextEditingController _searchController = TextEditingController();
-  
+
   String _searchQuery = '';
   String? _currentUserId;
+  Stream<List<ChatModel>>? _chatsStream;
 
   @override
   void initState() {
     super.initState();
     _currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (_currentUserId != null) {
+      _chatsStream = _chatService.getUserChats(_currentUserId!);
+    }
   }
 
   @override
@@ -125,7 +129,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
           // Chats List
           Expanded(
             child: StreamBuilder<List<ChatModel>>(
-              stream: _chatService.getUserChats(_currentUserId!),
+              stream: _chatsStream,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -157,11 +161,15 @@ class _ChatsScreenState extends State<ChatsScreen> {
                       (id) => id != _currentUserId,
                       orElse: () => '',
                     );
-                    final otherUserDetails = chat.participantDetails[otherUserId];
-                    final name = otherUserDetails?['name']?.toString().toLowerCase() ?? '';
+                    final otherUserDetails =
+                        chat.participantDetails[otherUserId];
+                    final name =
+                        otherUserDetails?['name']?.toString().toLowerCase() ??
+                            '';
                     final lastMessage = chat.lastMessage.toLowerCase();
-                    
-                    return name.contains(_searchQuery) || lastMessage.contains(_searchQuery);
+
+                    return name.contains(_searchQuery) ||
+                        lastMessage.contains(_searchQuery);
                   }).toList();
                 }
 
@@ -170,7 +178,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+                        Icon(Icons.search_off,
+                            size: 64, color: Colors.grey[400]),
                         const SizedBox(height: 16),
                         Text(
                           'No chats found',
@@ -274,7 +283,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
               ],
             ),
             const SizedBox(width: 12),
-            
+
             // Chat Info
             Expanded(
               child: Column(
@@ -288,8 +297,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
                           name,
                           style: TextStyle(
                             fontSize: 16,
-                            fontWeight: unreadCount > 0 
-                                ? FontWeight.bold 
+                            fontWeight: unreadCount > 0
+                                ? FontWeight.bold
                                 : FontWeight.w600,
                           ),
                           maxLines: 1,
@@ -300,11 +309,11 @@ class _ChatsScreenState extends State<ChatsScreen> {
                         AppHelpers.getRelativeTime(chat.lastMessageTime),
                         style: TextStyle(
                           fontSize: 12,
-                          color: unreadCount > 0 
+                          color: unreadCount > 0
                               ? const Color(0xFFE91E63)
                               : Colors.grey[600],
-                          fontWeight: unreadCount > 0 
-                              ? FontWeight.bold 
+                          fontWeight: unreadCount > 0
+                              ? FontWeight.bold
                               : FontWeight.normal,
                         ),
                       ),
@@ -323,16 +332,16 @@ class _ChatsScreenState extends State<ChatsScreen> {
                         const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          chat.lastMessage.isEmpty 
+                          chat.lastMessage.isEmpty
                               ? 'No messages yet'
                               : chat.lastMessage,
                           style: TextStyle(
                             fontSize: 14,
-                            color: unreadCount > 0 
+                            color: unreadCount > 0
                                 ? Colors.black87
                                 : Colors.grey[600],
-                            fontWeight: unreadCount > 0 
-                                ? FontWeight.w500 
+                            fontWeight: unreadCount > 0
+                                ? FontWeight.w500
                                 : FontWeight.normal,
                           ),
                           maxLines: 1,

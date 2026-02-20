@@ -17,6 +17,7 @@ class ServiceRequestModel {
   final String? rejectionReason;
   final String? responseMessage;
   final DateTime? respondedAt;
+  final String? hireType; // full_time, part_time, project_based
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -37,6 +38,7 @@ class ServiceRequestModel {
     this.rejectionReason,
     this.responseMessage,
     this.respondedAt,
+    this.hireType,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -71,6 +73,7 @@ class ServiceRequestModel {
       rejectionReason: map['rejectionReason'],
       responseMessage: map['responseMessage'],
       respondedAt: (map['respondedAt'] as Timestamp?)?.toDate(),
+      hireType: map['hireType'],
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -96,6 +99,7 @@ class ServiceRequestModel {
       'responseMessage': responseMessage,
       'respondedAt':
           respondedAt != null ? Timestamp.fromDate(respondedAt!) : null,
+      if (hireType != null) 'hireType': hireType,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };

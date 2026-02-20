@@ -14,6 +14,7 @@ import 'edit_skilled_profile_screen.dart';
 import 'customer_setup_screen.dart';
 import 'company_setup_screen.dart';
 import '../auth/login_screen.dart';
+import 'settings_screen.dart';
 
 class ProfileTabScreen extends StatefulWidget {
   const ProfileTabScreen({super.key});
@@ -122,264 +123,483 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Profile', style: TextStyle(color: Colors.white)),
-          flexibleSpace: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF9C27B0), Color(0xFFE91E63)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-          ),
-        ),
-        body: const Center(child: CircularProgressIndicator()),
+      return const Scaffold(
+        backgroundColor: Color(0xFFF6F7FB),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile', style: TextStyle(color: Colors.white)),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF9C27B0), Color(0xFFE91E63)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
-        elevation: 0,
-      ),
+      backgroundColor: const Color(0xFFF6F7FB),
       body: RefreshIndicator(
         onRefresh: _loadUserData,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             children: [
-              // Profile Header
+              // ── Attractive Profile Header ──
               Container(
                 width: double.infinity,
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Color(0xFF9C27B0), Color(0xFFE91E63)],
+                    colors: [Color(0xFF6A0DAD), Color(0xFF9C27B0), Color(0xFFE91E63)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(36),
+                    bottomRight: Radius.circular(36),
+                  ),
                 ),
-                child: Column(
+                child: Stack(
+                  clipBehavior: Clip.none,
                   children: [
-                    const SizedBox(height: 24),
-                    // Profile Picture
-                    GestureDetector(
-                      onTap: () {
-                        if (_currentUser != null) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ProfileScreen(userId: _currentUser!.uid),
+                    // Decorative blobs
+                    Positioned(
+                      top: -30,
+                      right: -30,
+                      child: Container(
+                        width: 180,
+                        height: 180,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withValues(alpha: 0.07),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 20,
+                      left: -40,
+                      child: Container(
+                        width: 140,
+                        height: 140,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withValues(alpha: 0.05),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 40,
+                      left: 80,
+                      child: Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withValues(alpha: 0.06),
+                        ),
+                      ),
+                    ),
+                    // Content
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 32, 0, 32),
+                      child: Column(
+                        children: [
+                          // Avatar with gradient ring
+                          GestureDetector(
+                            onTap: () {
+                              if (_currentUser != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ProfileScreen(userId: _currentUser!.uid),
+                                  ),
+                                );
+                              }
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: const LinearGradient(
+                                  colors: [Colors.white, Color(0xFFFFD700)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.25),
+                                    blurRadius: 24,
+                                    spreadRadius: 2,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ],
+                              ),
+                              padding: const EdgeInsets.all(3.5),
+                              child: CircleAvatar(
+                                radius: 52,
+                                backgroundColor: Colors.white,
+                                child: WebImageLoader.loadAvatar(
+                                  imageUrl: _profilePhotoUrl,
+                                  radius: 50,
+                                  fallbackText: _currentUser?.name,
+                                  backgroundColor: const Color(0xFFF3E5F5),
+                                ),
+                              ),
                             ),
-                          );
-                        }
-                      },
-                      child: CircleAvatar(
-                        radius: 60,
-                        backgroundColor: Colors.white,
-                        child: WebImageLoader.loadAvatar(
-                          imageUrl: _profilePhotoUrl,
-                          radius: 60,
-                          fallbackText: _currentUser?.name,
-                          backgroundColor: const Color(0xFF9C27B0),
-                        ),
+                          ),
+                          const SizedBox(height: 14),
+                          // Name
+                          Text(
+                            _currentUser?.name ?? 'User',
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: -0.3,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          // Email
+                          Text(
+                            _currentUser?.email ?? '',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.white.withValues(alpha: 0.8),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          // Role Badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.4),
+                                  width: 1.2),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _currentUser?.role == UserRoles.company
+                                      ? Icons.business_rounded
+                                      : _currentUser?.role == UserRoles.skilledPerson
+                                          ? Icons.star_rounded
+                                          : Icons.person_rounded,
+                                  color: Colors.white,
+                                  size: 14,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  UserRoles.getDisplayName(_currentUser?.role ?? UserRoles.customer),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          // Quick action buttons
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _headerAction(
+                                icon: Icons.visibility_rounded,
+                                label: 'View Profile',
+                                onTap: () {
+                                  if (_currentUser != null) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => ProfileScreen(userId: _currentUser!.uid),
+                                      ),
+                                    );
+                                  }
+                                },
+                              ),
+                              const SizedBox(width: 16),
+                              _headerAction(
+                                icon: Icons.edit_rounded,
+                                label: 'Edit Profile',
+                                onTap: () async {
+                                  if (_currentUser == null) return;
+                                  Widget editScreen;
+                                  if (_currentUser!.role == UserRoles.skilledPerson) {
+                                    editScreen = const EditSkilledProfileScreen();
+                                  } else if (_currentUser!.role == UserRoles.customer) {
+                                    editScreen = CustomerSetupScreen(userId: _currentUser!.uid);
+                                  } else if (_currentUser!.role == UserRoles.company) {
+                                    editScreen = CompanySetupScreen(userId: _currentUser!.uid);
+                                  } else {
+                                    editScreen = const EditSkilledProfileScreen();
+                                  }
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => editScreen),
+                                  );
+                                  _loadUserData();
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    // Name
-                    Text(
-                      _currentUser?.name ?? 'User',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    // Email
-                    Text(
-                      _currentUser?.email ?? '',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.white70,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    // Role Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        UserRoles.getDisplayName(_currentUser?.role ?? UserRoles.customer),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
                   ],
                 ),
               ),
 
-              // Menu Options
-              const SizedBox(height: 16),
-              
-              // View Full Profile Button
-              _buildMenuTile(
-                icon: Icons.person,
-                title: 'View Full Profile',
-                onTap: () {
-                  if (_currentUser != null) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ProfileScreen(userId: _currentUser!.uid),
-                      ),
-                    );
-                  }
-                },
-              ),
+              const SizedBox(height: 20),
 
-              // Edit Profile - available for ALL roles
-              _buildMenuTile(
-                icon: Icons.edit,
-                title: _currentUser?.role == UserRoles.skilledPerson
-                    ? 'Edit Professional Profile'
-                    : _currentUser?.role == UserRoles.company
-                        ? 'Edit Company Profile'
-                        : 'Edit Profile',
-                onTap: () async {
-                  if (_currentUser == null) return;
-                  Widget editScreen;
-                  if (_currentUser!.role == UserRoles.skilledPerson) {
-                    editScreen = const EditSkilledProfileScreen();
-                  } else if (_currentUser!.role == UserRoles.customer) {
-                    editScreen = CustomerSetupScreen(userId: _currentUser!.uid);
-                  } else if (_currentUser!.role == UserRoles.company) {
-                    editScreen = CompanySetupScreen(userId: _currentUser!.uid);
-                  } else {
-                    editScreen = const EditSkilledProfileScreen();
-                  }
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => editScreen),
-                  );
-                  _loadUserData();
-                },
-              ),
-
-              const Divider(height: 32),
-
-              // Account Options
-              _buildMenuTile(
-                icon: Icons.settings,
-                title: 'Settings',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Settings - Coming Soon')),
-                  );
-                },
-              ),
-
-              _buildMenuTile(
-                icon: Icons.help_outline,
-                title: 'Help & Support',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Help & Support - Coming Soon')),
-                  );
-                },
-              ),
-
-              _buildMenuTile(
-                icon: Icons.info_outline,
-                title: 'About',
-                onTap: () {
-                  showAboutDialog(
-                    context: context,
-                    applicationName: 'SkillShare',
-                    applicationVersion: '1.0.0',
-                    applicationIcon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF9C27B0),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.handshake,
-                        color: Colors.white,
-                        size: 32,
-                      ),
-                    ),
-                    children: [
-                      const Text('Connect skilled professionals with customers'),
-                    ],
-                  );
-                },
-              ),
-
-              const Divider(height: 32),
-
-              // Logout Button
+              // ── Menu Section ──
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Container(
-                  width: double.infinity,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF9C27B0), Color(0xFFE91E63)],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF9C27B0).withValues(alpha: 0.3),
-                        blurRadius: 8,
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 16,
                         offset: const Offset(0, 4),
                       ),
                     ],
                   ),
-                  child: ElevatedButton.icon(
-                    onPressed: _handleLogout,
-                    icon: const Icon(Icons.logout, color: Colors.white),
-                    label: const Text(
-                      'Logout',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                  child: Column(
+                    children: [
+                      _buildMenuTile(
+                        icon: Icons.settings_rounded,
+                        iconColor: const Color(0xFF607D8B),
+                        title: 'Settings',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                          );
+                        },
                       ),
+                      const Divider(height: 1, indent: 60),
+                      _buildMenuTile(
+                        icon: Icons.help_outline_rounded,
+                        iconColor: const Color(0xFF009688),
+                        title: 'Help & Support',
+                        onTap: () => _showHelpDialog(),
+                      ),
+                      const Divider(height: 1, indent: 60),
+                      _buildMenuTile(
+                        icon: Icons.info_outline_rounded,
+                        iconColor: const Color(0xFF3F51B5),
+                        title: 'About SkillShare',
+                        onTap: () {
+                          showAboutDialog(
+                            context: context,
+                            applicationName: 'SkillShare',
+                            applicationVersion: '1.0.0',
+                            applicationIcon: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF9C27B0),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.handshake, color: Colors.white, size: 32),
+                            ),
+                            children: [
+                              const Text('Connect skilled professionals with customers'),
+                            ],
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Logout Button
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: GestureDetector(
+                  onTap: _handleLogout,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFE53935), Color(0xFFFF7043)],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFE53935).withValues(alpha: 0.35),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.logout_rounded, color: Colors.white, size: 20),
+                        SizedBox(width: 10),
+                        Text(
+                          'Logout',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 32),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showHelpDialog() {
+    final subjectController = TextEditingController();
+    final messageController = TextEditingController();
+    bool isSending = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.help_outline, color: Color(0xFF9C27B0)),
+              SizedBox(width: 8),
+              Text('Help & Support'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Having a problem? Send us a message and we\'ll get back to you shortly.',
+                  style: TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: subjectController,
+                  decoration: const InputDecoration(
+                    labelText: 'Subject',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.subject),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: messageController,
+                  decoration: const InputDecoration(
+                    labelText: 'Message',
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                  maxLines: 4,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: isSending
+                  ? null
+                  : () async {
+                      final subject = subjectController.text.trim();
+                      final message = messageController.text.trim();
+                      if (subject.isEmpty || message.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content:
+                                  Text('Please fill in both fields')),
+                        );
+                        return;
+                      }
+                      setDialogState(() => isSending = true);
+                      try {
+                        final uid = FirebaseAuth.instance.currentUser?.uid;
+                        if (uid != null) {
+                          await FirestoreService().submitSupportTicket(
+                            userId: uid,
+                            subject: subject,
+                            message: message,
+                          );
+                        }
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        // ignore: use_build_context_synchronously
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                                'Support ticket submitted! We\'ll respond soon.'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      } catch (e) {
+                        setDialogState(() => isSending = false);
+                        // ignore: use_build_context_synchronously
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: $e')),
+                        );
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF9C27B0)),
+              child: isSending
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2))
+                  : const Text('Submit',
+                      style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _headerAction({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(
+              color: Colors.white.withValues(alpha: 0.4), width: 1.2),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(width: 7),
+            Text(label,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13)),
+          ],
         ),
       ),
     );
@@ -389,24 +609,29 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
     required IconData icon,
     required String title,
     required VoidCallback onTap,
+    Color iconColor = const Color(0xFF9C27B0),
   }) {
     return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
       leading: Container(
-        padding: const EdgeInsets.all(8),
+        width: 40,
+        height: 40,
         decoration: BoxDecoration(
-          color: const Color(0xFF9C27B0).withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
+          color: iconColor.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(icon, color: const Color(0xFF9C27B0)),
+        child: Icon(icon, color: iconColor, size: 20),
       ),
       title: Text(
         title,
         style: const TextStyle(
           fontWeight: FontWeight.w500,
-          fontSize: 16,
+          fontSize: 15,
+          color: Color(0xFF1A1A2E),
         ),
       ),
-      trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+      trailing: const Icon(Icons.chevron_right_rounded,
+          color: Color(0xFFBBBBCC), size: 22),
       onTap: onTap,
     );
   }

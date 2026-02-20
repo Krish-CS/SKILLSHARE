@@ -1,15 +1,21 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/user_provider.dart';
+import '../../models/order_model.dart';
+import '../../models/service_request_model.dart';
 import '../../models/skilled_user_profile.dart';
 import '../../utils/app_constants.dart';
+import '../../utils/app_helpers.dart';
 import '../../utils/user_roles.dart';
 import '../../utils/add_dummy_profiles.dart';
 import '../../utils/web_image_loader.dart';
 import '../../widgets/expert_card.dart';
 import '../../services/firestore_service.dart';
 import '../profile/profile_screen.dart';
+import 'explore_screen.dart';
+import '../../widgets/notification_bell.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,11 +26,28 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  final FirestoreService _firestoreService = FirestoreService();
   String _searchQuery = '';
   String? _selectedCategory;
   String _sortBy = 'rating'; // rating, reviews, projects
   bool _isGridView = false;
   bool _showFilters = false;
+  bool _searchFocused = false;
+
+  // Animated search hints
+  int _hintIndex = 0;
+  Timer? _hintTimer;
+  static const _searchHints = [
+    'Search Plumbers...',
+    'Search Electricians...',
+    'Search Carpenters...',
+    'Search Tailors...',
+    'Search Painters...',
+    'Search Web Developers...',
+    'Search Photographers...',
+    'Search Tutors...',
+  ];
 
   final List<String> _categories = [
     'All',
@@ -35,6 +58,14 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
+    _searchFocusNode.addListener(() {
+      setState(() => _searchFocused = _searchFocusNode.hasFocus);
+    });
+    _hintTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!_searchFocusNode.hasFocus && _searchController.text.isEmpty) {
+        setState(() => _hintIndex = (_hintIndex + 1) % _searchHints.length);
+      }
+    });
     // Use addPostFrameCallback to ensure widget tree is built before loading data
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
@@ -66,7 +97,8 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         // Auto-sync: if users collection has no photo but role profile does, sync it
-        if (currentUser.profilePhoto == null || currentUser.profilePhoto!.isEmpty) {
+        if (currentUser.profilePhoto == null ||
+            currentUser.profilePhoto!.isEmpty) {
           String? rolePhoto;
           if (userProvider.skilledProfile?.profilePicture != null &&
               userProvider.skilledProfile!.profilePicture!.isNotEmpty) {
@@ -80,7 +112,8 @@ class _HomeScreenState extends State<HomeScreen> {
           }
           if (rolePhoto != null) {
             try {
-              await FirestoreService().updateUserProfilePhoto(currentUser.uid, rolePhoto);
+              await _firestoreService.updateUserProfilePhoto(
+                  currentUser.uid, rolePhoto);
               final updatedUser = currentUser.copyWith(profilePhoto: rolePhoto);
               await authProvider.updateProfile(updatedUser);
             } catch (_) {}
@@ -96,15 +129,25 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
+    _searchFocusNode.dispose();
+    _hintTimer?.cancel();
     super.dispose();
   }
 
-  List<SkilledUserProfile> _getFilteredAndSortedUsers(List<SkilledUserProfile> users) {
+  List<SkilledUserProfile> _getFilteredAndSortedUsers(
+    List<SkilledUserProfile> users,
+    String? currentUserId,
+  ) {
     var filtered = users.where((profile) {
+      if (currentUserId != null && profile.userId == currentUserId) {
+        return false;
+      }
+
       // Search filter
       final matchesSearch = _searchQuery.isEmpty ||
           (profile.category?.toLowerCase().contains(_searchQuery) ?? false) ||
-          profile.skills.any((skill) => skill.toLowerCase().contains(_searchQuery)) ||
+          profile.skills
+              .any((skill) => skill.toLowerCase().contains(_searchQuery)) ||
           (profile.bio.toLowerCase().contains(_searchQuery));
 
       // Category filter
@@ -131,6 +174,187 @@ class _HomeScreenState extends State<HomeScreen> {
     return filtered;
   }
 
+  Future<List<_HomeNotificationItem>> _loadNotificationsForUser(
+    String userId,
+  ) async {
+    final notifications = <_HomeNotificationItem>[];
+    final results = await Future.wait([
+      _firestoreService.getLatestUserWorkRequests(userId, limit: 15),
+      _firestoreService.getLatestOrdersForUser(userId, limit: 15),
+    ]);
+
+    final requests = results[0] as List<ServiceRequestModel>;
+    final orders = results[1] as List<OrderModel>;
+
+    for (final request in requests) {
+      notifications.add(
+        _HomeNotificationItem(
+          title: 'Work request: ${request.title}',
+          subtitle:
+              'Status: ${request.status.toUpperCase()} • ${request.description}',
+          createdAt: request.updatedAt,
+          icon: request.status == AppConstants.requestStatusAccepted
+              ? Icons.check_circle
+              : request.status == AppConstants.requestStatusRejected
+                  ? Icons.cancel
+                  : Icons.work_outline,
+          color: request.status == AppConstants.requestStatusAccepted
+              ? Colors.green
+              : request.status == AppConstants.requestStatusRejected
+                  ? Colors.red
+                  : Colors.orange,
+        ),
+      );
+    }
+
+    for (final order in orders) {
+      final isBuyer = order.buyerId == userId;
+      final actorLabel = isBuyer ? 'Your order' : 'Sale update';
+      final timeline = order.statusTimeline.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      final latestTimeline = timeline.isNotEmpty
+          ? '${timeline.first.key} at ${AppHelpers.formatDateTime(timeline.first.value)}'
+          : 'status updated';
+
+      notifications.add(
+        _HomeNotificationItem(
+          title: '$actorLabel: ${order.productName}',
+          subtitle: 'Order ${order.status.toUpperCase()} • $latestTimeline',
+          createdAt: order.updatedAt,
+          icon: isBuyer ? Icons.shopping_bag : Icons.store,
+          color: isBuyer ? const Color(0xFF2196F3) : const Color(0xFF6A11CB),
+        ),
+      );
+    }
+
+    notifications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return notifications.take(25).toList();
+  }
+
+  void _showNotificationsSheet(BuildContext context, String userId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.85,
+        child: FutureBuilder<List<_HomeNotificationItem>>(
+          future: _loadNotificationsForUser(userId),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Text(
+                    'Failed to load notifications: ${snapshot.error}',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            }
+
+            final notifications =
+                snapshot.data ?? const <_HomeNotificationItem>[];
+            if (notifications.isEmpty) {
+              return const Center(child: Text('No notifications yet'));
+            }
+
+            return Column(
+              children: [
+                Container(
+                  width: 44,
+                  height: 5,
+                  margin: const EdgeInsets.only(top: 10, bottom: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[400],
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const Text(
+                  'Notifications',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    itemCount: notifications.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final item = notifications[index];
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            CircleAvatar(
+                              radius: 18,
+                              backgroundColor:
+                                  item.color.withValues(alpha: 0.15),
+                              child:
+                                  Icon(item.icon, color: item.color, size: 18),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.title,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    item.subtitle,
+                                    style: TextStyle(
+                                      color: Colors.grey[700],
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    AppHelpers.getRelativeTime(item.createdAt),
+                                    style: TextStyle(
+                                      color: Colors.grey[500],
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
@@ -141,11 +365,11 @@ class _HomeScreenState extends State<HomeScreen> {
     // Resolve profile photo: users collection → role-specific profile → null
     String? profilePhotoUrl = currentUser?.profilePhoto;
     if (profilePhotoUrl == null || profilePhotoUrl.isEmpty) {
-      profilePhotoUrl = userProvider.skilledProfile?.profilePicture
-          ?? userProvider.customerProfile?.profilePicture
-          ?? userProvider.companyProfile?.logoUrl;
+      profilePhotoUrl = userProvider.skilledProfile?.profilePicture ??
+          userProvider.customerProfile?.profilePicture ??
+          userProvider.companyProfile?.logoUrl;
     }
-    
+
     // Role-based greeting
     String greeting = 'Welcome';
     final hour = DateTime.now().hour;
@@ -180,15 +404,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 title: const Text(
                   'SkillShare',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 20),
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontSize: 20),
                 ),
                 actions: [
-                  IconButton(
-                    icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-                    onPressed: () {
-                      // TODO: Navigate to notifications
-                    },
-                  ),
+                  if (currentUser != null)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: NotificationBell(
+                        userId: currentUser.uid,
+                        onTap: () =>
+                            _showNotificationsSheet(context, currentUser.uid),
+                        color: Colors.white,
+                      ),
+                    ),
                   Padding(
                     padding: const EdgeInsets.all(8.0),
                     child: GestureDetector(
@@ -197,7 +428,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => ProfileScreen(userId: currentUser.uid),
+                              builder: (_) =>
+                                  ProfileScreen(userId: currentUser.uid),
                             ),
                           );
                         }
@@ -231,42 +463,185 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         Text(
                           '$greeting, ${(currentUser?.name ?? 'there').split(' ').first}!',
-                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                          style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           userRole == UserRoles.skilledPerson
                               ? 'Manage your profile and connect with clients'
                               : 'Find skilled professionals near you',
-                          style: const TextStyle(fontSize: 14, color: Colors.white70),
+                          style: const TextStyle(
+                              fontSize: 14, color: Colors.white70),
                         ),
                         const SizedBox(height: 16),
-                        // Search bar — persistent, not inside FlexibleSpaceBar
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(30),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.1),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: TextField(
-                            controller: _searchController,
-                            decoration: InputDecoration(
-                              hintText: 'Search skills, categories...',
-                              border: InputBorder.none,
-                              icon: const Icon(Icons.search, color: Colors.grey),
-                              suffixIcon: _searchQuery.isNotEmpty
-                                  ? IconButton(
-                                      icon: const Icon(Icons.clear, color: Colors.grey),
-                                      onPressed: () => _searchController.clear(),
+                        // Animated search bar with gradient focus border + cycling hints
+                        GestureDetector(
+                          onTap: () => _searchFocusNode.requestFocus(),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            padding: EdgeInsets.all(_searchFocused ? 2 : 0),
+                            decoration: BoxDecoration(
+                              gradient: _searchFocused
+                                  ? const LinearGradient(
+                                      colors: [
+                                        Color(0xFFFF6B6B),
+                                        Color(0xFFFFE66D),
+                                        Color(0xFF4ECDC4),
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
                                     )
                                   : null,
+                              color:
+                                  _searchFocused ? null : Colors.transparent,
+                              borderRadius: BorderRadius.circular(30),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _searchFocused
+                                      ? const Color(0xFF4ECDC4)
+                                          .withValues(alpha: 0.5)
+                                      : Colors.black.withValues(alpha: 0.15),
+                                  blurRadius: _searchFocused ? 18 : 10,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: Container(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 14),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(
+                                    _searchFocused ? 28 : 30),
+                              ),
+                              child: Row(
+                                children: [
+                                  AnimatedSwitcher(
+                                    duration:
+                                        const Duration(milliseconds: 300),
+                                    child: Icon(
+                                      _searchFocused
+                                          ? Icons.search
+                                          : Icons.search_rounded,
+                                      key: ValueKey(_searchFocused),
+                                      color: _searchFocused
+                                          ? const Color(0xFF6A11CB)
+                                          : Colors.grey[500],
+                                      size: 22,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Stack(
+                                      alignment: Alignment.centerLeft,
+                                      children: [
+                                        TextField(
+                                          controller: _searchController,
+                                          focusNode: _searchFocusNode,
+                                          style: const TextStyle(
+                                            fontSize: 15,
+                                            color: Colors.black87,
+                                          ),
+                                          decoration: InputDecoration(
+                                            border: InputBorder.none,
+                                            isDense: true,
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                                    vertical: 14),
+                                            hintText: _searchFocused
+                                                ? 'Type to search...'
+                                                : null,
+                                            hintStyle: TextStyle(
+                                              color: Colors.grey[400],
+                                              fontSize: 15,
+                                            ),
+                                          ),
+                                        ),
+                                        // Animated cycling hints (only when empty & unfocused)
+                                        if (!_searchFocused &&
+                                            _searchQuery.isEmpty)
+                                          IgnorePointer(
+                                            child: AnimatedSwitcher(
+                                              duration: const Duration(
+                                                  milliseconds: 400),
+                                              transitionBuilder:
+                                                  (child, anim) =>
+                                                      FadeTransition(
+                                                opacity: anim,
+                                                child: SlideTransition(
+                                                  position: Tween<Offset>(
+                                                    begin: const Offset(
+                                                        0, 0.4),
+                                                    end: Offset.zero,
+                                                  ).animate(
+                                                    CurvedAnimation(
+                                                      parent: anim,
+                                                      curve: Curves
+                                                          .easeOutCubic,
+                                                    ),
+                                                  ),
+                                                  child: child,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                _searchHints[_hintIndex],
+                                                key: ValueKey(_hintIndex),
+                                                style: TextStyle(
+                                                  color: Colors.grey[400],
+                                                  fontSize: 15,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  // Right icon: clear or filter
+                                  AnimatedSwitcher(
+                                    duration:
+                                        const Duration(milliseconds: 200),
+                                    child: _searchQuery.isNotEmpty
+                                        ? IconButton(
+                                            key: const ValueKey('clear'),
+                                            icon: const Icon(Icons.close,
+                                                color: Colors.grey, size: 20),
+                                            onPressed: () {
+                                              _searchController.clear();
+                                              _searchFocusNode.unfocus();
+                                            },
+                                            padding: EdgeInsets.zero,
+                                            constraints:
+                                                const BoxConstraints(),
+                                          )
+                                        : GestureDetector(
+                                            key: const ValueKey('filter'),
+                                            onTap: () => setState(() =>
+                                                _showFilters = !_showFilters),
+                                            child: Container(
+                                              padding: const EdgeInsets.all(6),
+                                              decoration: BoxDecoration(
+                                                gradient:
+                                                    const LinearGradient(
+                                                  colors: [
+                                                    Color(0xFF6A11CB),
+                                                    Color(0xFF2575FC),
+                                                  ],
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: const Icon(
+                                                  Icons.tune_rounded,
+                                                  color: Colors.white,
+                                                  size: 18),
+                                            ),
+                                          ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -277,49 +652,83 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
 
               // Skilled Person Quick Stats Dashboard
-              if (userRole == UserRoles.skilledPerson && userProvider.skilledProfile != null)
+              if (userRole == UserRoles.skilledPerson &&
+                  userProvider.skilledProfile != null)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Your Dashboard', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        const Text('Your Dashboard',
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 12),
                         Row(
                           children: [
-                            _buildStatChip(Icons.star, userProvider.skilledProfile!.rating.toStringAsFixed(1), 'Rating', Colors.amber),
+                            _buildStatChip(
+                                Icons.star,
+                                userProvider.skilledProfile!.rating
+                                    .toStringAsFixed(1),
+                                'Rating',
+                                Colors.amber),
                             const SizedBox(width: 8),
-                            _buildStatChip(Icons.rate_review, '${userProvider.skilledProfile!.reviewCount}', 'Reviews', const Color(0xFF2196F3)),
+                            _buildStatChip(
+                                Icons.rate_review,
+                                '${userProvider.skilledProfile!.reviewCount}',
+                                'Reviews',
+                                const Color(0xFF2196F3)),
                             const SizedBox(width: 8),
-                            _buildStatChip(Icons.work, '${userProvider.skilledProfile!.projectCount}', 'Projects', const Color(0xFF4CAF50)),
+                            _buildStatChip(
+                                Icons.work,
+                                '${userProvider.skilledProfile!.projectCount}',
+                                'Projects',
+                                const Color(0xFF4CAF50)),
                             const SizedBox(width: 8),
-                            _buildStatChip(Icons.photo_library, '${userProvider.skilledProfile!.portfolioImages.length}', 'Portfolio', const Color(0xFF9C27B0)),
+                            _buildStatChip(
+                                Icons.photo_library,
+                                '${userProvider.skilledProfile!.portfolioImages.length}',
+                                'Portfolio',
+                                const Color(0xFF9C27B0)),
                           ],
                         ),
                         const SizedBox(height: 8),
                         Row(
                           children: [
                             Icon(
-                              userProvider.skilledProfile!.visibility == 'public' ? Icons.visibility : Icons.visibility_off,
+                              userProvider.skilledProfile!.visibility ==
+                                      'public'
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
                               size: 14,
-                              color: userProvider.skilledProfile!.visibility == 'public' ? Colors.green : Colors.orange,
+                              color: userProvider.skilledProfile!.visibility ==
+                                      'public'
+                                  ? Colors.green
+                                  : Colors.orange,
                             ),
                             const SizedBox(width: 4),
                             Text(
                               'Profile: ${userProvider.skilledProfile!.visibility == 'public' ? 'Public' : 'Private'}',
-                              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.grey[600]),
                             ),
                             const SizedBox(width: 12),
                             Icon(
-                              userProvider.skilledProfile!.isVerified ? Icons.verified : Icons.pending,
+                              userProvider.skilledProfile!.isVerified
+                                  ? Icons.verified
+                                  : Icons.pending,
                               size: 14,
-                              color: userProvider.skilledProfile!.isVerified ? Colors.green : Colors.orange,
+                              color: userProvider.skilledProfile!.isVerified
+                                  ? Colors.green
+                                  : Colors.orange,
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              userProvider.skilledProfile!.isVerified ? 'Verified' : 'Not Verified',
-                              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                              userProvider.skilledProfile!.isVerified
+                                  ? 'Verified'
+                                  : 'Not Verified',
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.grey[600]),
                             ),
                           ],
                         ),
@@ -347,17 +756,35 @@ class _HomeScreenState extends State<HomeScreen> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          TextButton.icon(
-                            onPressed: () {
-                              setState(() {
-                                _showFilters = !_showFilters;
-                              });
-                            },
-                            icon: Icon(
-                              _showFilters ? Icons.filter_alt : Icons.filter_alt_outlined,
-                              size: 20,
-                            ),
-                            label: const Text('Filters'),
+                          Row(
+                            children: [
+                              TextButton.icon(
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ExploreScreen(
+                                      initialCategory: _selectedCategory,
+                                    ),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.explore, size: 18),
+                                label: const Text('Explore All'),
+                              ),
+                              TextButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    _showFilters = !_showFilters;
+                                  });
+                                },
+                                icon: Icon(
+                                  _showFilters
+                                      ? Icons.filter_alt
+                                      : Icons.filter_alt_outlined,
+                                  size: 18,
+                                ),
+                                label: const Text('Filters'),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -370,7 +797,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           itemBuilder: (context, index) {
                             final category = _categories[index];
                             final isSelected = _selectedCategory == category ||
-                                (_selectedCategory == null && category == 'All');
+                                (_selectedCategory == null &&
+                                    category == 'All');
                             return Padding(
                               padding: const EdgeInsets.only(right: 8),
                               child: FilterChip(
@@ -378,14 +806,20 @@ class _HomeScreenState extends State<HomeScreen> {
                                 selected: isSelected,
                                 onSelected: (selected) {
                                   setState(() {
-                                    _selectedCategory = category == 'All' ? null : category;
+                                    _selectedCategory =
+                                        category == 'All' ? null : category;
                                   });
                                 },
-                                selectedColor: const Color(0xFF2196F3).withValues(alpha: 0.2),
+                                selectedColor: const Color(0xFF2196F3)
+                                    .withValues(alpha: 0.2),
                                 checkmarkColor: const Color(0xFF2196F3),
                                 labelStyle: TextStyle(
-                                  color: isSelected ? const Color(0xFF2196F3) : Colors.grey[700],
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  color: isSelected
+                                      ? const Color(0xFF2196F3)
+                                      : Colors.grey[700],
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
                                 ),
                               ),
                             );
@@ -393,7 +827,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       // Filter Options
-                      if (_showFilters) ...[  
+                      if (_showFilters) ...[
                         const SizedBox(height: 16),
                         Card(
                           child: Padding(
@@ -455,7 +889,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                     IconButton(
                                       icon: Icon(
                                         Icons.view_list,
-                                        color: !_isGridView ? const Color(0xFF2196F3) : Colors.grey,
+                                        color: !_isGridView
+                                            ? const Color(0xFF2196F3)
+                                            : Colors.grey,
                                       ),
                                       onPressed: () {
                                         setState(() {
@@ -466,7 +902,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                     IconButton(
                                       icon: Icon(
                                         Icons.grid_view,
-                                        color: _isGridView ? const Color(0xFF2196F3) : Colors.grey,
+                                        color: _isGridView
+                                            ? const Color(0xFF2196F3)
+                                            : Colors.grey,
                                       ),
                                       onPressed: () {
                                         setState(() {
@@ -489,7 +927,8 @@ class _HomeScreenState extends State<HomeScreen> {
               // Top Rated Experts Header
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -533,6 +972,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         builder: (context) {
                           final filteredUsers = _getFilteredAndSortedUsers(
                             userProvider.verifiedUsers,
+                            currentUser?.uid,
                           );
 
                           if (filteredUsers.isEmpty) {
@@ -575,7 +1015,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
                           if (_isGridView) {
                             return SliverGrid(
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: 2,
                                 crossAxisSpacing: 12,
                                 mainAxisSpacing: 12,
@@ -603,7 +1044,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                       ),
               ),
-              
+
               // Bottom spacing
               const SliverToBoxAdapter(
                 child: SizedBox(height: 80),
@@ -645,7 +1086,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildStatChip(IconData icon, String value, String label, Color color) {
+  Widget _buildStatChip(
+      IconData icon, String value, String label, Color color) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
@@ -658,8 +1100,11 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Icon(icon, color: color, size: 20),
             const SizedBox(height: 4),
-            Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: color)),
-            Text(label, style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+            Text(value,
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 16, color: color)),
+            Text(label,
+                style: TextStyle(fontSize: 10, color: Colors.grey[600])),
           ],
         ),
       ),
@@ -691,7 +1136,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Container(
                     decoration: BoxDecoration(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                      borderRadius:
+                          const BorderRadius.vertical(top: Radius.circular(16)),
                       gradient: LinearGradient(
                         colors: [Colors.blue[400]!, Colors.purple[400]!],
                         begin: Alignment.topLeft,
@@ -704,9 +1150,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         backgroundColor: Colors.white,
                         child: CircleAvatar(
                           radius: 42,
-                          backgroundImage: WebImageLoader.getImageProvider(profile.profilePicture),
-                          child: (profile.profilePicture == null || profile.profilePicture!.isEmpty)
-                              ? const Icon(Icons.person, size: 40, color: Colors.grey)
+                          backgroundImage: WebImageLoader.getImageProvider(
+                              profile.profilePicture),
+                          child: (profile.profilePicture == null ||
+                                  profile.profilePicture!.isEmpty)
+                              ? const Icon(Icons.person,
+                                  size: 40, color: Colors.grey)
                               : null,
                         ),
                       ),
@@ -780,7 +1229,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     const Spacer(),
                     Row(
                       children: [
-                        Icon(Icons.work_outline, size: 12, color: Colors.grey[600]),
+                        Icon(Icons.work_outline,
+                            size: 12, color: Colors.grey[600]),
                         const SizedBox(width: 4),
                         Text(
                           '${profile.projectCount} projects',
@@ -855,4 +1305,20 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+class _HomeNotificationItem {
+  final String title;
+  final String subtitle;
+  final DateTime createdAt;
+  final IconData icon;
+  final Color color;
+
+  const _HomeNotificationItem({
+    required this.title,
+    required this.subtitle,
+    required this.createdAt,
+    required this.icon,
+    required this.color,
+  });
 }

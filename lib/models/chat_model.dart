@@ -55,6 +55,7 @@ class MessageModel {
   final String type; // text, image, video
   final String? mediaUrl;
   final bool isRead;
+  final DateTime? readAt;
   final DateTime createdAt;
 
   MessageModel({
@@ -65,6 +66,7 @@ class MessageModel {
     this.type = 'text',
     this.mediaUrl,
     this.isRead = false,
+    this.readAt,
     required this.createdAt,
   });
 
@@ -77,6 +79,7 @@ class MessageModel {
       type: map['type'] ?? 'text',
       mediaUrl: map['mediaUrl'],
       isRead: map['isRead'] ?? false,
+      readAt: (map['readAt'] as Timestamp?)?.toDate(),
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
@@ -89,6 +92,7 @@ class MessageModel {
       'type': type,
       'mediaUrl': mediaUrl,
       'isRead': isRead,
+      if (readAt != null) 'readAt': Timestamp.fromDate(readAt!),
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }

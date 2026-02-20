@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/service_request_model.dart';
 import '../../services/firestore_service.dart';
+import '../app_popup.dart';
 import '../gpay_simulation_dialog.dart';
 
 /// Widget that displays work requests inside a chat and allows asking for work.
@@ -203,17 +204,16 @@ class _WorkRequestCardState extends State<_WorkRequestCard> {
         approve: approve,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(approve
-              ? 'Work request approved! Project added to your profile.'
-              : 'Work request declined.'),
-          backgroundColor: approve ? Colors.green : Colors.red,
-        ));
+        AppPopup.show(context,
+            message: approve
+                ? 'Work request approved! Project added to your profile.'
+                : 'Work request declined.',
+            type: approve ? PopupType.success : PopupType.info);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')));
+        AppPopup.show(context,
+            message: 'Error: $e', type: PopupType.error);
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -245,12 +245,11 @@ class _WorkRequestCardState extends State<_WorkRequestCard> {
         await _svc.updateRequestStatus(widget.request.id, 'completed');
       } catch (_) {}
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-              '✅ Payment of ₹${amountResult.toStringAsFixed(2)} done! TXN: $txnId'),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 4),
-        ));
+        AppPopup.show(context,
+            message:
+                '✅ Payment of ₹${amountResult.toStringAsFixed(2)} done! TXN: $txnId',
+            type: PopupType.success,
+            duration: const Duration(seconds: 4));
       }
     }
   }
@@ -432,33 +431,35 @@ class _PaymentAmountDialogState extends State<_PaymentAmountDialog> {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: const Text('Payment Amount'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Project: ${widget.projectTitle}',
-            style: const TextStyle(fontSize: 13, color: Colors.black54),
-            maxLines: 2,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _controller,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
-            ],
-            decoration: InputDecoration(
-              labelText: 'Amount (₹)',
-              prefixText: '₹ ',
-              errorText: _error,
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10)),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Project: ${widget.projectTitle}',
+              style: const TextStyle(fontSize: 13, color: Colors.black54),
+              maxLines: 2,
             ),
-            autofocus: true,
-          ),
-        ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: _controller,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
+              ],
+              decoration: InputDecoration(
+                labelText: 'Amount (₹)',
+                prefixText: '₹ ',
+                errorText: _error,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(

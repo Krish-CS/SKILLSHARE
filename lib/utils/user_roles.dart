@@ -11,6 +11,7 @@ class UserRoles {
   static const String company = 'company';
   static const String skilledPerson = 'skilled_person';
   static const String admin = 'admin';
+  static const String deliveryPartner = 'delivery_partner';
 
   // All available roles
   static const List<String> allRoles = [
@@ -18,6 +19,7 @@ class UserRoles {
     company,
     skilledPerson,
     admin,
+    deliveryPartner,
   ];
 
   // Legacy aliases supported for existing Firebase users
@@ -38,6 +40,9 @@ class UserRoles {
     if (normalized == customer) return customer;
     if (normalized == company) return company;
     if (normalized == admin) return admin;
+    if (normalized == deliveryPartner || normalized == 'delivery_partner') {
+      return deliveryPartner;
+    }
     if (normalized == skilledPerson || _skilledAliases.contains(normalized)) {
       return skilledPerson;
     }
@@ -51,6 +56,7 @@ class UserRoles {
     company: 'Company',
     skilledPerson: 'Skilled Person',
     admin: 'Administrator',
+    deliveryPartner: 'Delivery Partner',
   };
 
   // Get display name for a role

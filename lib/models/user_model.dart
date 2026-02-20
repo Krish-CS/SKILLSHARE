@@ -11,6 +11,7 @@ class UserModel {
   final DateTime createdAt;
   final DateTime updatedAt;
   final bool isActive;
+  final bool? isSuspended;
 
   UserModel({
     required this.uid,
@@ -22,6 +23,7 @@ class UserModel {
     required this.createdAt,
     required this.updatedAt,
     this.isActive = true,
+    this.isSuspended,
   });
 
   factory UserModel.fromMap(Map<String, dynamic> map, String uid) {
@@ -38,6 +40,7 @@ class UserModel {
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isActive: map['isActive'] ?? true,
+      isSuspended: map['isSuspended'] as bool?,
     );
   }
 
@@ -51,6 +54,7 @@ class UserModel {
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
       'isActive': isActive,
+      if (isSuspended != null) 'isSuspended': isSuspended,
     };
   }
 
@@ -59,6 +63,7 @@ class UserModel {
     String? phone,
     String? profilePhoto,
     bool? isActive,
+    bool? isSuspended,
   }) {
     return UserModel(
       uid: uid,
@@ -70,6 +75,7 @@ class UserModel {
       createdAt: createdAt,
       updatedAt: DateTime.now(),
       isActive: isActive ?? this.isActive,
+      isSuspended: isSuspended ?? this.isSuspended,
     );
   }
 }

@@ -22,12 +22,12 @@ class JobsScreen extends StatefulWidget {
 class _JobsScreenState extends State<JobsScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _searchController = TextEditingController();
-  
+
   List<JobModel> _allJobs = [];
   List<JobModel> _filteredJobs = [];
   UserModel? _currentUser;
   bool _isLoading = true;
-  
+
   String _searchQuery = '';
   String? _selectedJobType;
   String _sortBy = 'newest'; // newest, deadline, budget
@@ -60,7 +60,7 @@ class _JobsScreenState extends State<JobsScreen> {
       if (userId != null) {
         _currentUser = await _firestoreService.getUserById(userId);
       }
-      
+
       _allJobs = await _firestoreService.getOpenJobs();
       _applyFilters();
     } catch (e) {
@@ -83,9 +83,11 @@ class _JobsScreenState extends State<JobsScreen> {
         // Search filter
         final matchesSearch = _searchQuery.isEmpty ||
             job.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            job.description.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            job.requiredSkills.any((skill) => 
-              skill.toLowerCase().contains(_searchQuery.toLowerCase()));
+            job.description
+                .toLowerCase()
+                .contains(_searchQuery.toLowerCase()) ||
+            job.requiredSkills.any((skill) =>
+                skill.toLowerCase().contains(_searchQuery.toLowerCase()));
 
         // Job type filter
         final matchesJobType = _selectedJobType == null ||
@@ -138,16 +140,15 @@ class _JobsScreenState extends State<JobsScreen> {
   }
 
   bool get _canPostJobs {
-    // Only companies and customers can post jobs
-    return _currentUser?.role == AppConstants.roleCompany || 
-           _currentUser?.role == UserRoles.customer;
+    // Only companies can post jobs
+    return _currentUser?.role == AppConstants.roleCompany;
   }
-  
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<app_auth.AuthProvider>(context);
     final userRole = authProvider.userRole ?? UserRoles.customer;
-    
+
     // Role-based title
     String screenTitle = 'Jobs';
     if (userRole == UserRoles.skilledPerson) {
@@ -157,7 +158,7 @@ class _JobsScreenState extends State<JobsScreen> {
     } else {
       screenTitle = 'Hire & Jobs';
     }
-    
+
     return Scaffold(
       appBar: AppBar(
         title: Text(screenTitle, style: const TextStyle(color: Colors.white)),
@@ -239,7 +240,7 @@ class _JobsScreenState extends State<JobsScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                
+
                 // Filters Row
                 Row(
                   children: [
@@ -268,7 +269,7 @@ class _JobsScreenState extends State<JobsScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    
+
                     // Sort Filter
                     Expanded(
                       child: Container(
@@ -340,7 +341,8 @@ class _JobsScreenState extends State<JobsScreen> {
                           itemBuilder: (context, index) {
                             return JobCard(
                               job: _filteredJobs[index],
-                              onTap: () => _navigateToJobDetail(_filteredJobs[index]),
+                              onTap: () =>
+                                  _navigateToJobDetail(_filteredJobs[index]),
                             );
                           },
                         ),
@@ -421,7 +423,8 @@ class _JobsScreenState extends State<JobsScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            _searchQuery.isNotEmpty || _selectedJobType != null && _selectedJobType != 'All'
+            _searchQuery.isNotEmpty ||
+                    _selectedJobType != null && _selectedJobType != 'All'
                 ? Icons.search_off
                 : Icons.work_off,
             size: 80,
@@ -429,7 +432,8 @@ class _JobsScreenState extends State<JobsScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            _searchQuery.isNotEmpty || _selectedJobType != null && _selectedJobType != 'All'
+            _searchQuery.isNotEmpty ||
+                    _selectedJobType != null && _selectedJobType != 'All'
                 ? 'No jobs found'
                 : 'No jobs available',
             style: TextStyle(
@@ -440,7 +444,8 @@ class _JobsScreenState extends State<JobsScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            _searchQuery.isNotEmpty || _selectedJobType != null && _selectedJobType != 'All'
+            _searchQuery.isNotEmpty ||
+                    _selectedJobType != null && _selectedJobType != 'All'
                 ? 'Try adjusting your filters'
                 : 'Check back later for new opportunities!',
             style: TextStyle(
@@ -448,7 +453,9 @@ class _JobsScreenState extends State<JobsScreen> {
               color: Colors.grey[500],
             ),
           ),
-          if (_canPostJobs && _searchQuery.isEmpty && (_selectedJobType == null || _selectedJobType == 'All'))
+          if (_canPostJobs &&
+              _searchQuery.isEmpty &&
+              (_selectedJobType == null || _selectedJobType == 'All'))
             Padding(
               padding: const EdgeInsets.only(top: 24),
               child: ElevatedButton.icon(
@@ -486,7 +493,7 @@ class _JobsScreenState extends State<JobsScreen> {
         builder: (context) => JobDetailScreen(job: job),
       ),
     );
-    
+
     // If job was updated/deleted, reload
     if (result == true) {
       _loadData();

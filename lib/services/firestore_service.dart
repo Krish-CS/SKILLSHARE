@@ -1387,6 +1387,96 @@ class FirestoreService {
     });
   }
 
+  // ===== Delivery Partner =====
+
+  /// Stream all orders assigned to a delivery partner.
+  Stream<List<OrderModel>> streamDeliveryPartnerOrders(
+      String deliveryPartnerId) {
+    return _firestore
+        .collection(AppConstants.ordersCollection)
+        .where('deliveryPartnerId', isEqualTo: deliveryPartnerId)
+        .snapshots()
+        .map((snapshot) {
+      final orders = snapshot.docs
+          .map((doc) => OrderModel.fromMap(doc.data(), doc.id))
+          .toList();
+      orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return orders;
+    });
+  }
+
+  /// Stream orders that are 'shipped' and have no delivery partner (available to pick up).
+  Stream<List<OrderModel>> streamAvailableDeliveries() {
+    return _firestore
+        .collection(AppConstants.ordersCollection)
+        .where('status', isEqualTo: 'shipped')
+        .snapshots()
+        .map((snapshot) {
+      final orders = snapshot.docs
+          .map((doc) => OrderModel.fromMap(doc.data(), doc.id))
+          .where((o) =>
+              o.deliveryPartnerId == null || o.deliveryPartnerId!.isEmpty)
+          .toList();
+      orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return orders;
+    });
+  }
+
+  /// Assign a delivery partner to an order and set estimated delivery.
+  Future<void> assignDeliveryPartner({
+    required String orderId,
+    required String deliveryPartnerId,
+    required String deliveryPartnerName,
+    DateTime? estimatedDelivery,
+  }) async {
+    final updateData = <String, dynamic>{
+      'deliveryPartnerId': deliveryPartnerId,
+      'deliveryPartnerName': deliveryPartnerName,
+      'status': 'out_for_delivery',
+      'statusTimeline.out_for_delivery': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    if (estimatedDelivery != null) {
+      updateData['estimatedDelivery'] =
+          Timestamp.fromDate(estimatedDelivery);
+    }
+    await _firestore
+        .collection(AppConstants.ordersCollection)
+        .doc(orderId)
+        .update(updateData);
+  }
+
+  /// Update order delivery status (only delivery partner or seller can do this).
+  Future<void> updateDeliveryStatus({
+    required String orderId,
+    required String deliveryPartnerId,
+    required String status,
+  }) async {
+    const allowed = {
+      'out_for_delivery',
+      'delivered',
+      'failed_delivery',
+    };
+    if (!allowed.contains(status)) {
+      throw Exception('Invalid delivery status: $status');
+    }
+    final ref =
+        _firestore.collection(AppConstants.ordersCollection).doc(orderId);
+    final snap = await ref.get();
+    if (!snap.exists) throw Exception('Order not found.');
+    final data = snap.data()!;
+    final assignedId = data['deliveryPartnerId'] as String?;
+    if (assignedId != deliveryPartnerId) {
+      throw Exception(
+          'You are not the assigned delivery partner for this order.');
+    }
+    await ref.update({
+      'status': status,
+      'statusTimeline.$status': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   // ===== Jobs =====
 
   Future<String> createJob(JobModel job) async {
@@ -1548,6 +1638,7 @@ class FirestoreService {
     required String title,
     required String description,
     DateTime? scheduledDate,
+    String? hireType, // full_time, part_time, project_based
   }) async {
     if (requesterId == skilledUserId) {
       throw Exception('You cannot hire yourself.');
@@ -1586,6 +1677,7 @@ class FirestoreService {
       description: normalizedDescription,
       status: AppConstants.requestStatusPending,
       scheduledDate: scheduledDate,
+      hireType: hireType,
       createdAt: now,
       updatedAt: now,
     );
@@ -1611,8 +1703,10 @@ class FirestoreService {
 
     final customer = await getUserById(customerId);
     final customerRole = (customer?.role ?? '').toLowerCase().trim();
-    if (customerRole != AppConstants.roleCustomer) {
-      throw Exception('Only customers can create work requests in chat.');
+    if (customerRole != AppConstants.roleCustomer &&
+        customerRole != AppConstants.roleCompany) {
+      throw Exception(
+          'Only customers or companies can create work requests in chat.');
     }
 
     final skilledProfile = await getSkilledUserProfile(skilledUserId);
@@ -1685,6 +1779,56 @@ class FirestoreService {
     });
   }
 
+  Future<List<ServiceRequestModel>> getLatestUserWorkRequests(
+    String userId, {
+    int limit = 20,
+  }) async {
+    final snapshot = await _firestore
+        .collection(AppConstants.requestsCollection)
+        .where('type', isEqualTo: _chatWorkRequestType)
+        .where('participants', arrayContains: userId)
+        .get();
+
+    final requests = snapshot.docs
+        .map((doc) => ServiceRequestModel.fromMap(doc.data(), doc.id))
+        .toList();
+    requests.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    if (requests.length > limit) {
+      return requests.sublist(0, limit);
+    }
+    return requests;
+  }
+
+  Future<List<OrderModel>> getLatestOrdersForUser(
+    String userId, {
+    int limit = 20,
+  }) async {
+    final snapshots = await Future.wait([
+      _firestore
+          .collection(AppConstants.ordersCollection)
+          .where('buyerId', isEqualTo: userId)
+          .get(),
+      _firestore
+          .collection(AppConstants.ordersCollection)
+          .where('sellerId', isEqualTo: userId)
+          .get(),
+    ]);
+
+    final ordersById = <String, OrderModel>{};
+    for (final snapshot in snapshots) {
+      for (final doc in snapshot.docs) {
+        ordersById[doc.id] = OrderModel.fromMap(doc.data(), doc.id);
+      }
+    }
+
+    final orders = ordersById.values.toList();
+    orders.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    if (orders.length > limit) {
+      return orders.sublist(0, limit);
+    }
+    return orders;
+  }
+
   Future<void> respondToChatWorkRequest({
     required String requestId,
     required String skilledUserId,
@@ -1725,7 +1869,8 @@ class FirestoreService {
         throw Exception('This work request has already been processed.');
       }
 
-      customerId = ((data['customerId'] ?? data['requesterId']) as String?)?.trim();
+      customerId =
+          ((data['customerId'] ?? data['requesterId']) as String?)?.trim();
       requestTitle = (data['title'] as String?)?.trim() ?? 'Unnamed Project';
       requestDescription = (data['description'] as String?)?.trim() ?? '';
 
@@ -1794,8 +1939,6 @@ class FirestoreService {
       debugPrint('Failed to add project to user profile: $e');
     }
   }
-
-
 
   Future<Map<String, dynamic>> getShopSettings(String userId) async {
     final doc = await _firestore
@@ -1903,4 +2046,118 @@ class FirestoreService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
+
+  // ===== Reports (extra admin methods – submitProfileReport is defined earlier) ======
+
+  Future<void> submitChatReport({
+    required String reporterId,
+    required String reportedUserId,
+    required String chatId,
+    required String reason,
+    String? details,
+  }) async {
+    await _firestore.collection(AppConstants.reportsCollection).add({
+      'type': 'chat',
+      'reporterId': reporterId,
+      'reportedUserId': reportedUserId,
+      'chatId': chatId,
+      'reason': reason,
+      'details': details ?? '',
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getAllReports({int limit = 100}) async {
+    try {
+      final snapshot = await _firestore
+          .collection(AppConstants.reportsCollection)
+          .limit(limit)
+          .get();
+      final reports = snapshot.docs
+          .map((doc) => {'id': doc.id, ...doc.data()})
+          .toList();
+      reports.sort((a, b) {
+        final aTime = a['createdAt'];
+        final bTime = b['createdAt'];
+        if (aTime is Timestamp && bTime is Timestamp) {
+          return bTime.compareTo(aTime);
+        }
+        return 0;
+      });
+      return reports;
+    } catch (e) {
+      debugPrint('getAllReports error: $e');
+      return [];
+    }
+  }
+
+  Future<void> updateReportStatus(
+    String reportId,
+    String status, {
+    String? adminNotes,
+    String? adminId,
+  }) async {
+    await _firestore
+        .collection(AppConstants.reportsCollection)
+        .doc(reportId)
+        .update({
+      'status': status,
+      if (adminNotes != null) 'adminNotes': adminNotes,
+      if (adminId != null) 'resolvedBy': adminId,
+      'resolvedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // ===== Admin - User Management =====
+
+  Future<List<UserModel>> getAllUsers({int limit = 100}) async {
+    try {
+      final snapshot = await _firestore
+          .collection(AppConstants.usersCollection)
+          .limit(limit)
+          .get();
+      return snapshot.docs
+          .map((doc) => UserModel.fromMap(doc.data(), doc.id))
+          .toList();
+    } catch (e) {
+      debugPrint('getAllUsers error: $e');
+      return [];
+    }
+  }
+
+  Future<void> suspendUser(String userId, {required bool suspend}) async {
+    await _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(userId)
+        .update({
+      'isSuspended': suspend,
+      'suspendedAt': suspend ? FieldValue.serverTimestamp() : null,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> adminDeleteUserAccount(String userId) async {
+    final batch = _firestore.batch();
+
+    // Delete user doc
+    batch.delete(
+        _firestore.collection(AppConstants.usersCollection).doc(userId));
+
+    // Delete profile doc (skilled/customer/company)
+    batch.delete(_firestore
+        .collection(AppConstants.skilledUsersCollection)
+        .doc(userId));
+    batch.delete(_firestore
+        .collection(AppConstants.customerProfilesCollection)
+        .doc(userId));
+    batch.delete(_firestore
+        .collection(AppConstants.companyProfilesCollection)
+        .doc(userId));
+
+    await batch.commit();
+  }
+
 }

@@ -23,6 +23,9 @@ class OrderModel {
   final Map<String, DateTime> statusTimeline;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? deliveryPartnerId;
+  final String? deliveryPartnerName;
+  final DateTime? estimatedDelivery;
 
   const OrderModel({
     required this.id,
@@ -47,6 +50,9 @@ class OrderModel {
     this.statusTimeline = const {},
     required this.createdAt,
     required this.updatedAt,
+    this.deliveryPartnerId,
+    this.deliveryPartnerName,
+    this.estimatedDelivery,
   });
 
   static Map<String, DateTime> _parseTimeline(dynamic rawTimeline) {
@@ -97,6 +103,9 @@ class OrderModel {
       statusTimeline: _parseTimeline(map['statusTimeline']),
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      deliveryPartnerId: map['deliveryPartnerId'],
+      deliveryPartnerName: map['deliveryPartnerName'],
+      estimatedDelivery: (map['estimatedDelivery'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -127,6 +136,11 @@ class OrderModel {
       ),
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
+      if (deliveryPartnerId != null) 'deliveryPartnerId': deliveryPartnerId,
+      if (deliveryPartnerName != null)
+        'deliveryPartnerName': deliveryPartnerName,
+      if (estimatedDelivery != null)
+        'estimatedDelivery': Timestamp.fromDate(estimatedDelivery!),
     };
   }
 }

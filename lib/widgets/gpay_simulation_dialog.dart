@@ -102,9 +102,11 @@ class _GPaySimulationDialogState extends State<GPaySimulationDialog>
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
+      insetPadding: EdgeInsets.fromLTRB(24, 24, 24, bottomInset + 24),
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: _step == _PayStep.success
             ? _buildSuccess()

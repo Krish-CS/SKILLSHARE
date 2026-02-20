@@ -7,7 +7,9 @@ import '../../providers/auth_provider.dart' as app_auth;
 import '../../utils/app_helpers.dart';
 
 class CreateJobScreen extends StatefulWidget {
-  const CreateJobScreen({super.key});
+  final JobModel? existingJob;
+
+  const CreateJobScreen({super.key, this.existingJob});
 
   @override
   State<CreateJobScreen> createState() => _CreateJobScreenState();
@@ -28,6 +30,27 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   final List<String> _requiredSkills = [];
   DateTime? _selectedDeadline;
   bool _isLoading = false;
+
+  bool get _isEditing => widget.existingJob != null;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-fill if editing
+    final job = widget.existingJob;
+    if (job != null) {
+      _titleController.text = job.title;
+      _descriptionController.text = job.description;
+      _locationController.text = job.location;
+      _budgetMinController.text = job.budgetMin?.toStringAsFixed(0) ?? '';
+      _budgetMaxController.text = job.budgetMax?.toStringAsFixed(0) ?? '';
+      _selectedJobType = job.jobType.isNotEmpty
+          ? job.jobType[0].toUpperCase() + job.jobType.substring(1)
+          : null;
+      _requiredSkills.addAll(job.requiredSkills);
+      _selectedDeadline = job.deadline;
+    }
+  }
 
   final List<String> _jobTypes = [
     'Full-time',
@@ -120,37 +143,69 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     try {
       final userId = FirebaseAuth.instance.currentUser!.uid;
       final now = DateTime.now();
-      
-      final job = JobModel(
-        id: '',
-        companyId: userId,
-        title: _titleController.text.trim(),
-        description: _descriptionController.text.trim(),
-        requiredSkills: _requiredSkills,
-        location: _locationController.text.trim(),
-        budgetMin: _budgetMinController.text.isNotEmpty
-            ? double.parse(_budgetMinController.text.trim())
-            : null,
-        budgetMax: _budgetMaxController.text.isNotEmpty
-            ? double.parse(_budgetMaxController.text.trim())
-            : null,
-        jobType: _selectedJobType!.toLowerCase(),
-        status: 'open',
-        deadline: _selectedDeadline!,
-        createdAt: now,
-        updatedAt: now,
-      );
 
-      await _firestoreService.createJob(job);
-
-      if (mounted) {
-        Navigator.pop(context, true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Job posted successfully!'),
-            backgroundColor: Colors.green,
-          ),
+      if (_isEditing) {
+        final updatedJob = JobModel(
+          id: widget.existingJob!.id,
+          companyId: widget.existingJob!.companyId,
+          title: _titleController.text.trim(),
+          description: _descriptionController.text.trim(),
+          requiredSkills: _requiredSkills,
+          location: _locationController.text.trim(),
+          budgetMin: _budgetMinController.text.isNotEmpty
+              ? double.parse(_budgetMinController.text.trim())
+              : null,
+          budgetMax: _budgetMaxController.text.isNotEmpty
+              ? double.parse(_budgetMaxController.text.trim())
+              : null,
+          jobType: _selectedJobType!.toLowerCase(),
+          status: widget.existingJob!.status,
+          applicants: widget.existingJob!.applicants,
+          selectedApplicant: widget.existingJob!.selectedApplicant,
+          deadline: _selectedDeadline!,
+          createdAt: widget.existingJob!.createdAt,
+          updatedAt: now,
         );
+        await _firestoreService.updateJob(updatedJob);
+        if (mounted) {
+          Navigator.pop(context, true);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Job updated successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        final job = JobModel(
+          id: '',
+          companyId: userId,
+          title: _titleController.text.trim(),
+          description: _descriptionController.text.trim(),
+          requiredSkills: _requiredSkills,
+          location: _locationController.text.trim(),
+          budgetMin: _budgetMinController.text.isNotEmpty
+              ? double.parse(_budgetMinController.text.trim())
+              : null,
+          budgetMax: _budgetMaxController.text.isNotEmpty
+              ? double.parse(_budgetMaxController.text.trim())
+              : null,
+          jobType: _selectedJobType!.toLowerCase(),
+          status: 'open',
+          deadline: _selectedDeadline!,
+          createdAt: now,
+          updatedAt: now,
+        );
+        await _firestoreService.createJob(job);
+        if (mounted) {
+          Navigator.pop(context, true);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Job posted successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -211,8 +266,9 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Post a Job', style: TextStyle(color: Colors.white)),
-        flexibleSpace: Container(
+        title: Text(_isEditing ? 'Edit Job' : 'Post a Job',
+            style: const TextStyle(color: Colors.white)),
+      flexibleSpace: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               colors: [Color(0xFF2196F3), Color(0xFF00BCD4)],
@@ -506,9 +562,9 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                         strokeWidth: 2,
                       ),
                     )
-                  : const Text(
-                      'Post Job',
-                      style: TextStyle(
+                  : Text(
+                      _isEditing ? 'Update Job' : 'Post Job',
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
