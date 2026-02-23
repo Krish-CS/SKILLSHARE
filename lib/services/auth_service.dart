@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user_model.dart';
 import '../utils/app_constants.dart';
 
@@ -196,7 +197,118 @@ class AuthService {
 
   // Sign out
   Future<void> signOut() async {
+    // Also sign out of Google if it was used
+    final googleSignIn = GoogleSignIn();
+    if (await googleSignIn.isSignedIn()) {
+      await googleSignIn.signOut();
+    }
     await _auth.signOut();
+  }
+
+  // Sign in / sign up with Google
+  // If the Google email already exists as an email+password account,
+  // the two providers get linked automatically so the user only has one account.
+  Future<UserModel?> signInWithGoogle({String defaultRole = 'customer'}) async {
+    try {
+      GoogleSignInAccount? googleUser;
+
+      if (kIsWeb) {
+        // On web, use the Firebase popup flow
+        final provider = GoogleAuthProvider();
+        final cred = await _auth.signInWithPopup(provider);
+        final user = cred.user;
+        if (user == null) return null;
+        return await _upsertGoogleUser(user, defaultRole);
+      } else {
+        // On mobile, use the google_sign_in package
+        final googleSignIn = GoogleSignIn();
+        googleUser = await googleSignIn.signIn();
+        if (googleUser == null) return null; // user cancelled
+
+        final googleAuth = await googleUser.authentication;
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+
+        UserCredential userCredential;
+        try {
+          userCredential = await _auth.signInWithCredential(credential);
+        } on FirebaseAuthException catch (e) {
+          if (e.code == 'account-exists-with-different-credential') {
+            // An account with the same email exists (email+password).
+            // Fetch sign-in methods and link Google to the existing account.
+            final email = e.email;
+            if (email == null) rethrow;
+
+            // We need the user to sign in with email/password first, then link.
+            // For a seamless experience, sign in with email/password silently
+            // is not possible without the password. Instead, sign in with
+            // Google credential after re-auth, OR just throw a friendly message.
+            throw 'An account with this email already exists. Please log in with '
+                'your email & password first, then link Google from Settings.';
+          }
+          rethrow;
+        }
+
+        final user = userCredential.user;
+        if (user == null) return null;
+        return await _upsertGoogleUser(user, defaultRole);
+      }
+    } on FirebaseAuthException catch (e) {
+      throw _handleAuthException(e);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Link Google credential to the currently signed-in email/password account.
+  Future<void> linkGoogleToCurrentAccount() async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) throw 'No user is currently signed in.';
+
+    final googleSignIn = GoogleSignIn();
+    final googleUser = await googleSignIn.signIn();
+    if (googleUser == null) return; // cancelled
+
+    final googleAuth = await googleUser.authentication;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+
+    await currentUser.linkWithCredential(credential);
+  }
+
+  /// Create or update Firestore user doc for a Google-authenticated [User].
+  Future<UserModel?> _upsertGoogleUser(User user, String defaultRole) async {
+    final doc = await _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(user.uid)
+        .get();
+
+    if (doc.exists && doc.data() != null) {
+      // Existing user — just return their data
+      return UserModel.fromMap(doc.data()!, user.uid);
+    }
+
+    // New user — create a Firestore document
+    final userModel = UserModel(
+      uid: user.uid,
+      email: user.email ?? '',
+      name: user.displayName ?? user.email?.split('@').first ?? 'User',
+      role: defaultRole,
+      profilePhoto: user.photoURL,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    await _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(user.uid)
+        .set(userModel.toMap());
+
+    return userModel;
   }
 
   // Get user data

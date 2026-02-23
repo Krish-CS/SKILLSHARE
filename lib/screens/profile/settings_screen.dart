@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -191,6 +192,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _showChangePasswordDialog(),
                 ),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF4285F4).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.g_mobiledata, color: Color(0xFF4285F4), size: 28),
+                  ),
+                  title: const Text('Link Google Account'),
+                  subtitle: const Text('Sign in with Google on this account'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _linkGoogleAccount(),
+                ),
                 const SizedBox(height: 24),
               ],
             ),
@@ -220,6 +235,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
       activeColor: const Color(0xFF9C27B0),
       onChanged: onChanged,
     );
+  }
+
+  Future<void> _linkGoogleAccount() async {
+    try {
+      final authService = AuthService();
+      await authService.linkGoogleToCurrentAccount();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Google account linked successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not link Google account: $e')),
+        );
+      }
+    }
   }
 
   void _showChangePasswordDialog() {

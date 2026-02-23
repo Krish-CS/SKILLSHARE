@@ -12,6 +12,7 @@ class WebImageLoader {
     double? width,
     double? height,
     BoxFit fit = BoxFit.cover,
+    Alignment alignment = Alignment.center,
     Widget? placeholder,
     Widget? errorWidget,
   }) {
@@ -33,6 +34,7 @@ class WebImageLoader {
         width: width,
         height: height,
         fit: fit,
+        alignment: alignment,
         errorBuilder: (context, error, stackTrace) {
           debugPrint('Image load error (web): $error');
           return errorWidget ??
@@ -68,6 +70,7 @@ class WebImageLoader {
         width: width,
         height: height,
         fit: fit,
+        alignment: alignment,
         placeholder: (context, url) =>
             placeholder ??
             Container(
@@ -96,6 +99,8 @@ class WebImageLoader {
     String? fallbackText,
     Color? backgroundColor,
     Color? textColor,
+    BoxFit fit = BoxFit.cover,
+    Alignment alignment = Alignment.center,
   }) {
     // Handle null or empty URLs with fallback
     if (imageUrl == null || imageUrl.trim().isEmpty) {
@@ -128,7 +133,8 @@ class WebImageLoader {
           imageUrl: imageUrl,
           width: radius * 2,
           height: radius * 2,
-          fit: BoxFit.cover,
+          fit: fit,
+          alignment: alignment,
           errorWidget: Container(
             width: radius * 2,
             height: radius * 2,

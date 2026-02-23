@@ -251,192 +251,402 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
       );
     }
 
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Set Up Your Profile'),
-        backgroundColor: Colors.blue,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Tell us about yourself',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+      backgroundColor: const Color(0xFFF6F7FB),
+      body: Form(
+        key: _formKey,
+        child: CustomScrollView(
+          slivers: [
+            // Gradient app bar with avatar
+            SliverAppBar(
+              expandedHeight: 200,
+              pinned: true,
+              stretch: true,
+              backgroundColor: const Color(0xFF1565C0),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+              flexibleSpace: FlexibleSpaceBar(
+                titlePadding: const EdgeInsets.only(left: 16, bottom: 14),
+                title: const Text(
+                  'Edit Profile',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                background: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 24),
+                      child: GestureDetector(
+                        onTap: _pickProfileImage,
+                        child: Stack(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 3),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.3),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: CircleAvatar(
+                                radius: 52,
+                                backgroundColor: Colors.white,
+                                backgroundImage: (kIsWeb && _profileImageBytes != null)
+                                    ? MemoryImage(_profileImageBytes!) as ImageProvider
+                                    : (_profileImage != null
+                                        ? FileImage(_profileImage!) as ImageProvider
+                                        : (_profileImageUrl != null && _profileImageUrl!.isNotEmpty
+                                            ? NetworkImage(_profileImageUrl!) as ImageProvider
+                                            : null)),
+                                child: _profileImage == null &&
+                                        _profileImageBytes == null &&
+                                        (_profileImageUrl == null || _profileImageUrl!.isEmpty)
+                                    ? const Icon(Icons.person, size: 52, color: Color(0xFF1565C0))
+                                    : null,
+                              ),
+                            ),
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1565C0),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2),
+                                ),
+                                child: const Icon(Icons.camera_alt, color: Colors.white, size: 16),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Help us understand what you\'re looking for',
-                style: TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 24),
+            ),
 
-              // Profile Picture
-              Center(
-                child: Stack(
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(16, 20, 16, bottomPad + 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CircleAvatar(
-                      radius: 60,
-                      backgroundImage: (kIsWeb && _profileImageBytes != null)
-                          ? MemoryImage(_profileImageBytes!)
-                          : (_profileImage != null
-                              ? FileImage(_profileImage!)
-                              : (_profileImageUrl != null && _profileImageUrl!.isNotEmpty
-                                  ? NetworkImage(_profileImageUrl!)
-                                  : null)) as ImageProvider?,
-                        child: _profileImage == null && _profileImageBytes == null && (_profileImageUrl == null || _profileImageUrl!.isEmpty)
-                          ? const Icon(Icons.person, size: 60)
-                          : null,
+                    // About section card
+                    _sectionCard(
+                      title: 'About You',
+                      icon: Icons.person_outline_rounded,
+                      child: Column(
+                        children: [
+                          TextFormField(
+                            controller: _bioController,
+                            decoration: _inputDeco(
+                              label: 'Bio',
+                              hint: 'Tell us a bit about yourself...',
+                              icon: Icons.info_outline,
+                            ),
+                            maxLines: 3,
+                            maxLength: 500,
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Please tell us about yourself';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _locationController,
+                            decoration: _inputDeco(
+                              label: 'Location',
+                              hint: 'City, State',
+                              icon: Icons.location_on_outlined,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: CircleAvatar(
-                        backgroundColor: Colors.blue,
-                        child: IconButton(
-                          icon: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
-                          onPressed: _pickProfileImage,
+
+                    const SizedBox(height: 16),
+
+                    // Interests section card
+                    _sectionCard(
+                      title: 'Your Interests',
+                      icon: Icons.favorite_outline_rounded,
+                      subtitle: 'What are you passionate about?',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _interestController,
+                                  decoration: _inputDeco(
+                                    label: 'Add an interest',
+                                    hint: 'e.g. Cooking, Art...',
+                                    icon: Icons.add_circle_outline,
+                                  ),
+                                  onSubmitted: (_) => _addInterest(),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Material(
+                                color: const Color(0xFF1565C0),
+                                borderRadius: BorderRadius.circular(12),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(12),
+                                  onTap: _addInterest,
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(14),
+                                    child: Icon(Icons.add, color: Colors.white),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_interests.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: _interests.map((interest) {
+                                return Chip(
+                                  label: Text(interest,
+                                      style: const TextStyle(color: Color(0xFF1565C0))),
+                                  deleteIcon: const Icon(Icons.close, size: 16, color: Color(0xFF1565C0)),
+                                  onDeleted: () => _removeInterest(interest),
+                                  backgroundColor: const Color(0xFFE3F2FD),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                    side: const BorderSide(color: Color(0xFF90CAF9)),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Services section card
+                    _sectionCard(
+                      title: 'Services You Need',
+                      icon: Icons.build_outlined,
+                      subtitle: 'Select the categories you\'re interested in',
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _serviceCategories.map((category) {
+                          final isSelected = _lookingFor.contains(category);
+                          return GestureDetector(
+                            onTap: () => _toggleLookingFor(category),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isSelected ? const Color(0xFF1565C0) : Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: isSelected ? const Color(0xFF1565C0) : const Color(0xFFCFD8DC),
+                                  width: 1.5,
+                                ),
+                                boxShadow: isSelected
+                                    ? [
+                                        BoxShadow(
+                                          color: const Color(0xFF1565C0).withValues(alpha: 0.3),
+                                          blurRadius: 6,
+                                          offset: const Offset(0, 2),
+                                        )
+                                      ]
+                                    : [],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (isSelected) ...[
+                                    const Icon(Icons.check, color: Colors.white, size: 14),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  Text(
+                                    category,
+                                    style: TextStyle(
+                                      color: isSelected ? Colors.white : const Color(0xFF455A64),
+                                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    // Save Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF1565C0).withValues(alpha: 0.4),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: ElevatedButton(
+                          onPressed: _isUploading ? null : _saveProfile,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: _isUploading
+                              ? const SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                                )
+                              : const Text(
+                                  'Complete Profile',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
-
-              // Bio
-              TextFormField(
-                controller: _bioController,
-                decoration: const InputDecoration(
-                  labelText: 'About You',
-                  hintText: 'Tell us a bit about yourself...',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.info_outline),
-                ),
-                maxLines: 3,
-                maxLength: 500,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please tell us about yourself';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Location
-              TextFormField(
-                controller: _locationController,
-                decoration: const InputDecoration(
-                  labelText: 'Location',
-                  hintText: 'City, State',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.location_on),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Interests Section
-              const Text(
-                'Your Interests',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'What are you passionate about?',
-                style: TextStyle(color: Colors.grey, fontSize: 14),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _interestController,
-                      decoration: const InputDecoration(
-                        hintText: 'Add an interest',
-                        border: OutlineInputBorder(),
-                      ),
-                      onSubmitted: (_) => _addInterest(),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.add_circle, color: Colors.blue),
-                    onPressed: _addInterest,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _interests.map((interest) {
-                  return Chip(
-                    label: Text(interest),
-                    deleteIcon: const Icon(Icons.close, size: 18),
-                    onDeleted: () => _removeInterest(interest),
-                    backgroundColor: Colors.blue[100],
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 24),
-
-              // What are you looking for?
-              const Text(
-                'What Services Do You Need?',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Select the categories you\'re interested in',
-                style: TextStyle(color: Colors.grey, fontSize: 14),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _serviceCategories.map((category) {
-                  final isSelected = _lookingFor.contains(category);
-                  return FilterChip(
-                    label: Text(category),
-                    selected: isSelected,
-                    onSelected: (_) => _toggleLookingFor(category),
-                    selectedColor: Colors.blue[300],
-                    checkmarkColor: Colors.white,
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 32),
-
-              // Save Button
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _isUploading ? null : _saveProfile,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: _isUploading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          'Complete Profile',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _sectionCard({
+    required String title,
+    required IconData icon,
+    String? subtitle,
+    required Widget child,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE3F2FD),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: const Color(0xFF1565C0), size: 18),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1A1A2E),
+                    ),
+                  ),
+                  if (subtitle != null)
+                    Text(
+                      subtitle,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          child,
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _inputDeco({
+    required String label,
+    required String hint,
+    required IconData icon,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixIcon: Icon(icon, color: const Color(0xFF1565C0)),
+      filled: true,
+      fillColor: const Color(0xFFF5F7FA),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFCFD8DC)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFCFD8DC)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFF1565C0), width: 2),
+      ),
+      labelStyle: const TextStyle(color: Color(0xFF607D8B)),
     );
   }
 }

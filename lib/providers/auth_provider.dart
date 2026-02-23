@@ -156,6 +156,25 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> signInWithGoogle({String defaultRole = 'customer'}) async {
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+
+      _currentUser = await _authService.signInWithGoogle(defaultRole: defaultRole);
+
+      _isLoading = false;
+      notifyListeners();
+      return _currentUser != null;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<bool> resetPassword(String email) async {
     try {
       _isLoading = true;

@@ -47,13 +47,15 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
         // Get fresh user data from Firestore
         _currentUser = await _firestoreService.getUserById(userId);
         _profilePhotoUrl = _currentUser?.profilePhoto;
-        
+
         // Load role-specific profile for photo
         final role = _currentUser?.role;
         if (role == UserRoles.skilledPerson) {
           try {
-            _skilledProfile = await _firestoreService.getSkilledUserProfile(userId);
-            if (_skilledProfile?.profilePicture != null && _skilledProfile!.profilePicture!.isNotEmpty) {
+            _skilledProfile =
+                await _firestoreService.getSkilledUserProfile(userId);
+            if (_skilledProfile?.profilePicture != null &&
+                _skilledProfile!.profilePicture!.isNotEmpty) {
               _profilePhotoUrl = _skilledProfile!.profilePicture;
             }
           } catch (e) {
@@ -61,8 +63,10 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
           }
         } else if (role == UserRoles.customer) {
           try {
-            _customerProfile = await _firestoreService.getCustomerProfile(userId);
-            if (_customerProfile?.profilePicture != null && _customerProfile!.profilePicture!.isNotEmpty) {
+            _customerProfile =
+                await _firestoreService.getCustomerProfile(userId);
+            if (_customerProfile?.profilePicture != null &&
+                _customerProfile!.profilePicture!.isNotEmpty) {
               _profilePhotoUrl = _customerProfile!.profilePicture;
             }
           } catch (e) {
@@ -71,7 +75,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
         } else if (role == UserRoles.company) {
           try {
             _companyProfile = await _firestoreService.getCompanyProfile(userId);
-            if (_companyProfile?.logoUrl != null && _companyProfile!.logoUrl!.isNotEmpty) {
+            if (_companyProfile?.logoUrl != null &&
+                _companyProfile!.logoUrl!.isNotEmpty) {
               _profilePhotoUrl = _companyProfile!.logoUrl;
             }
           } catch (e) {
@@ -109,7 +114,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
     );
 
     if (confirm == true && mounted) {
-      final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
+      final authProvider =
+          Provider.of<app_auth.AuthProvider>(context, listen: false);
       await authProvider.signOut();
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
@@ -142,7 +148,11 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                 width: double.infinity,
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Color(0xFF6A0DAD), Color(0xFF9C27B0), Color(0xFFE91E63)],
+                    colors: [
+                      Color(0xFF6A0DAD),
+                      Color(0xFF9C27B0),
+                      Color(0xFFE91E63)
+                    ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -193,7 +203,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                     ),
                     // Content
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 32, 0, 32),
+                      padding: EdgeInsets.fromLTRB(0, MediaQuery.of(context).padding.top + 20, 0, 32),
                       child: Column(
                         children: [
                           // Avatar with gradient ring
@@ -203,7 +213,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => ProfileScreen(userId: _currentUser!.uid),
+                                    builder: (_) => ProfileScreen(
+                                        userId: _currentUser!.uid),
                                   ),
                                 );
                               }
@@ -234,6 +245,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                                   radius: 50,
                                   fallbackText: _currentUser?.name,
                                   backgroundColor: const Color(0xFFF3E5F5),
+                                  alignment: Alignment.center,
                                 ),
                               ),
                             ),
@@ -261,7 +273,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                           const SizedBox(height: 10),
                           // Role Badge
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 18, vertical: 6),
                             decoration: BoxDecoration(
                               color: Colors.white.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(20),
@@ -275,7 +288,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                                 Icon(
                                   _currentUser?.role == UserRoles.company
                                       ? Icons.business_rounded
-                                      : _currentUser?.role == UserRoles.skilledPerson
+                                      : _currentUser?.role ==
+                                              UserRoles.skilledPerson
                                           ? Icons.star_rounded
                                           : Icons.person_rounded,
                                   color: Colors.white,
@@ -283,7 +297,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
-                                  UserRoles.getDisplayName(_currentUser?.role ?? UserRoles.customer),
+                                  UserRoles.getDisplayName(
+                                      _currentUser?.role ?? UserRoles.customer),
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.w600,
@@ -306,7 +321,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (_) => ProfileScreen(userId: _currentUser!.uid),
+                                        builder: (_) => ProfileScreen(
+                                            userId: _currentUser!.uid),
                                       ),
                                     );
                                   }
@@ -319,18 +335,26 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                                 onTap: () async {
                                   if (_currentUser == null) return;
                                   Widget editScreen;
-                                  if (_currentUser!.role == UserRoles.skilledPerson) {
-                                    editScreen = const EditSkilledProfileScreen();
-                                  } else if (_currentUser!.role == UserRoles.customer) {
-                                    editScreen = CustomerSetupScreen(userId: _currentUser!.uid);
-                                  } else if (_currentUser!.role == UserRoles.company) {
-                                    editScreen = CompanySetupScreen(userId: _currentUser!.uid);
+                                  if (_currentUser!.role ==
+                                      UserRoles.skilledPerson) {
+                                    editScreen =
+                                        const EditSkilledProfileScreen();
+                                  } else if (_currentUser!.role ==
+                                      UserRoles.customer) {
+                                    editScreen = CustomerSetupScreen(
+                                        userId: _currentUser!.uid);
+                                  } else if (_currentUser!.role ==
+                                      UserRoles.company) {
+                                    editScreen = CompanySetupScreen(
+                                        userId: _currentUser!.uid);
                                   } else {
-                                    editScreen = const EditSkilledProfileScreen();
+                                    editScreen =
+                                        const EditSkilledProfileScreen();
                                   }
                                   await Navigator.push(
                                     context,
-                                    MaterialPageRoute(builder: (_) => editScreen),
+                                    MaterialPageRoute(
+                                        builder: (_) => editScreen),
                                   );
                                   _loadUserData();
                                 },
@@ -370,7 +394,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                            MaterialPageRoute(
+                                builder: (_) => const SettingsScreen()),
                           );
                         },
                       ),
@@ -397,10 +422,12 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                                 color: const Color(0xFF9C27B0),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Icon(Icons.handshake, color: Colors.white, size: 32),
+                              child: const Icon(Icons.handshake,
+                                  color: Colors.white, size: 32),
                             ),
                             children: [
-                              const Text('Connect skilled professionals with customers'),
+                              const Text(
+                                  'Connect skilled professionals with customers'),
                             ],
                           );
                         },
@@ -429,7 +456,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFE53935).withValues(alpha: 0.35),
+                          color:
+                              const Color(0xFFE53935).withValues(alpha: 0.35),
                           blurRadius: 12,
                           offset: const Offset(0, 4),
                         ),
@@ -438,7 +466,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.logout_rounded, color: Colors.white, size: 20),
+                        Icon(Icons.logout_rounded,
+                            color: Colors.white, size: 20),
                         SizedBox(width: 10),
                         Text(
                           'Logout',
@@ -524,8 +553,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                       if (subject.isEmpty || message.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                              content:
-                                  Text('Please fill in both fields')),
+                              content: Text('Please fill in both fields')),
                         );
                         return;
                       }
@@ -565,8 +593,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                       height: 16,
                       child: CircularProgressIndicator(
                           color: Colors.white, strokeWidth: 2))
-                  : const Text('Submit',
-                      style: TextStyle(color: Colors.white)),
+                  : const Text('Submit', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
