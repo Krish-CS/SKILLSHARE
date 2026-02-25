@@ -329,6 +329,196 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     );
   }
 
+  void _showTaskMonitoringSheet(BuildContext context) {
+    final allRequests = [..._pendingRequests, ..._acceptedRequests];
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.55,
+        maxChildSize: 0.9,
+        builder: (_, sc) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius:
+                BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 10, bottom: 6),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              // Header
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.format_list_bulleted,
+                        color: Colors.teal, size: 20),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Task Monitoring',
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold),
+                    ),
+                    const Spacer(),
+                    if (allRequests.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.teal.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${allRequests.length} task${allRequests.length != 1 ? 's' : ''}',
+                          style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.teal,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              if (allRequests.isEmpty)
+                const Expanded(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.assignment_outlined,
+                            size: 48, color: Colors.grey),
+                        SizedBox(height: 12),
+                        Text('No active tasks',
+                            style: TextStyle(
+                                color: Colors.grey, fontSize: 15)),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Expanded(
+                  child: ListView(
+                    controller: sc,
+                    padding: const EdgeInsets.all(12),
+                    children: [
+                      if (_pendingRequests.isNotEmpty) ...[
+                        _monitoringSectionLabel(
+                            'Pending', Colors.orange, Icons.hourglass_top),
+                        ..._pendingRequests.map((r) =>
+                            _monitoringTaskTile(r)),
+                        const SizedBox(height: 8),
+                      ],
+                      if (_acceptedRequests.isNotEmpty) ...[
+                        _monitoringSectionLabel(
+                            'In Progress', Colors.green, Icons.work),
+                        ..._acceptedRequests.map((r) =>
+                            _monitoringTaskTile(r)),
+                      ],
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _monitoringSectionLabel(
+      String label, Color color, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: color),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _monitoringTaskTile(ServiceRequestModel r) {
+    final isPending = r.status == 'pending';
+    final statusColor = isPending ? Colors.orange : Colors.green;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: statusColor.withValues(alpha: 0.06),
+        border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isPending ? Icons.hourglass_empty : Icons.work_outline,
+            size: 18,
+            color: statusColor,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  r.title.isNotEmpty ? r.title : 'Work Request',
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                if (r.description.isNotEmpty)
+                  Text(
+                    r.description,
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.grey[600]),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              isPending ? 'Pending' : 'Active',
+              style: TextStyle(
+                  fontSize: 10,
+                  color: statusColor,
+                  fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Image helpers ────────────────────────────────────────────────────────────
 
   Future<void> _pickAndSendImage() async {
@@ -625,6 +815,50 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             ],
           ),
           actions: [
+            // Task monitoring list icon — visible to all participants
+            if (_currentUserId != null)
+              GestureDetector(
+                onTap: () => _showTaskMonitoringSheet(context),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Icon(Icons.format_list_bulleted,
+                          color: Colors.white, size: 24),
+                    ),
+                    // Total requests badge
+                    if (_pendingRequests.length + _acceptedRequests.length > 0)
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: Container(
+                          height: 17,
+                          constraints:
+                              const BoxConstraints(minWidth: 17),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.teal[600],
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: Colors.white, width: 1.5),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${_pendingRequests.length + _acceptedRequests.length}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             // Work-flow button — only for customers/companies
             if (canAskForWork)
               GestureDetector(
@@ -634,7 +868,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   children: [
                     const Padding(
                       padding: EdgeInsets.all(12),
-                      child: Icon(Icons.assignment_outlined,
+                      child: Icon(Icons.work_outline,
                           color: Colors.white, size: 24),
                     ),
                     // Pending badge — only shown when requests are pending
