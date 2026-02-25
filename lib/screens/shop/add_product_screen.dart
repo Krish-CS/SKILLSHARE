@@ -264,7 +264,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.security, size: 80, color: Colors.orange),
+                const Icon(Icons.fingerprint, size: 80, color: Color(0xFF9C27B0)),
                 const SizedBox(height: 20),
                 const Text(
                   'Verification Required',
@@ -272,10 +272,17 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  'You need to complete Aadhaar verification before you can sell products. '
-                  'Please go to your profile and complete the verification process.',
+                  'To list products, complete Aadhaar + fingerprint verification.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Profile \u2192 Edit Profile \u2192 Verify Identity',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF9C27B0)),
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton(

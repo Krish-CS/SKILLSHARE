@@ -1772,19 +1772,7 @@ class FirestoreService {
       );
     }
 
-    final existingPending = await _firestore
-        .collection(AppConstants.requestsCollection)
-        .where('type', isEqualTo: _chatWorkRequestType)
-        .where('chatId', isEqualTo: chatId)
-        .where('customerId', isEqualTo: customerId)
-        .where('skilledUserId', isEqualTo: skilledUserId)
-        .where('status', isEqualTo: AppConstants.requestStatusPending)
-        .limit(1)
-        .get();
-    if (existingPending.docs.isNotEmpty) {
-      throw Exception('You already have a pending work request in this chat.');
-    }
-
+    // No duplicate check — customers can submit multiple work requests per chat.
     final docRef = _firestore.collection(AppConstants.requestsCollection).doc();
     await docRef.set({
       'type': _chatWorkRequestType,
@@ -1807,12 +1795,12 @@ class FirestoreService {
   Stream<List<ServiceRequestModel>> streamChatWorkRequests(String chatId) {
     return _firestore
         .collection(AppConstants.requestsCollection)
-        .where('type', isEqualTo: _chatWorkRequestType)
-        .where('chatId', isEqualTo: chatId)
+        .where('chatId', isEqualTo: chatId) // single-field — no composite index
         .snapshots()
         .map((snapshot) {
       final requests = snapshot.docs
           .map((doc) => ServiceRequestModel.fromMap(doc.data(), doc.id))
+          .where((r) => r.type == _chatWorkRequestType) // type filter in memory
           .toList();
       requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return requests;
@@ -1822,12 +1810,13 @@ class FirestoreService {
   Stream<List<ServiceRequestModel>> streamUserWorkRequests(String userId) {
     return _firestore
         .collection(AppConstants.requestsCollection)
-        .where('type', isEqualTo: _chatWorkRequestType)
-        .where('participants', arrayContains: userId)
+        .where('participants',
+            arrayContains: userId) // single-field — no composite index
         .snapshots()
         .map((snapshot) {
       final requests = snapshot.docs
           .map((doc) => ServiceRequestModel.fromMap(doc.data(), doc.id))
+          .where((r) => r.type == _chatWorkRequestType) // type filter in memory
           .toList();
       requests.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       return requests;
@@ -1840,12 +1829,13 @@ class FirestoreService {
   }) async {
     final snapshot = await _firestore
         .collection(AppConstants.requestsCollection)
-        .where('type', isEqualTo: _chatWorkRequestType)
-        .where('participants', arrayContains: userId)
+        .where('participants',
+            arrayContains: userId) // single-field — no composite index
         .get();
 
     final requests = snapshot.docs
         .map((doc) => ServiceRequestModel.fromMap(doc.data(), doc.id))
+        .where((r) => r.type == _chatWorkRequestType) // type filter in memory
         .toList();
     requests.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     if (requests.length > limit) {
@@ -2213,6 +2203,28 @@ class FirestoreService {
         .doc(userId));
 
     await batch.commit();
+  }
+
+  /// Cancel a pending chat work request (customer only).
+  Future<void> cancelChatWorkRequest({
+    required String requestId,
+    required String customerId,
+  }) async {
+    final ref =
+        _firestore.collection(AppConstants.requestsCollection).doc(requestId);
+    final snap = await ref.get();
+    if (!snap.exists) throw Exception('Request not found.');
+    final data = snap.data()!;
+    if ((data['customerId'] ?? data['requesterId']) != customerId) {
+      throw Exception('Not authorized to cancel this request.');
+    }
+    if (data['status'] != AppConstants.requestStatusPending) {
+      throw Exception('Only pending requests can be cancelled.');
+    }
+    await ref.update({
+      'status': 'cancelled',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
 }

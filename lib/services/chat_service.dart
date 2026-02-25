@@ -398,4 +398,57 @@ class ChatService {
 
     await batch.commit();
   }
+
+  // Edit a text message (sender only, not deleted messages)
+  Future<void> editMessage({
+    required String chatId,
+    required String messageId,
+    required String senderId,
+    required String newText,
+  }) async {
+    final trimmed = newText.trim();
+    if (trimmed.isEmpty) throw Exception('Message cannot be empty.');
+
+    final ref = _firestore
+        .collection(AppConstants.chatsCollection)
+        .doc(chatId)
+        .collection(AppConstants.messagesCollection)
+        .doc(messageId);
+
+    final snap = await ref.get();
+    if (!snap.exists) throw Exception('Message not found.');
+    final data = snap.data()!;
+    if (data['senderId'] != senderId) throw Exception('Not your message.');
+    if (data['isDeleted'] == true) throw Exception('Cannot edit a deleted message.');
+    if ((data['type'] ?? 'text') != 'text') throw Exception('Only text messages can be edited.');
+
+    await ref.update({
+      'text': trimmed,
+      'editedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // Soft-delete a message (sender only)
+  Future<void> deleteMessage({
+    required String chatId,
+    required String messageId,
+    required String senderId,
+  }) async {
+    final ref = _firestore
+        .collection(AppConstants.chatsCollection)
+        .doc(chatId)
+        .collection(AppConstants.messagesCollection)
+        .doc(messageId);
+
+    final snap = await ref.get();
+    if (!snap.exists) return;
+    if (snap.data()?['senderId'] != senderId) throw Exception('Not your message.');
+
+    await ref.update({
+      'text': 'This message was deleted',
+      'isDeleted': true,
+      'mediaUrl': null,
+      'deletedAt': FieldValue.serverTimestamp(),
+    });
+  }
 }

@@ -40,6 +40,9 @@ dependencies:
   # Chat
   intl: ^0.18.1
   
+  # Biometric / local auth
+  local_auth: ^2.3.0
+
   # Utils
   url_launcher: ^6.2.2
   share_plus: ^10.0.3

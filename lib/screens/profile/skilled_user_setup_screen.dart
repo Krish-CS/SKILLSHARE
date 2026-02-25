@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:math';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
@@ -10,6 +11,7 @@ import '../../models/skilled_user_profile.dart';
 import '../../utils/app_constants.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/firestore_service.dart';
+import '../../services/biometric_service.dart';
 import '../main_navigation.dart';
 
 class SkilledUserSetupScreen extends StatefulWidget {
@@ -276,18 +278,19 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
   }
 
   bool _validateAadhaar(String aadhaar) {
-    // Remove spaces and check if it's 12 digits
+    // Remove spaces and check if it’s 12 digits
     final cleanAadhaar = aadhaar.replaceAll(' ', '');
     return cleanAadhaar.length == 12 && int.tryParse(cleanAadhaar) != null;
   }
 
+  /// Step 1 — validate Aadhaar, generate random OTP, show dialog
   Future<void> _verifyAadhaar() async {
     final aadhaar = _aadhaarController.text.trim().replaceAll(' ', '');
-    
+
     if (aadhaar.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter Aadhaar number'),
+          content: Text('Please enter your Aadhaar number'),
           backgroundColor: Colors.red,
         ),
       );
@@ -304,45 +307,261 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       return;
     }
 
-    setState(() {
-      _isVerifying = true;
-    });
+    setState(() => _isVerifying = true);
 
-    try {
-      // Simulate API call for Aadhaar verification
-      await Future.delayed(const Duration(seconds: 2));
-      
+    // Simulate network call to send OTP
+    await Future.delayed(const Duration(milliseconds: 1200));
+    if (!mounted) return;
+    setState(() => _isVerifying = false);
+
+    // Generate a random 6-digit OTP
+    final generatedOtp = (100000 + Random().nextInt(900000)).toString();
+
+    _showOtpDialog(aadhaar, generatedOtp);
+  }
+
+  /// Step 2 — OTP dialog with simulated SMS auto-fill
+  void _showOtpDialog(String aadhaar, String generatedOtp) {
+    final maskedAadhaar = _maskAadhaar(aadhaar);
+    final otpController = TextEditingController();
+    bool isVerifying = false;
+    bool isAutoFilling = true;  // starts in "reading SMS" state
+    bool autoFilled = false;
+    String? otpError;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          // Kick off auto-fill simulation once
+          if (isAutoFilling && !autoFilled) {
+            autoFilled = true;
+            Future.delayed(const Duration(milliseconds: 1500), () {
+              if (ctx.mounted) {
+                // Type OTP character by character
+                int i = 0;
+                void typeNext() {
+                  if (i <= generatedOtp.length && ctx.mounted) {
+                    setDialogState(() {
+                      otpController.text = generatedOtp.substring(0, i);
+                      if (i == generatedOtp.length) isAutoFilling = false;
+                    });
+                    if (i < generatedOtp.length) {
+                      i++;
+                      Future.delayed(const Duration(milliseconds: 80), typeNext);
+                    }
+                  }
+                }
+                i = 1;
+                typeNext();
+              }
+            });
+          }
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF9C27B0).withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.message_rounded,
+                      color: Color(0xFF9C27B0), size: 30),
+                ),
+                const SizedBox(height: 10),
+                const Text('OTP Verification',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                RichText(
+                  textAlign: TextAlign.center,
+                  text: TextSpan(
+                    style: const TextStyle(color: Colors.black87, fontSize: 13),
+                    children: [
+                      const TextSpan(text: 'An OTP has been sent to the mobile\nnumber linked with Aadhaar '),
+                      TextSpan(
+                        text: maskedAadhaar,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // SMS auto-fill status banner
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: isAutoFilling
+                      ? Container(
+                          key: const ValueKey('reading'),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 12, height: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 1.5,
+                                  color: Colors.blue.shade600,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Text('Reading SMS...',
+                                  style: TextStyle(fontSize: 12, color: Colors.blue)),
+                            ],
+                          ),
+                        )
+                      : Container(
+                          key: const ValueKey('filled'),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.green.shade300),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check_circle_rounded,
+                                  size: 14, color: Colors.green.shade600),
+                              const SizedBox(width: 6),
+                              Text('OTP auto-filled from SMS',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.green.shade700,
+                                      fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: otpController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  textAlign: TextAlign.center,
+                  readOnly: isAutoFilling,
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 8),
+                  decoration: InputDecoration(
+                    hintText: '------',
+                    counterText: '',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF9C27B0), width: 2),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: !isAutoFilling ? const Color(0xFF9C27B0) : Colors.grey.shade300,
+                        width: !isAutoFilling ? 2 : 1,
+                      ),
+                    ),
+                    errorText: otpError,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: isVerifying ? null : () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: (isVerifying || isAutoFilling)
+                    ? null
+                    : () async {
+                        final otp = otpController.text.trim();
+                        if (otp != generatedOtp) {
+                          setDialogState(() => otpError = 'Incorrect OTP');
+                          return;
+                        }
+                        setDialogState(() {
+                          isVerifying = true;
+                          otpError = null;
+                        });
+                        Navigator.pop(ctx);
+                        await _runBiometricStep(aadhaar);
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF9C27B0),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                child: isVerifying
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2))
+                    : isAutoFilling
+                        ? const Text('Please wait...',
+                            style: TextStyle(color: Colors.white70))
+                        : const Text('Verify & Continue',
+                            style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// Step 3 — biometric scan, then mark verified
+  Future<void> _runBiometricStep(String aadhaar) async {
+    // Show biometric prompt dialog while waiting
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const _BiometricWaitDialog(),
+      );
+    }
+
+    final result = await BiometricService.authenticate(
+      reason: 'Scan your fingerprint to complete Aadhaar verification',
+    );
+
+    if (mounted) Navigator.of(context, rootNavigator: true).pop(); // close wait dialog
+    if (!mounted) return;
+
+    if (result == BiometricResult.success) {
       setState(() {
         _isVerified = true;
         _verificationStatus = 'verified';
-        _isVerifying = false;
       });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 8),
-                Text('Aadhaar verification successful!'),
-              ],
-            ),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.verified_user, color: Colors.white),
+              SizedBox(width: 8),
+              Text('✓ Aadhaar & fingerprint verified! Profile is now public.'),
+            ],
           ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isVerifying = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Verification failed: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 4),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(BiometricService.resultMessage(result)),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
     }
   }
 
@@ -987,9 +1206,17 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
-                            onPressed: _verifyAadhaar,
-                            icon: const Icon(Icons.verified_user),
-                            label: const Text('Verify Identity'),
+                            onPressed: _isVerifying ? null : _verifyAadhaar,
+                            icon: _isVerifying
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                        color: Colors.white, strokeWidth: 2))
+                                : const Icon(Icons.fingerprint),
+                            label: Text(_isVerifying
+                                ? 'Sending OTP...'
+                                : 'Verify Identity'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF4CAF50),
                               foregroundColor: Colors.white,
@@ -998,10 +1225,35 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                           ),
                         ),
                         const SizedBox(height: 8),
+                        // Steps explanation
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF9C27B0).withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Verification steps:',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      color: Color(0xFF9C27B0))),
+                              SizedBox(height: 6),
+                              _StepRow(step: '1', text: 'Enter 12-digit Aadhaar number'),
+                              SizedBox(height: 4),
+                              _StepRow(step: '2', text: 'OTP auto-fills via SMS (just like real apps)'),
+                              SizedBox(height: 4),
+                              _StepRow(step: '3', text: 'Scan fingerprint / Face ID'),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                         Text(
-                          '⚠️ Note: Verification is optional but recommended for better visibility',
+                          '✔ After verification: profile becomes public, shop & products unlocked',
                           style: TextStyle(
-                            color: Colors.orange[700],
+                            color: Colors.green[700],
                             fontSize: 12,
                           ),
                         ),
@@ -1037,6 +1289,88 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
         ),
       ],
     ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────────
+// Helper widgets
+// ────────────────────────────────────────────────────────────────
+
+class _BiometricWaitDialog extends StatelessWidget {
+  const _BiometricWaitDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.fingerprint,
+                color: Color(0xFF4CAF50), size: 56),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Fingerprint Scan',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Place your finger on the\nsensor to verify identity',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          const LinearProgressIndicator(),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepRow extends StatelessWidget {
+  final String step;
+  final String text;
+
+  const _StepRow({required this.step, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 18,
+          height: 18,
+          margin: const EdgeInsets.only(right: 8, top: 1),
+          decoration: const BoxDecoration(
+            color: Color(0xFF9C27B0),
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              step,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(text,
+              style: const TextStyle(fontSize: 12, color: Colors.black87)),
+        ),
+      ],
     );
   }
 }

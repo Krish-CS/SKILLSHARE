@@ -661,16 +661,24 @@ class _ShopScreenState extends State<ShopScreen> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Row(
             children: [
-              Icon(Icons.security, color: Colors.orange),
+              Icon(Icons.fingerprint, color: Colors.deepPurple),
               SizedBox(width: 8),
               Text('Verification Required'),
             ],
           ),
-          content: const Text(
-            'You need to complete Aadhaar verification before you can sell products. '
-            'Please go to your profile and complete the verification process.',
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'To open your shop and sell products, complete Aadhaar + fingerprint verification first.',
+              ),
+              SizedBox(height: 12),
+              Text('Go to: Profile → Edit Profile → Verify Identity',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            ],
           ),
           actions: [
             TextButton(

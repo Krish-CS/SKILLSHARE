@@ -685,6 +685,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildSkilledPersonProfile() {
     const coverHeight = 210.0;
     const avatarRadius = 52.0;
+    const avatarBorder = 3.0;
 
     // gradient stops derived from category for a unique feel
     final List<Color> coverColors = _getCoverGradient(_profile!.category);
@@ -754,8 +755,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ],
             ],
-            flexibleSpace: FlexibleSpaceBar(
-              background: _buildCoverBanner(coverColors, coverHeight),
+            flexibleSpace: LayoutBuilder(
+              builder: (context, constraints) {
+                final top = MediaQuery.of(context).padding.top;
+                final t = ((constraints.biggest.height - kToolbarHeight - top) /
+                        (coverHeight - kToolbarHeight))
+                    .clamp(0.0, 1.0);
+                return Stack(
+                  clipBehavior: Clip.none,
+                  fit: StackFit.expand,
+                  children: [
+                    FlexibleSpaceBar(
+                      background:
+                          _buildCoverBanner(coverColors, coverHeight),
+                    ),
+                    if (t > 0.05)
+                      Positioned(
+                        bottom: -(avatarRadius + avatarBorder),
+                        left: 20,
+                        child: Opacity(
+                          opacity: t,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                colors: coverColors,
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: coverColors.last
+                                      .withValues(alpha: 0.45),
+                                  blurRadius: 20,
+                                  spreadRadius: 2,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            padding: const EdgeInsets.all(avatarBorder),
+                            child: CircleAvatar(
+                              radius: avatarRadius,
+                              backgroundColor: Colors.white,
+                              child: WebImageLoader.loadAvatar(
+                                imageUrl: _profile!.profilePicture,
+                                radius: avatarRadius - 1,
+                                fallbackText: _userData?.name,
+                                backgroundColor: Colors.grey[100],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
           ),
 
@@ -823,10 +877,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
 
   Widget _buildCoverBanner(List<Color> colors, double height) {
-    const overlapFromBanner = 40.0;
-    const avatarRadius = 52.0;
-    const avatarBorder = 3.0;
-
     return BannerDisplay(
       bannerData: _profile?.bannerData ?? {
         'type': 'text',
@@ -865,24 +915,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _blob(double size, Color color) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      );
-
   Widget _buildProfileIdentitySection(
       double avatarRadius, List<Color> coverColors) {
-    const overlapFromBanner = 40.0;
     const avatarBorder = 3.0;
     final avatarDiameter = 2 * (avatarRadius + avatarBorder); // 110
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, overlapFromBanner + 12, 16, 0),
-          child: Column(
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, avatarRadius + avatarBorder + 12, 16, 0),
+      child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
           // Stats row — sits to the right of the overlapping avatar
@@ -980,42 +1020,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
-    ),
-    // Avatar straddling the banner bottom
-    Positioned(
-      top: -overlapFromBanner,
-      left: 20,
-      child: Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: LinearGradient(
-              colors: coverColors,
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight),
-          boxShadow: [
-            BoxShadow(
-              color: coverColors.last.withValues(alpha: 0.45),
-              blurRadius: 20,
-              spreadRadius: 2,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.all(avatarBorder),
-        child: CircleAvatar(
-          radius: avatarRadius,
-          backgroundColor: Colors.white,
-          child: WebImageLoader.loadAvatar(
-            imageUrl: _profile!.profilePicture,
-            radius: avatarRadius - 1,
-            fallbackText: _userData?.name,
-            backgroundColor: Colors.grey[100],
-          ),
-        ),
-      ),
-    ),
-  ],
-  );
+    );
   }
 
   Widget _miniStat(
@@ -1742,7 +1747,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     const coverHeight = 200.0;
     const avatarRadius = 52.0;
     const avatarBorder = 3.0;
-    const overlapFromBanner = 40.0;
 
     // Build location string cleanly – filter out blanks / single chars
     String locationText = '';
@@ -1766,6 +1770,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         clipBehavior: Clip.none,
         slivers: [
           SliverAppBar(
+            clipBehavior: Clip.none,
             pinned: true,
             expandedHeight: coverHeight,
             backgroundColor: coverColors.first,
@@ -1832,55 +1837,100 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   },
                 ),
             ],
-            flexibleSpace: FlexibleSpaceBar(
-              collapseMode: CollapseMode.pin,
-              background: BannerDisplay(
-                bannerData: _customerProfile?.bannerData ?? {
-                  'type': 'text',
-                  'text': _userData?.name ?? '',
-                  'fontKey': 'default',
-                  'textColor': 0xFFFFFFFF,
-                  'fontSize': 28.0,
-                  'animation': 'none',
-                },
-                defaultColors: coverColors,
-                height: coverHeight,
-                child: Stack(
-                  fit: StackFit.expand,
+            flexibleSpace: LayoutBuilder(
+              builder: (context, constraints) {
+                final top = MediaQuery.of(context).padding.top;
+                final t = ((constraints.biggest.height - kToolbarHeight - top) /
+                        (coverHeight - kToolbarHeight))
+                    .clamp(0.0, 1.0);
+                return Stack(
                   clipBehavior: Clip.none,
+                  fit: StackFit.expand,
                   children: [
-                    // Edit banner button (own profile only)
-                    if (isOwnProfile)
+                    FlexibleSpaceBar(
+                      collapseMode: CollapseMode.pin,
+                      background: BannerDisplay(
+                        bannerData: _customerProfile?.bannerData ?? {
+                          'type': 'text',
+                          'text': _userData?.name ?? '',
+                          'fontKey': 'default',
+                          'textColor': 0xFFFFFFFF,
+                          'fontSize': 28.0,
+                          'animation': 'none',
+                        },
+                        defaultColors: coverColors,
+                        height: coverHeight,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          clipBehavior: Clip.none,
+                          children: [
+                            if (isOwnProfile)
+                              Positioned(
+                                bottom: 12,
+                                right: 12,
+                                child: GestureDetector(
+                                  onTap: _openBannerEditor,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(alpha: 0.45),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.edit_rounded,
+                                        color: Colors.white, size: 18),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (t > 0.05)
                       Positioned(
-                        bottom: 12,
-                        right: 12,
-                        child: GestureDetector(
-                          onTap: _openBannerEditor,
+                        bottom: -(avatarRadius + avatarBorder),
+                        left: 20,
+                        child: Opacity(
+                          opacity: t,
                           child: Container(
-                            padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.45),
                               shape: BoxShape.circle,
+                              gradient: const LinearGradient(
+                                  colors: coverColors,
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight),
+                              boxShadow: [
+                                BoxShadow(
+                                    color: coverColors.last.withValues(alpha: 0.45),
+                                    blurRadius: 20,
+                                    spreadRadius: 2,
+                                    offset: const Offset(0, 6))
+                              ],
                             ),
-                            child: const Icon(Icons.edit_rounded,
-                                color: Colors.white, size: 18),
+                            padding: const EdgeInsets.all(avatarBorder),
+                            child: CircleAvatar(
+                              radius: avatarRadius,
+                              backgroundColor: Colors.white,
+                              child: WebImageLoader.loadAvatar(
+                                imageUrl: imageUrl,
+                                radius: avatarRadius - 1,
+                                fallbackText: _userData?.name,
+                                backgroundColor: const Color(0xFFF3E5F5),
+                              ),
+                            ),
                           ),
                         ),
                       ),
                   ],
-                ),
-              ),
+                );
+              },
             ),
           ),
 
           // ── Identity row (name + action button) ──
           SliverToBoxAdapter(
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                      20, overlapFromBanner + 12, 16, 0),
+            child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      20, avatarRadius + avatarBorder + 12, 16, 0),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
@@ -2040,41 +2090,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
-            // Avatar straddling the banner bottom
-            Positioned(
-              top: -overlapFromBanner,
-              left: 20,
-              child: Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                      colors: coverColors,
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight),
-                  boxShadow: [
-                    BoxShadow(
-                        color: coverColors.last.withValues(alpha: 0.45),
-                        blurRadius: 20,
-                        spreadRadius: 2,
-                        offset: const Offset(0, 6))
-                  ],
-                ),
-                padding: const EdgeInsets.all(avatarBorder),
-                child: CircleAvatar(
-                  radius: avatarRadius,
-                  backgroundColor: Colors.white,
-                  child: WebImageLoader.loadAvatar(
-                    imageUrl: imageUrl,
-                    radius: avatarRadius - 1,
-                    fallbackText: _userData?.name,
-                    backgroundColor: const Color(0xFFF3E5F5),
-                  ),
-                ),
-              ),
-            ),
-          ],
           ),
-        ),
 
           const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
@@ -2252,7 +2268,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     const coverHeight = 200.0;
     const avatarRadius = 52.0;
     const avatarBorder = 3.0;
-    const overlapFromBanner = 40.0;
 
     // Clean location
     String locationText = '';
@@ -2271,6 +2286,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         clipBehavior: Clip.none,
         slivers: [
           SliverAppBar(
+            clipBehavior: Clip.none,
             pinned: true,
             expandedHeight: coverHeight,
             backgroundColor: coverColors.first,
@@ -2316,55 +2332,101 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
             ],
-            flexibleSpace: FlexibleSpaceBar(
-              collapseMode: CollapseMode.pin,
-              background: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Positioned.fill(
-                    child: BannerDisplay(
-                      bannerData: profile.bannerData ?? {
-                        'type': 'text',
-                        'text': _userData?.name ?? '',
-                        'fontKey': 'default',
-                        'textColor': 0xFFFFFFFF,
-                        'fontSize': 28.0,
-                        'animation': 'none',
-                      },
-                      defaultColors: coverColors,
-                      height: coverHeight,
-                    ),
-                  ),
-                  if (isOwnProfile)
-                    Positioned(
-                      bottom: 12,
-                      right: 12,
-                      child: GestureDetector(
-                        onTap: _openBannerEditor,
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.45),
-                            shape: BoxShape.circle,
+            flexibleSpace: LayoutBuilder(
+              builder: (context, constraints) {
+                final top = MediaQuery.of(context).padding.top;
+                final t = ((constraints.biggest.height - kToolbarHeight - top) /
+                        (coverHeight - kToolbarHeight))
+                    .clamp(0.0, 1.0);
+                return Stack(
+                  clipBehavior: Clip.none,
+                  fit: StackFit.expand,
+                  children: [
+                    FlexibleSpaceBar(
+                      collapseMode: CollapseMode.pin,
+                      background: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Positioned.fill(
+                            child: BannerDisplay(
+                              bannerData: profile.bannerData ?? {
+                                'type': 'text',
+                                'text': _userData?.name ?? '',
+                                'fontKey': 'default',
+                                'textColor': 0xFFFFFFFF,
+                                'fontSize': 28.0,
+                                'animation': 'none',
+                              },
+                              defaultColors: coverColors,
+                              height: coverHeight,
+                            ),
                           ),
-                          child: const Icon(Icons.edit_rounded,
-                              color: Colors.white, size: 18),
-                        ),
+                          if (isOwnProfile)
+                            Positioned(
+                              bottom: 12,
+                              right: 12,
+                              child: GestureDetector(
+                                onTap: _openBannerEditor,
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.45),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.edit_rounded,
+                                      color: Colors.white, size: 18),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                ],
-              ),
+                    if (t > 0.05)
+                      Positioned(
+                        bottom: -(avatarRadius + avatarBorder),
+                        left: 20,
+                        child: Opacity(
+                          opacity: t,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: const LinearGradient(
+                                  colors: coverColors,
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight),
+                              boxShadow: [
+                                BoxShadow(
+                                    color: coverColors.last.withValues(alpha: 0.45),
+                                    blurRadius: 20,
+                                    spreadRadius: 2,
+                                    offset: const Offset(0, 6))
+                              ],
+                            ),
+                            padding: const EdgeInsets.all(avatarBorder),
+                            child: CircleAvatar(
+                              radius: avatarRadius,
+                              backgroundColor: Colors.white,
+                              child: WebImageLoader.loadAvatar(
+                                imageUrl: imageUrl,
+                                radius: avatarRadius - 1,
+                                fallbackText: profile.companyName,
+                                backgroundColor: const Color(0xFFE3F2FD),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
           ),
 
           // ── Identity row ──
           SliverToBoxAdapter(
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                      20, overlapFromBanner + 12, 16, 0),
+            child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      20, avatarRadius + avatarBorder + 12, 16, 0),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -2577,41 +2639,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
-            // Avatar straddling the banner bottom
-            Positioned(
-              top: -overlapFromBanner,
-              left: 20,
-              child: Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                      colors: coverColors,
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight),
-                  boxShadow: [
-                    BoxShadow(
-                        color: coverColors.last.withValues(alpha: 0.45),
-                        blurRadius: 20,
-                        spreadRadius: 2,
-                        offset: const Offset(0, 6))
-                  ],
-                ),
-                padding: const EdgeInsets.all(avatarBorder),
-                child: CircleAvatar(
-                  radius: avatarRadius,
-                  backgroundColor: Colors.white,
-                  child: WebImageLoader.loadAvatar(
-                    imageUrl: imageUrl,
-                    radius: avatarRadius - 1,
-                    fallbackText: profile.companyName,
-                    backgroundColor: const Color(0xFFE3F2FD),
-                  ),
-                ),
-              ),
-            ),
-          ],
           ),
-        ),
 
           const SliverToBoxAdapter(child: SizedBox(height: 20)),
 

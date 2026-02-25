@@ -56,6 +56,8 @@ class MessageModel {
   final String? mediaUrl;
   final bool isRead;
   final DateTime? readAt;
+  final bool isDeleted;
+  final DateTime? editedAt;
   final DateTime createdAt;
 
   MessageModel({
@@ -67,6 +69,8 @@ class MessageModel {
     this.mediaUrl,
     this.isRead = false,
     this.readAt,
+    this.isDeleted = false,
+    this.editedAt,
     required this.createdAt,
   });
 
@@ -80,6 +84,8 @@ class MessageModel {
       mediaUrl: map['mediaUrl'],
       isRead: map['isRead'] ?? false,
       readAt: (map['readAt'] as Timestamp?)?.toDate(),
+      isDeleted: map['isDeleted'] ?? false,
+      editedAt: (map['editedAt'] as Timestamp?)?.toDate(),
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
@@ -93,6 +99,8 @@ class MessageModel {
       'mediaUrl': mediaUrl,
       'isRead': isRead,
       if (readAt != null) 'readAt': Timestamp.fromDate(readAt!),
+      'isDeleted': isDeleted,
+      if (editedAt != null) 'editedAt': Timestamp.fromDate(editedAt!),
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }

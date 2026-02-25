@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/user_provider.dart';
 import '../../models/skilled_user_profile.dart';
+import '../../models/service_request_model.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/user_roles.dart';
 import '../../utils/add_dummy_profiles.dart';
@@ -550,6 +551,137 @@ class _HomeScreenState extends State<HomeScreen> {
                         const Divider(),
                       ],
                     ),
+                  ),
+                ),
+
+              // Work Requests Dashboard (Customer / Company)
+              if ((userRole == UserRoles.customer ||
+                      userRole == UserRoles.company) &&
+                  currentUser != null)
+                SliverToBoxAdapter(
+                  child: StreamBuilder<List<ServiceRequestModel>>(
+                    stream: _firestoreService
+                        .streamUserWorkRequests(currentUser.uid),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        debugPrint(
+                            'Home work requests error: ${snapshot.error}');
+                        return const SizedBox.shrink();
+                      }
+                      final requests = snapshot.data ?? [];
+                      if (requests.isEmpty) return const SizedBox.shrink();
+
+                      final pending =
+                          requests.where((r) => r.status == 'pending').length;
+                      final accepted =
+                          requests.where((r) => r.status == 'accepted').length;
+
+                      return Padding(
+                        padding:
+                            const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Your Work Requests',
+                              style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                _buildStatChip(
+                                    Icons.hourglass_empty,
+                                    '$pending',
+                                    'Pending',
+                                    Colors.orange),
+                                const SizedBox(width: 8),
+                                _buildStatChip(
+                                    Icons.check_circle_outline,
+                                    '$accepted',
+                                    'Approved',
+                                    Colors.green),
+                                const SizedBox(width: 8),
+                                _buildStatChip(
+                                    Icons.list_alt,
+                                    '${requests.length}',
+                                    'Total',
+                                    const Color(0xFF6A11CB)),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            ...requests.take(2).map((req) {
+                              Color statusColor;
+                              switch (req.status) {
+                                case 'accepted':
+                                  statusColor = Colors.green;
+                                  break;
+                                case 'rejected':
+                                  statusColor = Colors.red;
+                                  break;
+                                case 'completed':
+                                  statusColor = Colors.blue;
+                                  break;
+                                default:
+                                  statusColor = Colors.orange;
+                              }
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                                child: ListTile(
+                                  leading: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: statusColor
+                                          .withValues(alpha: 0.12),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(Icons.work_outline,
+                                        color: statusColor, size: 18),
+                                  ),
+                                  title: Text(
+                                    req.title,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  subtitle: Text(
+                                    req.description,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  trailing: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: statusColor
+                                          .withValues(alpha: 0.12),
+                                      borderRadius:
+                                          BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      req.status[0].toUpperCase() +
+                                          req.status.substring(1),
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: statusColor,
+                                          fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }),
+                            const SizedBox(height: 4),
+                            const Divider(),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
 

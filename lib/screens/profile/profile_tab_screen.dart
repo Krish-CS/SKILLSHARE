@@ -11,6 +11,7 @@ import '../../utils/web_image_loader.dart';
 import '../../utils/user_roles.dart';
 import 'profile_screen.dart';
 import 'edit_skilled_profile_screen.dart';
+import 'skilled_user_setup_screen.dart';
 import 'customer_setup_screen.dart';
 import 'company_setup_screen.dart';
 import '../auth/login_screen.dart';
@@ -308,6 +309,82 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                               ],
                             ),
                           ),
+                          const SizedBox(height: 20),
+                          // Verified badge for skilled users
+                          if (_currentUser?.role == UserRoles.skilledPerson) ...[
+                            const SizedBox(height: 8),
+                            if (_skilledProfile?.isVerified == true)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withValues(alpha: 0.25),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                      color: Colors.greenAccent.withValues(
+                                          alpha: 0.7),
+                                      width: 1.2),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.verified_user,
+                                        color: Colors.greenAccent, size: 14),
+                                    SizedBox(width: 5),
+                                    Text(
+                                      'Aadhaar Verified',
+                                      style: TextStyle(
+                                        color: Colors.greenAccent,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              GestureDetector(
+                                onTap: () async {
+                                  if (_currentUser == null) return;
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => SkilledUserSetupScreen(
+                                          userId: _currentUser!.uid),
+                                    ),
+                                  );
+                                  _loadUserData();
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 14, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withValues(alpha: 0.25),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                        color: Colors.orange.withValues(
+                                            alpha: 0.7),
+                                        width: 1.2),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.fingerprint,
+                                          color: Colors.orange, size: 14),
+                                      SizedBox(width: 5),
+                                      Text(
+                                        'Tap to Verify Identity',
+                                        style: TextStyle(
+                                          color: Colors.orange,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
                           const SizedBox(height: 20),
                           // Quick action buttons
                           Row(
