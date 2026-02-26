@@ -77,3 +77,6 @@ nul
 con
 prn
 aux
+
+# Claude temp files
+cUsersUSERAppDataLocalTempclaude-*
