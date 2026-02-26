@@ -138,102 +138,209 @@ class _MainNavigationState extends State<MainNavigation> {
       return const AdminScreen();
     }
 
-    // Delivery partner has minimal nav (3 tabs)
-    final isDelivery = userRole == UserRoles.deliveryPartner;
-
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
         children: screens,
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              _getGradientColor(_currentIndex, 0, userRole),
-              _getGradientColor(_currentIndex, 1, userRole),
-              _getGradientColor(_currentIndex, 2, userRole),
-              if (!isDelivery)
-                _getGradientColor(_currentIndex, 3, userRole),
-            ],
+      bottomNavigationBar: _buildCustomBottomNav(navItems, userRole, currentUserId),
+    );
+  }
+
+  // ── Custom white bottom nav with per-tab gradient circles ──────────────
+  Widget _buildCustomBottomNav(
+    List<BottomNavigationBarItem> rawItems,
+    String role,
+    String? uid,
+  ) {
+    final chatIdx = _getChatTabIndex(role);
+    const cartIdx = 2;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.10),
+            blurRadius: 12,
+            offset: const Offset(0, -2),
           ),
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
-          },
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: Colors.transparent,
-          selectedItemColor: Colors.white,
-          unselectedItemColor: Colors.white70,
-          elevation: 0,
-          items: _buildNavItemsWithBadges(navItems, userRole, currentUserId),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 72,
+          child: Row(
+            children: List.generate(rawItems.length, (i) {
+              final selected = i == _currentIndex;
+              final g0 = _getGradientColor(i, 0, role);
+              final g1 = _getGradientColor(i, 2, role);
+              final icData = _getNavIcon(role, i);
+              final label = rawItems[i].label ?? '';
+
+              // Base icon (white when selected, grey when not)
+              Widget iconW = Icon(
+                icData,
+                color: selected ? Colors.white : Colors.grey[500],
+                size: 22,
+              );
+
+              // Badge overlay for cart / chat
+              if (uid != null) {
+                if (role == UserRoles.customer && i == cartIdx) {
+                  iconW = StreamBuilder<List<dynamic>>(
+                    stream: _firestoreService.streamCartItems(uid),
+                    builder: (_, snap) {
+                      final cnt = snap.data?.fold<int>(
+                              0, (a, x) => a + ((x as dynamic).quantity as int)) ??
+                          0;
+                      return _navBadge(icData, selected, cnt);
+                    },
+                  );
+                } else if (i == chatIdx) {
+                  iconW = StreamBuilder<List<dynamic>>(
+                    stream: _chatService.getUserChats(uid),
+                    builder: (_, snap) {
+                      int unread = 0;
+                      for (final c in snap.data ?? []) {
+                        final u = (c as dynamic).unreadCount;
+                        if (u is Map) unread += (u[uid] as int?) ?? 0;
+                      }
+                      return _navBadge(Icons.chat, selected, unread);
+                    },
+                  );
+                }
+              }
+
+              return Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() => _currentIndex = i),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const SizedBox(height: 8),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 260),
+                        curve: Curves.easeOut,
+                        width: 44,
+                        height: 44,
+                        decoration: selected
+                            ? BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(
+                                  colors: [g0, g1],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: g0.withValues(alpha: 0.40),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              )
+                            : null,
+                        child: Center(child: iconW),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontFamily: 'SourceSerif4',
+                          color: selected ? g0 : Colors.grey[500],
+                          fontWeight:
+                              selected ? FontWeight.w700 : FontWeight.w400,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
         ),
       ),
     );
   }
 
-  /// Wraps nav items with badges (cart count for customers, unread chats for all)
-  List<BottomNavigationBarItem> _buildNavItemsWithBadges(
-    List<BottomNavigationBarItem> items,
-    String role,
-    String? userId,
-  ) {
-    if (userId == null) return items;
-
-    // Chat tab index per role
-    final chatIndex = _getChatTabIndex(role);
-    // Cart tab index (only for customers)
-    const cartIndex = 2; // customer: Home, Shop, Cart, Chats, Profile
-
-    return List.generate(items.length, (i) {
-      // Cart badge — customer only
-      if (i == cartIndex && role == UserRoles.customer) {
-        return BottomNavigationBarItem(
-          icon: StreamBuilder<List<dynamic>>(
-            stream: _firestoreService.streamCartItems(userId),
-            builder: (context, snapshot) {
-              final count = snapshot.data?.fold<int>(
-                      0, (acc, item) => acc + (item.quantity as int)) ??
-                  0;
-              if (count <= 0) {
-                return const Icon(Icons.shopping_cart);
-              }
-              return _badgeIcon(Icons.shopping_cart, count);
-            },
+  /// Badge-aware icon used in the custom nav bar.
+  Widget _navBadge(IconData icon, bool selected, int count) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Icon(icon, color: selected ? Colors.white : Colors.grey[500], size: 22),
+        if (count > 0)
+          Positioned(
+            right: -6,
+            top: -6,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(
+                  color: Colors.red, shape: BoxShape.circle),
+              constraints:
+                  const BoxConstraints(minWidth: 14, minHeight: 14),
+              child: Text(
+                count > 99 ? '99+' : '$count',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            ),
           ),
-          label: 'Cart',
-        );
-      }
+      ],
+    );
+  }
 
-      // Chat badge — all roles
-      if (i == chatIndex) {
-        return BottomNavigationBarItem(
-          icon: StreamBuilder<List<dynamic>>(
-            stream: _chatService.getUserChats(userId),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) return const Icon(Icons.chat);
-              final chats = snapshot.data!;
-              int totalUnread = 0;
-              for (final chat in chats) {
-                final unread = (chat as dynamic).unreadCount;
-                if (unread is Map) {
-                  totalUnread += (unread[userId] as int?) ?? 0;
-                }
-              }
-              if (totalUnread <= 0) return const Icon(Icons.chat);
-              return _badgeIcon(Icons.chat, totalUnread);
-            },
-          ),
-          label: 'Chats',
-        );
-      }
-
-      return items[i];
-    });
+  /// Maps role + tab index to the correct IconData.
+  IconData _getNavIcon(String role, int index) {
+    switch (role) {
+      case UserRoles.customer:
+        return const [
+          Icons.home,
+          Icons.shopping_bag,
+          Icons.shopping_cart,
+          Icons.chat,
+          Icons.person
+        ][index];
+      case UserRoles.company:
+        return const [
+          Icons.home,
+          Icons.work,
+          Icons.shopping_bag,
+          Icons.chat,
+          Icons.business
+        ][index];
+      case UserRoles.skilledPerson:
+        return const [
+          Icons.home,
+          Icons.photo_library,
+          Icons.store,
+          Icons.chat,
+          Icons.person
+        ][index];
+      case UserRoles.deliveryPartner:
+        return const [
+          Icons.local_shipping,
+          Icons.chat,
+          Icons.person
+        ][index];
+      default:
+        return const [
+          Icons.home,
+          Icons.work,
+          Icons.shopping_bag,
+          Icons.chat,
+          Icons.person
+        ][index];
+    }
   }
 
   /// Returns the index of the Chats tab for each user role.
@@ -245,37 +352,6 @@ class _MainNavigationState extends State<MainNavigation> {
       case UserRoles.deliveryPartner: return 1; // Deliveries, *Chats*, Profile
       default:                    return 3;
     }
-  }
-
-  /// Builds an icon with a red circular badge.
-  Widget _badgeIcon(IconData icon, int count) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Icon(icon),
-        Positioned(
-          right: -6,
-          top: -6,
-          child: Container(
-            padding: const EdgeInsets.all(3),
-            decoration: const BoxDecoration(
-              color: Colors.red,
-              shape: BoxShape.circle,
-            ),
-            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-            child: Text(
-              count > 99 ? '99+' : '$count',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   /// Returns screens based on user role

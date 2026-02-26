@@ -27,6 +27,7 @@ dependencies:
   cached_network_image: ^3.3.0
   flutter_rating_bar: ^4.0.1
   shimmer: ^3.0.0
+  flutter_svg: ^2.0.10+1
   
   # Image Handling & Upload
   image_picker: ^1.0.5
@@ -67,13 +68,46 @@ flutter:
     - assets/images/
     - assets/icons/
 
-#   fonts:
-#     - family: Poppins
-#       fonts:
-#         - asset: assets/fonts/Poppins-Regular.ttf
-#         - asset: assets/fonts/Poppins-Medium.ttf
-#           weight: 500
-#         - asset: assets/fonts/Poppins-SemiBold.ttf
-#           weight: 600
-#         - asset: assets/fonts/Poppins-Bold.ttf
-#           weight: 700
+  fonts:
+    - family: SourceSerif4
+      fonts:
+        - asset: Source_Serif_4/static/SourceSerif4-ExtraLight.ttf
+          weight: 200
+        - asset: Source_Serif_4/static/SourceSerif4-ExtraLightItalic.ttf
+          weight: 200
+          style: italic
+        - asset: Source_Serif_4/static/SourceSerif4-Light.ttf
+          weight: 300
+        - asset: Source_Serif_4/static/SourceSerif4-LightItalic.ttf
+          weight: 300
+          style: italic
+        - asset: Source_Serif_4/static/SourceSerif4-Regular.ttf
+          weight: 400
+        - asset: Source_Serif_4/static/SourceSerif4-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: Source_Serif_4/static/SourceSerif4-Medium.ttf
+          weight: 500
+        - asset: Source_Serif_4/static/SourceSerif4-MediumItalic.ttf
+          weight: 500
+          style: italic
+        - asset: Source_Serif_4/static/SourceSerif4-SemiBold.ttf
+          weight: 600
+        - asset: Source_Serif_4/static/SourceSerif4-SemiBoldItalic.ttf
+          weight: 600
+          style: italic
+        - asset: Source_Serif_4/static/SourceSerif4-Bold.ttf
+          weight: 700
+        - asset: Source_Serif_4/static/SourceSerif4-BoldItalic.ttf
+          weight: 700
+          style: italic
+        - asset: Source_Serif_4/static/SourceSerif4-ExtraBold.ttf
+          weight: 800
+        - asset: Source_Serif_4/static/SourceSerif4-ExtraBoldItalic.ttf
+          weight: 800
+          style: italic
+        - asset: Source_Serif_4/static/SourceSerif4-Black.ttf
+          weight: 900
+        - asset: Source_Serif_4/static/SourceSerif4-BlackItalic.ttf
+          weight: 900
+          style: italic

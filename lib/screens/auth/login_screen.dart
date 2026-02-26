@@ -20,6 +20,7 @@ class _LoginScreenState extends State<LoginScreen>
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  late final FocusNode _passwordFocusNode;
 
   // ── Animated gradient ──────────────────────────────────────────────────────
   late final AnimationController _gradCtrl;
@@ -46,6 +47,9 @@ class _LoginScreenState extends State<LoginScreen>
         }
       });
     _gradCtrl.forward();
+    _passwordFocusNode = FocusNode();
+    _passwordFocusNode.addListener(() => setState(() {}));
+    _passwordController.addListener(() => setState(() {}));
   }
 
   @override
@@ -53,6 +57,7 @@ class _LoginScreenState extends State<LoginScreen>
     _gradCtrl.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _passwordFocusNode.dispose();
     super.dispose();
   }
 
@@ -268,24 +273,30 @@ class _LoginScreenState extends State<LoginScreen>
                                     ],
                                     enableInteractiveSelection: true,
                                     style: const TextStyle(fontSize: 15),
+                                    focusNode: _passwordFocusNode,
                                     decoration: _inputDecoration(
                                       label: 'Password',
                                       icon: Icons.lock_outline,
                                     ).copyWith(
-                                      suffixIcon: IconButton(
-                                        icon: Icon(
-                                          _obscurePassword
-                                              ? Icons.visibility_off_rounded
-                                              : Icons.visibility_rounded,
-                                          color: _obscurePassword
-                                              ? Colors.grey[400]
-                                              : const Color(0xFF6A11CB),
-                                          size: 22,
-                                        ),
-                                        onPressed: () => setState(() =>
-                                            _obscurePassword =
-                                                !_obscurePassword),
-                                      ),
+                                      suffixIcon: (_passwordFocusNode.hasFocus ||
+                                              _passwordController
+                                                  .text.isNotEmpty)
+                                          ? IconButton(
+                                              icon: Icon(
+                                                _obscurePassword
+                                                    ? Icons
+                                                        .visibility_off_rounded
+                                                    : Icons.visibility_rounded,
+                                                color: _obscurePassword
+                                                    ? Colors.grey[400]
+                                                    : const Color(0xFF6A11CB),
+                                                size: 22,
+                                              ),
+                                              onPressed: () => setState(() =>
+                                                  _obscurePassword =
+                                                      !_obscurePassword),
+                                            )
+                                          : null,
                                     ),
                                     validator: (v) {
                                       if (v == null || v.isEmpty) {

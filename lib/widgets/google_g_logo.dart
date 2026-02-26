@@ -1,73 +1,42 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
-/// A widget that paints the official Google "G" logo using canvas arcs.
-/// Works on all platforms without requiring the flutter_svg package.
+/// Renders the official Google "G" logo using the real SVG path data.
+/// Sourced from Google's brand guidelines — embedded directly so no
+/// network call is needed and rendering is pixel-perfect at any size.
 class GoogleGLogo extends StatelessWidget {
   const GoogleGLogo({super.key, this.size = 22});
 
   final double size;
 
+  // Official Google "G" four-segment logo paths.
+  static const String _svg = '''
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="#4285F4"
+    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92
+       c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57
+       c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+  <path fill="#34A853"
+    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77
+       c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84
+       C3.99 20.53 7.7 23 12 23z"/>
+  <path fill="#FBBC05"
+    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18
+       C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+  <path fill="#EA4335"
+    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15
+       C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84
+       c.87-2.6 3.3-4.53 6.16-4.53z"/>
+</svg>
+''';
+
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return SvgPicture.string(
+      _svg,
       width: size,
       height: size,
-      child: const CustomPaint(painter: _GoogleGPainter()),
+      fit: BoxFit.contain,
     );
   }
-}
-
-class _GoogleGPainter extends CustomPainter {
-  const _GoogleGPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final cx = size.width / 2;
-    final cy = size.height / 2;
-
-    // Ring radius (to center-line of stroke) and stroke width
-    final ringR = size.width * 0.33;
-    final sw = size.width * 0.23;
-
-    void drawArc(double startDeg, double sweepDeg, Color color) {
-      canvas.drawArc(
-        Rect.fromCircle(center: Offset(cx, cy), radius: ringR),
-        startDeg * math.pi / 180,
-        sweepDeg * math.pi / 180,
-        false,
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = sw
-          ..strokeCap = StrokeCap.butt,
-      );
-    }
-
-    // ── Arcs (0=right, clockwise positive) ──────────────────────────────
-    // Blue  : from -53° → 45° (top-right quadrant)
-    drawArc(-53, 98, const Color(0xFF4285F4));
-    // Green : from  45° → 90°
-    drawArc(45, 48, const Color(0xFF34A853));
-    // Yellow: from  93° → 135°
-    drawArc(93, 45, const Color(0xFFFBBC05));
-    // Red   : from 138° → 307°
-    drawArc(138, 169, const Color(0xFFEA4335));
-
-    // ── Horizontal right arm (blue) ──────────────────────────────────────
-    // Goes from center to the outer-right of the ring, forming the G shape.
-    final armStart = Offset(cx, cy);
-    final armEnd = Offset(cx + ringR + sw * 0.55, cy);
-    canvas.drawLine(
-      armStart,
-      armEnd,
-      Paint()
-        ..color = const Color(0xFF4285F4)
-        ..strokeWidth = sw * 0.82
-        ..strokeCap = StrokeCap.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

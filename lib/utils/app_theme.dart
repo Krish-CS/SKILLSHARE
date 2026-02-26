@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // Colors from the UI reference
@@ -34,7 +33,24 @@ class AppTheme {
         primary: primaryBlue,
         secondary: primaryPink,
       ),
-      textTheme: GoogleFonts.poppinsTextTheme(),
+      fontFamily: 'SourceSerif4',
+      textTheme: const TextTheme(
+        displayLarge:  TextStyle(fontFamily: 'SourceSerif4', fontWeight: FontWeight.w700, letterSpacing: -1.2, height: 1.10),
+        displayMedium: TextStyle(fontFamily: 'SourceSerif4', fontWeight: FontWeight.w700, letterSpacing: -0.8, height: 1.12),
+        displaySmall:  TextStyle(fontFamily: 'SourceSerif4', fontWeight: FontWeight.w600, letterSpacing: -0.5, height: 1.15),
+        headlineLarge: TextStyle(fontFamily: 'SourceSerif4', fontWeight: FontWeight.w700, letterSpacing: -0.5, height: 1.18),
+        headlineMedium:TextStyle(fontFamily: 'SourceSerif4', fontWeight: FontWeight.w600, letterSpacing: -0.3, height: 1.20),
+        headlineSmall: TextStyle(fontFamily: 'SourceSerif4', fontWeight: FontWeight.w600, letterSpacing: -0.2, height: 1.22),
+        titleLarge:    TextStyle(fontFamily: 'SourceSerif4', fontWeight: FontWeight.w600, letterSpacing: -0.2, height: 1.25),
+        titleMedium:   TextStyle(fontFamily: 'SourceSerif4', fontWeight: FontWeight.w500, letterSpacing: -0.1, height: 1.28),
+        titleSmall:    TextStyle(fontFamily: 'SourceSerif4', fontWeight: FontWeight.w500, letterSpacing: -0.1, height: 1.30),
+        bodyLarge:     TextStyle(fontFamily: 'SourceSerif4', fontWeight: FontWeight.w400, letterSpacing: 0.0,  height: 1.55),
+        bodyMedium:    TextStyle(fontFamily: 'SourceSerif4', fontWeight: FontWeight.w400, letterSpacing: 0.0,  height: 1.55),
+        bodySmall:     TextStyle(fontFamily: 'SourceSerif4', fontWeight: FontWeight.w400, letterSpacing: 0.0,  height: 1.50),
+        labelLarge:    TextStyle(fontFamily: 'SourceSerif4', fontWeight: FontWeight.w600, letterSpacing: 0.0,  height: 1.30),
+        labelMedium:   TextStyle(fontFamily: 'SourceSerif4', fontWeight: FontWeight.w500, letterSpacing: 0.0,  height: 1.30),
+        labelSmall:    TextStyle(fontFamily: 'SourceSerif4', fontWeight: FontWeight.w400, letterSpacing: 0.0,  height: 1.30),
+      ),
       scaffoldBackgroundColor: backgroundLight,
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
@@ -44,6 +60,9 @@ class AppTheme {
           color: textPrimary,
           fontSize: 20,
           fontWeight: FontWeight.w600,
+          fontFamily: 'SourceSerif4',
+          letterSpacing: -0.3,
+          height: 1.25,
         ),
       ),
       cardTheme: CardTheme(

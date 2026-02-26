@@ -362,6 +362,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                           ),
                                           decoration: InputDecoration(
                                             border: InputBorder.none,
+                                            enabledBorder: InputBorder.none,
+                                            focusedBorder: InputBorder.none,
+                                            errorBorder: InputBorder.none,
+                                            disabledBorder: InputBorder.none,
+                                            filled: false,
                                             isDense: true,
                                             contentPadding:
                                                 const EdgeInsets.symmetric(
