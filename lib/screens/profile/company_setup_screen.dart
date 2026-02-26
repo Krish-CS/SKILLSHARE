@@ -29,12 +29,12 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
   final _gstController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   final CloudinaryService _cloudinaryService = CloudinaryService();
-  
+
   String _selectedIndustry = 'Technology';
   String _selectedEmployeeCount = '1-10';
   bool _isLoading = true;
   bool _isUploading = false;
-  
+
   // Image variables
   File? _logoImage;
   Uint8List? _logoImageBytes;
@@ -64,6 +64,11 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
     '500+',
   ];
 
+  // Purple palette constants
+  static const _primary = Color(0xFF4527A0);
+  static const _light = Color(0xFF7E57C2);
+  static const _chipBg = Color(0xFFEDE7F6);
+
   @override
   void initState() {
     super.initState();
@@ -81,7 +86,8 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
       _websiteController.text = profile.website ?? '';
       _headOfficeController.text = profile.headOfficeLocation ?? '';
       _gstController.text = profile.gstNumber ?? '';
-      _selectedIndustry = profile.industry.isNotEmpty ? profile.industry : 'Technology';
+      _selectedIndustry =
+          profile.industry.isNotEmpty ? profile.industry : 'Technology';
       _selectedEmployeeCount = profile.employeeCount ?? '1-10';
       _logoUrl = profile.logoUrl;
     }
@@ -123,7 +129,6 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
         }
       }
     } catch (e) {
-      // Handle web-specific errors gracefully
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -136,20 +141,15 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
   }
 
   Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
-    setState(() {
-      _isUploading = true;
-    });
+    setState(() => _isUploading = true);
 
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       final currentProfile = userProvider.companyProfile;
 
-      // Upload logo if selected
       String? finalLogoUrl = _logoUrl;
       if (_logoImage != null || _logoImageBytes != null) {
         if (kIsWeb && _logoImageBytes != null) {
@@ -170,8 +170,8 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
         companyName: _companyNameController.text.trim(),
         description: _descriptionController.text.trim(),
         industry: _selectedIndustry,
-        website: _websiteController.text.trim().isNotEmpty 
-            ? _websiteController.text.trim() 
+        website: _websiteController.text.trim().isNotEmpty
+            ? _websiteController.text.trim()
             : null,
         logoUrl: finalLogoUrl,
         employeeCount: _selectedEmployeeCount,
@@ -181,7 +181,7 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
         gstNumber: _gstController.text.trim().isNotEmpty
             ? _gstController.text.trim()
             : null,
-        isVerified: false, // Requires admin verification
+        isVerified: false,
         verificationStatus: 'pending',
         createdAt: currentProfile?.createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
@@ -191,12 +191,11 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
 
       if (finalLogoUrl != null && finalLogoUrl.isNotEmpty) {
         try {
-          await FirestoreService().updateUserProfilePhoto(widget.userId, finalLogoUrl);
-
+          await FirestoreService()
+              .updateUserProfilePhoto(widget.userId, finalLogoUrl);
           if (authProvider.currentUser != null) {
-            final updatedUser = authProvider.currentUser!.copyWith(
-              profilePhoto: finalLogoUrl,
-            );
+            final updatedUser =
+                authProvider.currentUser!.copyWith(profilePhoto: finalLogoUrl);
             await authProvider.updateProfile(updatedUser);
           }
         } catch (e) {
@@ -213,16 +212,12 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
         ),
       );
 
-      // Navigate to main screen
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (context) => const MainNavigation(),
-        ),
+        MaterialPageRoute(builder: (context) => const MainNavigation()),
       );
     } catch (e) {
       if (!mounted) return;
-      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error saving profile: $e'),
@@ -230,11 +225,7 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
         ),
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isUploading = false;
-        });
-      }
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
@@ -246,227 +237,392 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
       );
     }
 
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Company Profile Setup'),
-        backgroundColor: Colors.indigo,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Tell us about your company',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+      backgroundColor: const Color(0xFFF6F7FB),
+      body: Form(
+        key: _formKey,
+        child: CustomScrollView(
+          slivers: [
+            // ── Gradient header with logo ──────────────────────────────────
+            SliverAppBar(
+              expandedHeight: 210,
+              pinned: true,
+              stretch: true,
+              backgroundColor: _primary,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+              flexibleSpace: FlexibleSpaceBar(
+                titlePadding: const EdgeInsets.only(left: 16, bottom: 14),
+                title: const Text(
+                  'Company Profile',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                background: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [_primary, _light],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 28),
+                      child: GestureDetector(
+                        onTap: _pickLogo,
+                        child: Stack(
+                          children: [
+                            Container(
+                              width: 100,
+                              height: 100,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border:
+                                    Border.all(color: Colors.white, width: 3),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color:
+                                        Colors.black.withValues(alpha: 0.3),
+                                    blurRadius: 14,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                                image: (kIsWeb && _logoImageBytes != null)
+                                    ? DecorationImage(
+                                        image: MemoryImage(_logoImageBytes!),
+                                        fit: BoxFit.cover)
+                                    : (_logoImage != null
+                                        ? DecorationImage(
+                                            image: FileImage(_logoImage!),
+                                            fit: BoxFit.cover)
+                                        : (_logoUrl != null &&
+                                                _logoUrl!.isNotEmpty
+                                            ? DecorationImage(
+                                                image:
+                                                    NetworkImage(_logoUrl!),
+                                                fit: BoxFit.cover)
+                                            : null)),
+                              ),
+                              child: (_logoImage == null &&
+                                      _logoImageBytes == null &&
+                                      (_logoUrl == null || _logoUrl!.isEmpty))
+                                  ? const Icon(Icons.business,
+                                      size: 48, color: _primary)
+                                  : null,
+                            ),
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: _primary,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                      color: Colors.white, width: 2),
+                                ),
+                                child: const Icon(Icons.camera_alt,
+                                    color: Colors.white, size: 16),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Build your company profile to attract talented candidates',
-                style: TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 24),
+            ),
 
-              // Company Logo
-              Center(
-                child: Stack(
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(16, 20, 16, bottomPad + 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        borderRadius: BorderRadius.circular(12),
-                        image: (kIsWeb && _logoImageBytes != null)
-                            ? DecorationImage(
-                                image: MemoryImage(_logoImageBytes!),
-                                fit: BoxFit.cover,
-                              )
-                            : (_logoImage != null
-                                ? DecorationImage(
-                                    image: FileImage(_logoImage!),
-                                    fit: BoxFit.cover,
-                                  )
-                                : (_logoUrl != null && _logoUrl!.isNotEmpty
-                                    ? DecorationImage(
-                                        image: NetworkImage(_logoUrl!),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : null)),
+                    // ── Company Identity ─────────────────────────────────
+                    _sectionCard(
+                      title: 'Company Identity',
+                      icon: Icons.business_center_rounded,
+                      child: Column(
+                        children: [
+                          TextFormField(
+                            controller: _companyNameController,
+                            decoration: _inputDeco(
+                              label: 'Company Name *',
+                              hint: 'Your Company Name',
+                              icon: Icons.business_outlined,
+                            ),
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Please enter company name';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 14),
+                          DropdownButtonFormField<String>(
+                            value: _selectedIndustry,
+                            decoration: _inputDeco(
+                              label: 'Industry *',
+                              hint: '',
+                              icon: Icons.category_outlined,
+                            ),
+                            items: _industries
+                                .map((i) => DropdownMenuItem(
+                                    value: i, child: Text(i)))
+                                .toList(),
+                            onChanged: (v) =>
+                                setState(() => _selectedIndustry = v!),
+                          ),
+                          const SizedBox(height: 14),
+                          DropdownButtonFormField<String>(
+                            value: _selectedEmployeeCount,
+                            decoration: _inputDeco(
+                              label: 'Company Size',
+                              hint: '',
+                              icon: Icons.people_outline_rounded,
+                            ),
+                            items: _employeeCounts
+                                .map((c) => DropdownMenuItem(
+                                    value: c,
+                                    child: Text('$c employees')))
+                                .toList(),
+                            onChanged: (v) =>
+                                setState(() => _selectedEmployeeCount = v!),
+                          ),
+                        ],
                       ),
-                      child: _logoImage == null && _logoImageBytes == null && (_logoUrl == null || _logoUrl!.isEmpty)
-                          ? const Icon(Icons.business, size: 60, color: Colors.grey)
-                          : null,
                     ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: CircleAvatar(
-                        backgroundColor: Colors.indigo,
-                        radius: 20,
-                        child: IconButton(
-                          icon: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
-                          onPressed: _pickLogo,
+
+                    const SizedBox(height: 16),
+
+                    // ── About ────────────────────────────────────────────
+                    _sectionCard(
+                      title: 'About the Company',
+                      icon: Icons.info_outline_rounded,
+                      subtitle: 'Help talent understand your mission',
+                      child: TextFormField(
+                        controller: _descriptionController,
+                        decoration: _inputDeco(
+                          label: 'Company Description *',
+                          hint:
+                              'Describe your vision, culture, work style...',
+                          icon: Icons.description_outlined,
+                        ),
+                        maxLines: 4,
+                        maxLength: 1000,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Please provide company description';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // ── Location & Web ───────────────────────────────────
+                    _sectionCard(
+                      title: 'Location & Web',
+                      icon: Icons.public_rounded,
+                      child: Column(
+                        children: [
+                          TextFormField(
+                            controller: _headOfficeController,
+                            decoration: _inputDeco(
+                              label: 'Head Office Location',
+                              hint: 'City, State, Country',
+                              icon: Icons.location_on_outlined,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          TextFormField(
+                            controller: _websiteController,
+                            decoration: _inputDeco(
+                              label: 'Website',
+                              hint: 'https://www.company.com',
+                              icon: Icons.language_outlined,
+                            ),
+                            keyboardType: TextInputType.url,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // ── Legal Details ────────────────────────────────────
+                    _sectionCard(
+                      title: 'Legal Details',
+                      icon: Icons.verified_outlined,
+                      subtitle: 'Optional — builds trust with candidates',
+                      child: TextFormField(
+                        controller: _gstController,
+                        decoration: _inputDeco(
+                          label: 'GST Number (Optional)',
+                          hint: 'For business verification',
+                          icon: Icons.numbers_outlined,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    // ── Save button ──────────────────────────────────────
+                    SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [_primary, _light],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: _primary.withValues(alpha: 0.4),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: ElevatedButton(
+                          onPressed: _isUploading ? null : _saveProfile,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: _isUploading
+                              ? const SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 2.5),
+                                )
+                              : const Text(
+                                  'Save Company Profile',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
-
-              // Company Name
-              TextFormField(
-                controller: _companyNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Company Name *',
-                  hintText: 'Your Company Name',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.business),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter company name';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Industry
-              DropdownButtonFormField<String>(
-                value: _selectedIndustry,
-                decoration: const InputDecoration(
-                  labelText: 'Industry *',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.category),
-                ),
-                items: _industries.map((industry) {
-                  return DropdownMenuItem(
-                    value: industry,
-                    child: Text(industry),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedIndustry = value!;
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Employee Count
-              DropdownButtonFormField<String>(
-                value: _selectedEmployeeCount,
-                decoration: const InputDecoration(
-                  labelText: 'Company Size',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.people),
-                ),
-                items: _employeeCounts.map((count) {
-                  return DropdownMenuItem(
-                    value: count,
-                    child: Text('$count employees'),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedEmployeeCount = value!;
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Description
-              TextFormField(
-                controller: _descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Company Description *',
-                  hintText: 'Tell us about your company...',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.description),
-                ),
-                maxLines: 4,
-                maxLength: 1000,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please provide company description';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Head Office Location
-              TextFormField(
-                controller: _headOfficeController,
-                decoration: const InputDecoration(
-                  labelText: 'Head Office Location',
-                  hintText: 'City, State, Country',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.location_on),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Website
-              TextFormField(
-                controller: _websiteController,
-                decoration: const InputDecoration(
-                  labelText: 'Website',
-                  hintText: 'https://www.company.com',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.language),
-                ),
-                keyboardType: TextInputType.url,
-              ),
-              const SizedBox(height: 16),
-
-              // GST Number
-              TextFormField(
-                controller: _gstController,
-                decoration: const InputDecoration(
-                  labelText: 'GST Number (Optional)',
-                  hintText: 'For business verification',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.verified),
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Note: Business verification is recommended to attract quality candidates',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-              const SizedBox(height: 32),
-
-              // Save Button
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _isUploading ? null : _saveProfile,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: _isUploading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          'Complete Profile',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _sectionCard({
+    required String title,
+    required IconData icon,
+    String? subtitle,
+    required Widget child,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _chipBg,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: _primary, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1A1A2E),
+                      ),
+                    ),
+                    if (subtitle != null)
+                      Text(
+                        subtitle,
+                        style:
+                            const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          child,
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _inputDeco({
+    required String label,
+    required String hint,
+    required IconData icon,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixIcon: Icon(icon, color: _primary),
+      filled: true,
+      fillColor: const Color(0xFFF5F7FA),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFCFD8DC)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFCFD8DC)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: _primary, width: 2),
+      ),
+      labelStyle: const TextStyle(color: Color(0xFF607D8B)),
     );
   }
 }

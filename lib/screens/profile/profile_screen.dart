@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -43,6 +44,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   UserModel? _userData;
   String? _userRole;
   bool _isLoading = true;
+  StreamSubscription? _profileSub;
 
   // Check if user is viewing their own profile
   bool get isOwnProfile =>
@@ -395,12 +397,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _loadProfile();
+    _loadProfile().then((_) => _subscribeToProfileStream());
   }
 
   @override
   void dispose() {
+    _profileSub?.cancel();
     super.dispose();
+  }
+
+  void _subscribeToProfileStream() {
+    _profileSub?.cancel();
+    if (_userRole == AppConstants.roleCustomer) {
+      _profileSub = _firestoreService
+          .customerProfileStream(widget.userId)
+          .listen((profile) {
+        if (mounted && profile != null) {
+          setState(() => _customerProfile = profile);
+        }
+      });
+    } else if (_userRole == AppConstants.roleCompany) {
+      _profileSub = _firestoreService
+          .companyProfileStream(widget.userId)
+          .listen((profile) {
+        if (mounted && profile != null) {
+          setState(() => _companyProfile = profile);
+        }
+      });
+    } else {
+      _profileSub = _firestoreService
+          .skilledUserProfileStream(widget.userId)
+          .listen((profile) {
+        if (mounted && profile != null) {
+          setState(() => _profile = profile);
+        }
+      });
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -691,10 +723,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final List<Color> coverColors = _getCoverGradient(_profile!.category);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
-      body: CustomScrollView(
-        clipBehavior: Clip.none,
-        slivers: [
+      backgroundColor: Colors.transparent,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              coverColors.first.withValues(alpha: 0.08),
+              const Color(0xFFF6F7FB),
+              coverColors.last.withValues(alpha: 0.04),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: CustomScrollView(
+          clipBehavior: Clip.none,
+          slivers: [
           // ── Pinned app-bar overlay (transparent → fills as you scroll) ──
           SliverAppBar(
             clipBehavior: Clip.none,
@@ -849,6 +893,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SliverToBoxAdapter(child: SizedBox(height: 48)),
         ],
       ),
+      ),
     );
   }
 
@@ -869,6 +914,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     }
     return const [Color(0xFF6A11CB), Color(0xFF2575FC)];
+  }
+
+  /// Generates a unique gradient color pair derived from the userId hash,
+  /// so each user gets their own distinct color theme.
+  List<Color> _getUserColorGradient(String userId) {
+    const palettes = [
+      [Color(0xFF9C27B0), Color(0xFFE91E63)],   // purple -> pink
+      [Color(0xFF006064), Color(0xFF26C6DA)],    // dark teal -> cyan
+      [Color(0xFF1B5E20), Color(0xFF66BB6A)],    // deep green -> mint
+      [Color(0xFFE65100), Color(0xFFFFB74D)],    // deep orange -> amber
+      [Color(0xFF880E4F), Color(0xFFEC407A)],    // wine -> rose
+      [Color(0xFF4A148C), Color(0xFFAB47BC)],    // deep purple -> lilac
+      [Color(0xFF01579B), Color(0xFF29B6F6)],    // ocean -> sky
+      [Color(0xFF37474F), Color(0xFF78909C)],    // slate -> steel
+      [Color(0xFF33691E), Color(0xFFAED581)],    // forest -> lime
+      [Color(0xFF3E2723), Color(0xFF8D6E63)],    // espresso -> latte
+      [Color(0xFFB71C1C), Color(0xFFEF9A9A)],    // crimson -> blush
+      [Color(0xFF0D47A1), Color(0xFF64B5F6)],    // cobalt -> periwinkle
+      [Color(0xFF1A237E), Color(0xFF7986CB)],    // indigo -> lavender
+      [Color(0xFF004D40), Color(0xFF4DB6AC)],    // emerald -> seafoam
+      [Color(0xFF827717), Color(0xFFFFF176)],    // olive -> butter
+      [Color(0xFF212121), Color(0xFF757575)],    // charcoal -> smoke
+    ];
+    int hash = 0;
+    for (int i = 0; i < userId.length; i++) {
+      hash = (hash * 31 + userId.codeUnitAt(i)) & 0xFFFFFF;
+    }
+    final pair = palettes[hash % palettes.length];
+    return [pair[0], pair[1]];
   }
 
   Widget _appBarIcon(IconData icon, VoidCallback onTap) => IconButton(
@@ -955,6 +1029,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
               letterSpacing: -0.3,
             ),
           ),
+          if (_profile!.category?.isNotEmpty == true) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: coverColors),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.auto_awesome_rounded, size: 12, color: Colors.white),
+                  const SizedBox(width: 4),
+                  Text(
+                    _profile!.category ?? '',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 4),
           // Location + Verified badge row
           Row(
@@ -1743,7 +1841,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final imageUrl = profile.profilePicture?.isNotEmpty == true
         ? profile.profilePicture
         : _userData?.profilePhoto;
-    const coverColors = [Color(0xFF9C27B0), Color(0xFFE91E63)];
+    final coverColors = _getUserColorGradient(widget.userId);
     const coverHeight = 200.0;
     const avatarRadius = 52.0;
     const avatarBorder = 3.0;
@@ -1765,30 +1863,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
-      body: CustomScrollView(
-        clipBehavior: Clip.none,
-        slivers: [
-          SliverAppBar(
-            clipBehavior: Clip.none,
-            pinned: true,
-            expandedHeight: coverHeight,
-            backgroundColor: coverColors.first,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            actions: [
-              if (isOwnProfile)
-                IconButton(
-                  icon: const Icon(Icons.edit_rounded, color: Colors.white),
-                  onPressed: () async {
-                    await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                CustomerSetupScreen(userId: widget.userId)));
-                    _loadProfile();
-                  },
-                )
+      backgroundColor: Colors.transparent,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              coverColors.first.withValues(alpha: 0.08),
+              const Color(0xFFF6F7FB),
+              coverColors.last.withValues(alpha: 0.04),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: CustomScrollView(
+          clipBehavior: Clip.none,
+          slivers: [
+            SliverAppBar(
+              clipBehavior: Clip.none,
+              pinned: true,
+              expandedHeight: coverHeight,
+              backgroundColor: coverColors.first,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              actions: [
+                if (isOwnProfile)
+                  IconButton(
+                    icon: const Icon(Icons.edit_rounded, color: Colors.white),
+                    onPressed: () async {
+                      await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  CustomerSetupScreen(userId: widget.userId)));
+                      _loadProfile();
+                    },
+                  )
               else
                 IconButton(
                   icon: const Icon(Icons.chat_bubble_rounded,
@@ -1894,7 +2004,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: Container(
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              gradient: const LinearGradient(
+                              gradient: LinearGradient(
                                   colors: coverColors,
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight),
@@ -1929,7 +2039,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           // ── Identity row (name + action button) ──
           SliverToBoxAdapter(
             child: Padding(
-                  padding: EdgeInsets.fromLTRB(
+                  padding: const EdgeInsets.fromLTRB(
                       20, avatarRadius + avatarBorder + 12, 16, 0),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -1949,6 +2059,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               fontWeight: FontWeight.bold,
                               color: Color(0xFF1A1A2E),
                               letterSpacing: -0.3),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(colors: coverColors),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.person_rounded, size: 12, color: Colors.white),
+                              SizedBox(width: 4),
+                              Text('Customer',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold)),
+                            ],
+                          ),
                         ),
                         if (locationText.isNotEmpty) ...[
                           const SizedBox(height: 5),
@@ -1982,7 +2112,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 18, vertical: 10),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
+                          gradient: LinearGradient(
                               colors: coverColors),
                           borderRadius: BorderRadius.circular(30),
                           boxShadow: [
@@ -2256,6 +2386,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SliverToBoxAdapter(child: SizedBox(height: 48)),
         ],
       ),
+      ),
     );
   }
 
@@ -2264,7 +2395,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final imageUrl = profile.logoUrl?.isNotEmpty == true
         ? profile.logoUrl
         : _userData?.profilePhoto;
-    const coverColors = [Color(0xFF1565C0), Color(0xFF42A5F5)];
+    final coverColors = _getUserColorGradient(widget.userId);
     const coverHeight = 200.0;
     const avatarRadius = 52.0;
     const avatarBorder = 3.0;
@@ -2281,17 +2412,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
-      body: CustomScrollView(
-        clipBehavior: Clip.none,
-        slivers: [
-          SliverAppBar(
-            clipBehavior: Clip.none,
-            pinned: true,
-            expandedHeight: coverHeight,
-            backgroundColor: coverColors.first,
-            foregroundColor: Colors.white,
-            elevation: 0,
+      backgroundColor: Colors.transparent,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              coverColors.first.withValues(alpha: 0.08),
+              const Color(0xFFF6F7FB),
+              coverColors.last.withValues(alpha: 0.04),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: CustomScrollView(
+          clipBehavior: Clip.none,
+          slivers: [
+            SliverAppBar(
+              clipBehavior: Clip.none,
+              pinned: true,
+              expandedHeight: coverHeight,
+              backgroundColor: coverColors.first,
+              foregroundColor: Colors.white,
+              elevation: 0,
             actions: [
               if (isOwnProfile)
                 IconButton(
@@ -2390,7 +2533,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: Container(
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              gradient: const LinearGradient(
+                              gradient: LinearGradient(
                                   colors: coverColors,
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight),
@@ -2425,7 +2568,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           // ── Identity row ──
           SliverToBoxAdapter(
             child: Padding(
-                  padding: EdgeInsets.fromLTRB(
+                  padding: const EdgeInsets.fromLTRB(
                       20, avatarRadius + avatarBorder + 12, 16, 0),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2448,6 +2591,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   color: Color(0xFF1A1A2E),
                                   letterSpacing: -0.3),
                             ),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(colors: coverColors),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.business_rounded, size: 12, color: Colors.white),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    profile.industry.isNotEmpty ? profile.industry : 'Company',
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ),
                             const SizedBox(height: 5),
                             Row(
                               children: [
@@ -2466,7 +2631,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 8, vertical: 3),
                                     decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
+                                      gradient: LinearGradient(
                                           colors: coverColors),
                                       borderRadius:
                                           BorderRadius.circular(20),
@@ -2531,14 +2696,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 10),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
+                          gradient: LinearGradient(
                               colors: coverColors),
                           borderRadius: BorderRadius.circular(30),
-                          boxShadow: const [
+                          boxShadow: [
                             BoxShadow(
-                                color: Color(0x5542A5F5),
+                                color: coverColors.last.withValues(alpha: 0.4),
                                 blurRadius: 10,
-                                offset: Offset(0, 3))
+                                offset: const Offset(0, 3))
                           ],
                         ),
                         child: const Row(
@@ -2652,7 +2817,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _sectionHeader('About', Icons.info_outline_rounded,
-                        const Color(0xFF1565C0)),
+                        coverColors.first),
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
@@ -2686,7 +2851,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _sectionHeader('Company Details',
-                      Icons.business_rounded, const Color(0xFF42A5F5)),
+                      Icons.business_rounded, coverColors.last),
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -2752,7 +2917,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _sectionHeader('Projects',
-                        Icons.folder_rounded, const Color(0xFF1565C0)),
+                        Icons.folder_rounded, coverColors.first),
                     ...profile.assignedProjects
                         .map((p) => _buildProjectCard(p)),
                     const SizedBox(height: 16),
@@ -2763,6 +2928,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const SliverToBoxAdapter(child: SizedBox(height: 48)),
         ],
+      ),
       ),
     );
   }

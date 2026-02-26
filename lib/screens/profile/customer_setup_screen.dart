@@ -9,6 +9,7 @@ import '../../providers/auth_provider.dart';
 import '../../models/customer_profile.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/firestore_service.dart';
+import '../../utils/web_image_loader.dart';
 import '../main_navigation.dart';
 
 class CustomerSetupScreen extends StatefulWidget {
@@ -71,13 +72,29 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
       _bioController.text = profile.bio;
       _interests = List.from(profile.interests);
       _lookingFor = List.from(profile.lookingFor);
-      _profileImageUrl = profile.profilePicture;
+      _profileImageUrl = (profile.profilePicture != null && profile.profilePicture!.trim().isNotEmpty)
+          ? profile.profilePicture
+          : null;
       _locationController.text = profile.location ?? '';
     }
 
     setState(() {
       _isLoading = false;
     });
+  }
+
+  /// Returns the appropriate ImageProvider based on available image data.
+  ImageProvider? _getProfileImage() {
+    if (kIsWeb && _profileImageBytes != null) {
+      return MemoryImage(_profileImageBytes!);
+    }
+    if (_profileImage != null) {
+      return FileImage(_profileImage!);
+    }
+    if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) {
+      return WebImageLoader.getImageProvider(_profileImageUrl);
+    }
+    return null;
   }
 
   @override
@@ -264,7 +281,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
               expandedHeight: 200,
               pinned: true,
               stretch: true,
-              backgroundColor: const Color(0xFF1565C0),
+              backgroundColor: const Color(0xFF00695C),
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
                 onPressed: () => Navigator.pop(context),
@@ -282,7 +299,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                 background: Container(
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
+                      colors: [Color(0xFF00695C), Color(0xFF26A69A)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -309,17 +326,14 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                               child: CircleAvatar(
                                 radius: 52,
                                 backgroundColor: Colors.white,
-                                backgroundImage: (kIsWeb && _profileImageBytes != null)
-                                    ? MemoryImage(_profileImageBytes!) as ImageProvider
-                                    : (_profileImage != null
-                                        ? FileImage(_profileImage!) as ImageProvider
-                                        : (_profileImageUrl != null && _profileImageUrl!.isNotEmpty
-                                            ? NetworkImage(_profileImageUrl!) as ImageProvider
-                                            : null)),
+                                backgroundImage: _getProfileImage(),
+                                onBackgroundImageError: _getProfileImage() != null
+                                    ? (_, __) {} // silently handle load errors
+                                    : null,
                                 child: _profileImage == null &&
                                         _profileImageBytes == null &&
                                         (_profileImageUrl == null || _profileImageUrl!.isEmpty)
-                                    ? const Icon(Icons.person, size: 52, color: Color(0xFF1565C0))
+                                    ? const Icon(Icons.person, size: 52, color: Color(0xFF00695C))
                                     : null,
                               ),
                             ),
@@ -329,7 +343,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                               child: Container(
                                 padding: const EdgeInsets.all(6),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF1565C0),
+                                  color: const Color(0xFF00695C),
                                   shape: BoxShape.circle,
                                   border: Border.all(color: Colors.white, width: 2),
                                 ),
@@ -411,7 +425,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                               ),
                               const SizedBox(width: 8),
                               Material(
-                                color: const Color(0xFF1565C0),
+                                color: const Color(0xFF00695C),
                                 borderRadius: BorderRadius.circular(12),
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(12),
@@ -432,13 +446,13 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                               children: _interests.map((interest) {
                                 return Chip(
                                   label: Text(interest,
-                                      style: const TextStyle(color: Color(0xFF1565C0))),
-                                  deleteIcon: const Icon(Icons.close, size: 16, color: Color(0xFF1565C0)),
+                                      style: const TextStyle(color: Color(0xFF00695C))),
+                                  deleteIcon: const Icon(Icons.close, size: 16, color: Color(0xFF00695C)),
                                   onDeleted: () => _removeInterest(interest),
-                                  backgroundColor: const Color(0xFFE3F2FD),
+                                  backgroundColor: const Color(0xFFE0F2F1),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(20),
-                                    side: const BorderSide(color: Color(0xFF90CAF9)),
+                                    side: const BorderSide(color: Color(0xFF80CBC4)),
                                   ),
                                 );
                               }).toList(),
@@ -466,16 +480,16 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                               duration: const Duration(milliseconds: 200),
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                               decoration: BoxDecoration(
-                                color: isSelected ? const Color(0xFF1565C0) : Colors.white,
+                                color: isSelected ? const Color(0xFF00695C) : Colors.white,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: isSelected ? const Color(0xFF1565C0) : const Color(0xFFCFD8DC),
+                                  color: isSelected ? const Color(0xFF00695C) : const Color(0xFFCFD8DC),
                                   width: 1.5,
                                 ),
                                 boxShadow: isSelected
                                     ? [
                                         BoxShadow(
-                                          color: const Color(0xFF1565C0).withValues(alpha: 0.3),
+                                          color: const Color(0xFF00695C).withValues(alpha: 0.3),
                                           blurRadius: 6,
                                           offset: const Offset(0, 2),
                                         )
@@ -514,14 +528,14 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
+                            colors: [Color(0xFF00695C), Color(0xFF26A69A)],
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
                           ),
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF1565C0).withValues(alpha: 0.4),
+                              color: const Color(0xFF00695C).withValues(alpha: 0.4),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),
@@ -590,10 +604,10 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE3F2FD),
+                  color: const Color(0xFFE0F2F1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: const Color(0xFF1565C0), size: 18),
+                child: Icon(icon, color: const Color(0xFF00695C), size: 18),
               ),
               const SizedBox(width: 10),
               Column(
@@ -631,7 +645,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
     return InputDecoration(
       labelText: label,
       hintText: hint,
-      prefixIcon: Icon(icon, color: const Color(0xFF1565C0)),
+      prefixIcon: Icon(icon, color: const Color(0xFF00695C)),
       filled: true,
       fillColor: const Color(0xFFF5F7FA),
       border: OutlineInputBorder(
@@ -644,7 +658,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF1565C0), width: 2),
+        borderSide: const BorderSide(color: Color(0xFF00695C), width: 2),
       ),
       labelStyle: const TextStyle(color: Color(0xFF607D8B)),
     );

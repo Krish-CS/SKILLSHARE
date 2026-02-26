@@ -1687,6 +1687,26 @@ class FirestoreService {
     });
   }
 
+  /// Send a silent reminder notification (stored in Firestore notifications collection)
+  /// instead of posting a visible chat message.
+  Future<void> sendReminderNotification({
+    required String requestId,
+    required String fromUserId,
+    required String toUserId,
+    required String requestTitle,
+  }) async {
+    await _firestore.collection('notifications').add({
+      'type': 'work_request_reminder',
+      'requestId': requestId,
+      'fromUserId': fromUserId,
+      'toUserId': toUserId,
+      'title': 'Reminder',
+      'body': 'Work request "$requestTitle" is still awaiting your response.',
+      'read': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   Future<String> createHireRequest({
     required String requesterId,
     required String skilledUserId,

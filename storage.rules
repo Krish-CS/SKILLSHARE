@@ -1,0 +1,89 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ─── Helper functions ──────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isImageFile() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function isValidFileSize() {
+      // Max 10 MB per file
+      return request.resource.size <= 10 * 1024 * 1024;
+    }
+
+    function isValidUpload() {
+      return isImageFile() && isValidFileSize();
+    }
+
+    // ─── Profile photos ───────────────────────────────────────────────
+    match /profile_photos/{userId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId) && isValidUpload();
+      allow delete: if isOwner(userId);
+    }
+
+    // ─── Profile banners ──────────────────────────────────────────────
+    match /profile_banners/{userId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId) && isValidUpload();
+      allow delete: if isOwner(userId);
+    }
+
+    // ─── Product images ───────────────────────────────────────────────
+    match /products/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isOwner(userId) && isValidUpload();
+      allow delete: if isOwner(userId);
+    }
+
+    // ─── Service images ───────────────────────────────────────────────
+    match /services/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isOwner(userId) && isValidUpload();
+      allow delete: if isOwner(userId);
+    }
+
+    // ─── Chat attachments ─────────────────────────────────────────────
+    match /chat_attachments/{chatId}/{fileName} {
+      // Only signed-in users can access (participants verified at Firestore level)
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isValidFileSize();
+      allow delete: if isSignedIn();
+    }
+
+    // ─── Portfolio images ─────────────────────────────────────────────
+    match /portfolio/{userId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId) && isValidUpload();
+      allow delete: if isOwner(userId);
+    }
+
+    // ─── Company logos ────────────────────────────────────────────────
+    match /company_logos/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isOwner(userId) && isValidUpload();
+      allow delete: if isOwner(userId);
+    }
+
+    // ─── ID verification documents (sensitive) ────────────────────────
+    match /verification/{userId}/{fileName} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && isValidFileSize();
+      allow delete: if isOwner(userId);
+    }
+
+    // ─── Deny all other paths ─────────────────────────────────────────
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

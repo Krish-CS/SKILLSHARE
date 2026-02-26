@@ -369,7 +369,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         color: Colors.teal, size: 20),
                     const SizedBox(width: 8),
                     const Text(
-                      'Task Monitoring',
+                      'Work Requests List',
                       style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold),
@@ -384,7 +384,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          '${allRequests.length} task${allRequests.length != 1 ? 's' : ''}',
+                          '${allRequests.length} request${allRequests.length != 1 ? 's' : ''}',
                           style: const TextStyle(
                               fontSize: 12,
                               color: Colors.teal,
@@ -404,7 +404,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         Icon(Icons.assignment_outlined,
                             size: 48, color: Colors.grey),
                         SizedBox(height: 12),
-                        Text('No active tasks',
+                        Text('No active requests',
                             style: TextStyle(
                                 color: Colors.grey, fontSize: 15)),
                       ],
@@ -463,6 +463,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   Widget _monitoringTaskTile(ServiceRequestModel r) {
     final isPending = r.status == 'pending';
     final statusColor = isPending ? Colors.orange : Colors.green;
+    final isMyRequest = r.customerId == _currentUserId;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -471,49 +472,154 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         border: Border.all(color: statusColor.withValues(alpha: 0.3)),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Icon(
-            isPending ? Icons.hourglass_empty : Icons.work_outline,
-            size: 18,
-            color: statusColor,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  r.title.isNotEmpty ? r.title : 'Work Request',
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600),
+          Row(
+            children: [
+              Icon(
+                isPending ? Icons.hourglass_empty : Icons.work_outline,
+                size: 18,
+                color: statusColor,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      r.title.isNotEmpty ? r.title : 'Work Request',
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    if (r.description.isNotEmpty)
+                      Text(
+                        r.description,
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey[600]),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
                 ),
-                if (r.description.isNotEmpty)
-                  Text(
-                    r.description,
-                    style: TextStyle(
-                        fontSize: 11, color: Colors.grey[600]),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  isPending ? 'Pending' : 'Active',
+                  style: TextStyle(
+                      fontSize: 10,
+                      color: statusColor,
+                      fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          // Remind & Cancel buttons for pending requests owned by customer
+          if (isPending && isMyRequest) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                SizedBox(
+                  height: 30,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      try {
+                        // Send a silent reminder notification (not a visible chat message)
+                        await _firestoreService.sendReminderNotification(
+                          requestId: r.id,
+                          fromUserId: _currentUserId!,
+                          toUserId: widget.otherUserId,
+                          requestTitle: r.title,
+                        );
+                        if (mounted) {
+                          AppPopup.show(context,
+                              message: 'Reminder sent!',
+                              type: PopupType.success);
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          AppPopup.show(context,
+                              message: 'Error: $e',
+                              type: PopupType.error);
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.notifications_active, size: 14),
+                    label: const Text('Remind', style: TextStyle(fontSize: 11)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.orange,
+                      side: const BorderSide(color: Colors.orange),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
                   ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 30,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                          title: const Text('Cancel Work Request'),
+                          content: Text(
+                              'Cancel "${r.title}"? This cannot be undone.'),
+                          actions: [
+                            TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('Keep')),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Cancel Request',
+                                  style: TextStyle(color: Colors.white)),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed == true) {
+                        try {
+                          await _firestoreService.updateRequestStatus(
+                              r.id, 'cancelled');
+                          if (mounted) {
+                            AppPopup.show(context,
+                                message: 'Work request cancelled.',
+                                type: PopupType.info);
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            AppPopup.show(context,
+                                message: 'Error: $e',
+                                type: PopupType.error);
+                          }
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.cancel_outlined, size: 14),
+                    label: const Text('Cancel', style: TextStyle(fontSize: 11)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
               ],
             ),
-          ),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              isPending ? 'Pending' : 'Active',
-              style: TextStyle(
-                  fontSize: 10,
-                  color: statusColor,
-                  fontWeight: FontWeight.bold),
-            ),
-          ),
+          ],
         ],
       ),
     );
@@ -815,7 +921,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             ],
           ),
           actions: [
-            // Task monitoring list icon — visible to all participants
+            // Work Requests List icon — visible to all participants
             if (_currentUserId != null)
               GestureDetector(
                 onTap: () => _showTaskMonitoringSheet(context),
@@ -1388,7 +1494,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                     Icon(Icons.done_all,
                         size: 14,
                         color: message.isRead
-                            ? Colors.blue
+                            ? const Color(0xFF1B5E20)
                             : Colors.grey[400]),
                   ],
                 ],
@@ -1857,12 +1963,12 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
     }
     setState(() => _loading = true);
     try {
-      await widget.chatService.sendMessage(
-        chatId: widget.chatId,
-        senderId: widget.currentUserId,
-        receiverId: widget.otherUserId,
-        text:
-            '⏰ Reminder: Work request "${widget.request.title}" is still awaiting your response.',
+      // Send a silent reminder notification instead of a visible chat message
+      await FirestoreService().sendReminderNotification(
+        requestId: widget.request.id,
+        fromUserId: widget.currentUserId,
+        toUserId: widget.otherUserId,
+        requestTitle: widget.request.title,
       );
       _lastRemindTimes[widget.request.id] = DateTime.now();
       if (mounted) {

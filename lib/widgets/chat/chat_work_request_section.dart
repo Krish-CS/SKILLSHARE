@@ -340,21 +340,14 @@ class _WorkRequestCardState extends State<_WorkRequestCard> {
           type: PopupType.info);
       return;
     }
-    final chatId = widget.request.chatId;
-    if (chatId == null || chatId.isEmpty) {
-      AppPopup.show(context,
-          message: 'Cannot send reminder for this request.',
-          type: PopupType.error);
-      return;
-    }
     setState(() => _loading = true);
     try {
-      await _chatSvc.sendMessage(
-        chatId: chatId,
-        senderId: widget.currentUserId,
-        receiverId: widget.request.skilledUserId,
-        text:
-            '⏰ Reminder: Work request "${widget.request.title}" is still awaiting your response.',
+      // Send a silent reminder notification instead of a visible chat message
+      await _svc.sendReminderNotification(
+        requestId: widget.request.id,
+        fromUserId: widget.currentUserId,
+        toUserId: widget.request.skilledUserId,
+        requestTitle: widget.request.title,
       );
       _lastRemindTimes[widget.request.id] = DateTime.now();
       if (mounted) {
