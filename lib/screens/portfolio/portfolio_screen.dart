@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -21,6 +22,7 @@ class PortfolioScreen extends StatefulWidget {
 class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final PortfolioService _portfolioService = PortfolioService();
+  StreamSubscription<List<PortfolioItem>>? _portfolioSub;
   List<PortfolioItem> _portfolioItems = [];
   bool _isLoading = true;
   String? _errorMessage;
@@ -29,36 +31,37 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _loadPortfolio();
+    _subscribeToPortfolio();
   }
 
   @override
   void dispose() {
+    _portfolioSub?.cancel();
     _tabController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadPortfolio() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  void _subscribeToPortfolio() {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
 
-    try {
-      final userId = FirebaseAuth.instance.currentUser?.uid;
-      if (userId != null) {
-        final items = await _portfolioService.getUserPortfolio(userId);
+    _portfolioSub = _portfolioService.streamUserPortfolio(userId).listen(
+      (items) {
+        if (!mounted) return;
         setState(() {
           _portfolioItems = items;
           _isLoading = false;
+          _errorMessage = null;
         });
-      }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Error loading portfolio: $e';
-        _isLoading = false;
-      });
-    }
+      },
+      onError: (e) {
+        if (!mounted) return;
+        setState(() {
+          _errorMessage = 'Error loading portfolio: $e';
+          _isLoading = false;
+        });
+      },
+    );
   }
 
   @override
@@ -150,7 +153,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
             Text(_errorMessage!, textAlign: TextAlign.center),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: _loadPortfolio,
+              onPressed: _subscribeToPortfolio,
               child: const Text('Retry'),
             ),
           ],
@@ -159,7 +162,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
     }
 
     return RefreshIndicator(
-      onRefresh: _loadPortfolio,
+      onRefresh: () async {}, // Stream auto-updates
       color: Colors.teal,
       child: CustomScrollView(
         slivers: [
@@ -423,7 +426,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
     );
 
     if (result == true && mounted) {
-      _loadPortfolio(); // Refresh the list
+      // Stream auto-updates
     }
   }
 
@@ -433,6 +436,6 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
       MaterialPageRoute(
         builder: (context) => AddPortfolioItemScreen(portfolioItem: item),
       ),
-    ).then((_) => _loadPortfolio());
+    ).then((_) {}); // Stream auto-updates
   }
 }

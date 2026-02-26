@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -23,6 +24,9 @@ class _JobsScreenState extends State<JobsScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _searchController = TextEditingController();
 
+  StreamSubscription<List<JobModel>>? _jobsSub;
+  StreamSubscription<UserModel?>? _userSub;
+
   List<JobModel> _allJobs = [];
   List<JobModel> _filteredJobs = [];
   UserModel? _currentUser;
@@ -43,38 +47,37 @@ class _JobsScreenState extends State<JobsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _subscribeToData();
   }
 
   @override
   void dispose() {
+    _jobsSub?.cancel();
+    _userSub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-
-    try {
-      final userId = FirebaseAuth.instance.currentUser?.uid;
-      if (userId != null) {
-        _currentUser = await _firestoreService.getUserById(userId);
-      }
-
-      _allJobs = await _firestoreService.getOpenJobs();
-      _applyFilters();
-    } catch (e) {
-      debugPrint('Error loading data: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading jobs: $e')),
-        );
-      }
+  void _subscribeToData() {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId != null) {
+      _userSub = _firestoreService.streamUserModel(userId).listen((user) {
+        if (mounted) setState(() => _currentUser = user);
+      });
     }
 
-    if (mounted) {
-      setState(() => _isLoading = false);
-    }
+    _jobsSub = _firestoreService.streamOpenJobs().listen(
+      (jobs) {
+        if (!mounted) return;
+        _allJobs = jobs;
+        _applyFilters();
+        if (_isLoading) setState(() => _isLoading = false);
+      },
+      onError: (e) {
+        debugPrint('Error streaming jobs: $e');
+        if (mounted && _isLoading) setState(() => _isLoading = false);
+      },
+    );
   }
 
   void _applyFilters() {
@@ -177,15 +180,13 @@ class _JobsScreenState extends State<JobsScreen> {
             IconButton(
               icon: const Icon(Icons.add),
               onPressed: () async {
-                final result = await Navigator.push(
+                await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => const CreateJobScreen(),
                   ),
                 );
-                if (result == true) {
-                  _loadData();
-                }
+                // Stream auto-updates
               },
             ),
         ],
@@ -329,7 +330,7 @@ class _JobsScreenState extends State<JobsScreen> {
           // Jobs List
           Expanded(
             child: RefreshIndicator(
-              onRefresh: _loadData,
+              onRefresh: () async {}, // Stream auto-updates
               color: const Color(0xFF2196F3),
               child: _isLoading
                   ? _buildShimmerLoading()
@@ -460,15 +461,13 @@ class _JobsScreenState extends State<JobsScreen> {
               padding: const EdgeInsets.only(top: 24),
               child: ElevatedButton.icon(
                 onPressed: () async {
-                  final result = await Navigator.push(
+                  await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => const CreateJobScreen(),
                     ),
                   );
-                  if (result == true) {
-                    _loadData();
-                  }
+                  // Stream auto-updates
                 },
                 icon: const Icon(Icons.add),
                 label: const Text('Post a Job'),
@@ -487,16 +486,13 @@ class _JobsScreenState extends State<JobsScreen> {
   }
 
   Future<void> _navigateToJobDetail(JobModel job) async {
-    final result = await Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => JobDetailScreen(job: job),
       ),
     );
 
-    // If job was updated/deleted, reload
-    if (result == true) {
-      _loadData();
-    }
+    // Stream auto-updates
   }
 }

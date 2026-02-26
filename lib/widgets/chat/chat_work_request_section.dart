@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/service_request_model.dart';
-import '../../services/chat_service.dart';
 import '../../services/firestore_service.dart';
 import '../app_popup.dart';
 import '../gpay_simulation_dialog.dart';
@@ -14,6 +13,9 @@ class ChatWorkRequestSection extends StatefulWidget {
   final String otherUserName;
   final bool isCurrentUserCustomer;
   final bool isCurrentUserSkilledPerson;
+  /// Pre-fetched work requests from parent — avoids duplicate Firestore
+  /// listeners and prevents data loss during widget-tree restructuring.
+  final List<ServiceRequestModel>? workRequests;
 
   const ChatWorkRequestSection({
     super.key,
@@ -23,6 +25,7 @@ class ChatWorkRequestSection extends StatefulWidget {
     required this.otherUserName,
     required this.isCurrentUserCustomer,
     required this.isCurrentUserSkilledPerson,
+    this.workRequests,
   });
 
   @override
@@ -42,6 +45,14 @@ class _ChatWorkRequestSectionState extends State<ChatWorkRequestSection> {
 
   @override
   Widget build(BuildContext context) {
+    // If parent provides pre-fetched data, use it directly (no stream needed).
+    // This avoids duplicate Firestore listeners and keeps data stable when
+    // the widget tree restructures (e.g. TabBarView toggle).
+    if (widget.workRequests != null) {
+      return _buildContent(widget.workRequests!);
+    }
+
+    // Fallback: use own stream
     return StreamBuilder<List<ServiceRequestModel>>(
       stream: _requestStream,
       builder: (context, snapshot) {
@@ -52,13 +63,18 @@ class _ChatWorkRequestSectionState extends State<ChatWorkRequestSection> {
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return const SizedBox.shrink();
         }
+        return _buildContent(snapshot.data!);
+      },
+    );
+  }
 
-        final requests = snapshot.data!;
-        // Show active (non-cancelled) requests only
-        final visible = requests
-            .where((r) => r.status != 'cancelled')
-            .toList();
+  Widget _buildContent(List<ServiceRequestModel> requests) {
+        // Show all requests (including completed/rejected) so user can track history
+        final visible = requests.toList();
         if (visible.isEmpty) return const SizedBox.shrink();
+
+        // Show up to 5 inline, rest behind "View all"
+        final inlineCount = visible.length <= 5 ? visible.length : 3;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -71,7 +87,7 @@ class _ChatWorkRequestSectionState extends State<ChatWorkRequestSection> {
                       size: 14, color: Colors.deepPurple),
                   const SizedBox(width: 4),
                   Text(
-                    'Work Requests',
+                    'Work Requests List',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -98,7 +114,7 @@ class _ChatWorkRequestSectionState extends State<ChatWorkRequestSection> {
               ),
             ),
             ...visible
-                .take(3)
+                .take(inlineCount)
                 .map((req) => _WorkRequestCard(
                       request: req,
                       currentUserId: widget.currentUserId,
@@ -108,7 +124,7 @@ class _ChatWorkRequestSectionState extends State<ChatWorkRequestSection> {
                           widget.isCurrentUserSkilledPerson,
                       isCurrentUserCustomer: widget.isCurrentUserCustomer,
                     )),
-            if (visible.length > 3)
+            if (visible.length > inlineCount)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: TextButton(
@@ -123,8 +139,6 @@ class _ChatWorkRequestSectionState extends State<ChatWorkRequestSection> {
             const Divider(height: 1),
           ],
         );
-      },
-    );
   }
 
   void _showAllRequests(
@@ -137,24 +151,36 @@ class _ChatWorkRequestSectionState extends State<ChatWorkRequestSection> {
               BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => DraggableScrollableSheet(
         expand: false,
-        initialChildSize: 0.6,
+        initialChildSize: 0.65,
+        maxChildSize: 0.9,
         builder: (_, sc) => ListView(
           controller: sc,
           padding: const EdgeInsets.all(16),
           children: [
-            const Center(
-              child: Text('All Work Requests',
-                  style: TextStyle(
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Center(
+              child: Text('All Work Requests (${reqs.length})',
+                  style: const TextStyle(
                       fontSize: 16, fontWeight: FontWeight.bold)),
             ),
             const SizedBox(height: 12),
             ...reqs.map((req) => _WorkRequestCard(
                   request: req,
-                  currentUserId: _ChatWorkRequestSectionState._staticCurrentUserId ?? '',
-                  otherUserId: '',
-                  otherUserName: '',
-                  isCurrentUserSkilledPerson: false,
-                  isCurrentUserCustomer: false,
+                  currentUserId: widget.currentUserId,
+                  otherUserId: widget.otherUserId,
+                  otherUserName: widget.otherUserName,
+                  isCurrentUserSkilledPerson: widget.isCurrentUserSkilledPerson,
+                  isCurrentUserCustomer: widget.isCurrentUserCustomer,
                 )),
           ],
         ),
@@ -162,14 +188,6 @@ class _ChatWorkRequestSectionState extends State<ChatWorkRequestSection> {
     );
   }
 
-  // Expose currentUserId for the _showAllRequests helper
-  static String? _staticCurrentUserId;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _staticCurrentUserId = widget.currentUserId;
-  }
 }
 
 class _WorkRequestCard extends StatefulWidget {
@@ -196,7 +214,6 @@ class _WorkRequestCard extends StatefulWidget {
 class _WorkRequestCardState extends State<_WorkRequestCard> {
   bool _loading = false;
   final FirestoreService _svc = FirestoreService();
-  final ChatService _chatSvc = ChatService();
 
   // Remind cooldown: 15 min per request
   static const _remindCooldown = Duration(minutes: 15);

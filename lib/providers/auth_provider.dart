@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
+import '../services/presence_service.dart';
 import '../utils/user_roles.dart';
 
 class AuthProvider with ChangeNotifier {
@@ -85,6 +86,8 @@ class AuthProvider with ChangeNotifier {
         }
       }
       _error = null;
+      // Start online-presence tracking
+      PresenceService.instance.startTracking(uid);
       notifyListeners();
     } catch (e) {
       debugPrint('Error loading user data: $e');
@@ -151,6 +154,7 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    PresenceService.instance.stopTracking();
     await _authService.signOut();
     _currentUser = null;
     notifyListeners();

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
@@ -26,71 +27,91 @@ class ProfileTabScreen extends StatefulWidget {
 
 class _ProfileTabScreenState extends State<ProfileTabScreen> {
   final FirestoreService _firestoreService = FirestoreService();
+  StreamSubscription<UserModel?>? _userSub;
+  StreamSubscription<SkilledUserProfile?>? _skilledSub;
+  StreamSubscription<CustomerProfile?>? _customerSub;
+  StreamSubscription<CompanyProfile?>? _companySub;
   UserModel? _currentUser;
   SkilledUserProfile? _skilledProfile;
-  CustomerProfile? _customerProfile;
-  CompanyProfile? _companyProfile;
   bool _isLoading = true;
   String? _profilePhotoUrl;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _subscribeToUserData();
   }
 
-  Future<void> _loadUserData() async {
-    setState(() => _isLoading = true);
+  @override
+  void dispose() {
+    _userSub?.cancel();
+    _skilledSub?.cancel();
+    _customerSub?.cancel();
+    _companySub?.cancel();
+    super.dispose();
+  }
 
-    try {
-      final userId = FirebaseAuth.instance.currentUser?.uid;
-      if (userId != null) {
-        // Get fresh user data from Firestore
-        _currentUser = await _firestoreService.getUserById(userId);
-        _profilePhotoUrl = _currentUser?.profilePhoto;
+  void _subscribeToUserData() {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
 
-        // Load role-specific profile for photo
-        final role = _currentUser?.role;
-        if (role == UserRoles.skilledPerson) {
-          try {
-            _skilledProfile =
-                await _firestoreService.getSkilledUserProfile(userId);
-            if (_skilledProfile?.profilePicture != null &&
-                _skilledProfile!.profilePicture!.isNotEmpty) {
-              _profilePhotoUrl = _skilledProfile!.profilePicture;
-            }
-          } catch (e) {
-            debugPrint('No skilled profile yet: $e');
-          }
-        } else if (role == UserRoles.customer) {
-          try {
-            _customerProfile =
-                await _firestoreService.getCustomerProfile(userId);
-            if (_customerProfile?.profilePicture != null &&
-                _customerProfile!.profilePicture!.isNotEmpty) {
-              _profilePhotoUrl = _customerProfile!.profilePicture;
-            }
-          } catch (e) {
-            debugPrint('No customer profile yet: $e');
-          }
-        } else if (role == UserRoles.company) {
-          try {
-            _companyProfile = await _firestoreService.getCompanyProfile(userId);
-            if (_companyProfile?.logoUrl != null &&
-                _companyProfile!.logoUrl!.isNotEmpty) {
-              _profilePhotoUrl = _companyProfile!.logoUrl;
-            }
-          } catch (e) {
-            debugPrint('No company profile yet: $e');
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('Error loading user data: $e');
-    }
+    _userSub = _firestoreService.streamUserModel(userId).listen(
+      (user) {
+        if (!mounted) return;
+        setState(() {
+          _currentUser = user;
+          _profilePhotoUrl = user?.profilePhoto;
+          if (_isLoading) _isLoading = false;
+        });
+        // Subscribe to role-specific profile if role is known
+        _subscribeToRoleProfile(userId, user?.role);
+      },
+      onError: (e) {
+        debugPrint('Error streaming user: $e');
+        if (mounted && _isLoading) setState(() => _isLoading = false);
+      },
+    );
+  }
 
-    if (mounted) {
-      setState(() => _isLoading = false);
+  void _subscribeToRoleProfile(String userId, String? role) {
+    // Cancel previous role subscriptions
+    _skilledSub?.cancel();
+    _customerSub?.cancel();
+    _companySub?.cancel();
+
+    if (role == UserRoles.skilledPerson) {
+      _skilledSub =
+          _firestoreService.skilledUserProfileStream(userId).listen((profile) {
+        if (!mounted) return;
+        setState(() {
+          _skilledProfile = profile;
+          if (profile?.profilePicture != null &&
+              profile!.profilePicture!.isNotEmpty) {
+            _profilePhotoUrl = profile.profilePicture;
+          }
+        });
+      });
+    } else if (role == UserRoles.customer) {
+      _customerSub =
+          _firestoreService.customerProfileStream(userId).listen((profile) {
+        if (!mounted) return;
+        setState(() {
+          if (profile?.profilePicture != null &&
+              profile!.profilePicture!.isNotEmpty) {
+            _profilePhotoUrl = profile.profilePicture;
+          }
+        });
+      });
+    } else if (role == UserRoles.company) {
+      _companySub =
+          _firestoreService.companyProfileStream(userId).listen((profile) {
+        if (!mounted) return;
+        setState(() {
+          if (profile?.logoUrl != null && profile!.logoUrl!.isNotEmpty) {
+            _profilePhotoUrl = profile.logoUrl;
+          }
+        });
+      });
     }
   }
 
@@ -139,7 +160,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
       body: RefreshIndicator(
-        onRefresh: _loadUserData,
+        onRefresh: () async {}, // Stream auto-updates
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
@@ -353,7 +374,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                                           userId: _currentUser!.uid),
                                     ),
                                   );
-                                  _loadUserData();
+                                  // Stream auto-updates
                                 },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
@@ -433,7 +454,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                                     MaterialPageRoute(
                                         builder: (_) => editScreen),
                                   );
-                                  _loadUserData();
+                                  // Stream auto-updates
                                 },
                               ),
                             ],

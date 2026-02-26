@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
@@ -26,6 +27,8 @@ class _ShopScreenState extends State<ShopScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+
+  StreamSubscription<List<ProductModel>>? _productsSub;
 
   List<ProductModel> _allProducts = [];
   List<ProductModel> _filteredProducts = [];
@@ -65,39 +68,40 @@ class _ShopScreenState extends State<ShopScreen> {
   @override
   void initState() {
     super.initState();
-    _loadProducts();
+    _subscribeToProducts();
   }
 
   @override
   void dispose() {
+    _productsSub?.cancel();
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadProducts() async {
-    setState(() => _isLoading = true);
-    try {
-      _allProducts = await _firestoreService.getAllProducts();
-      // Featured = top rated, in stock
-      _featuredProducts = _allProducts
-          .where((p) => p.isAvailable && p.rating >= 4.0 && p.stock > 0)
-          .toList()
-        ..sort((a, b) => b.rating.compareTo(a.rating));
-      if (_featuredProducts.isEmpty) {
-        _featuredProducts = _allProducts.take(5).toList();
-      } else {
-        _featuredProducts = _featuredProducts.take(5).toList();
-      }
-      _applyFilters();
-    } catch (e) {
-      debugPrint('Error loading products: $e');
-      if (mounted) {
-        AppPopup.show(context,
-            message: 'Error loading products: $e', type: PopupType.error);
-      }
-    }
-    if (mounted) setState(() => _isLoading = false);
+  void _subscribeToProducts() {
+    _productsSub = _firestoreService.streamAllProducts().listen(
+      (products) {
+        if (!mounted) return;
+        _allProducts = products;
+        // Featured = top rated, in stock
+        _featuredProducts = _allProducts
+            .where((p) => p.isAvailable && p.rating >= 4.0 && p.stock > 0)
+            .toList()
+          ..sort((a, b) => b.rating.compareTo(a.rating));
+        if (_featuredProducts.isEmpty) {
+          _featuredProducts = _allProducts.take(5).toList();
+        } else {
+          _featuredProducts = _featuredProducts.take(5).toList();
+        }
+        _applyFilters();
+        if (_isLoading) setState(() => _isLoading = false);
+      },
+      onError: (e) {
+        debugPrint('Error streaming products: $e');
+        if (mounted && _isLoading) setState(() => _isLoading = false);
+      },
+    );
   }
 
   void _applyFilters() {
@@ -129,12 +133,12 @@ class _ShopScreenState extends State<ShopScreen> {
   }
 
   Future<void> _navigateToProductDetail(ProductModel product) async {
-    final result = await Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(
           builder: (context) => ProductDetailScreen(product: product)),
     );
-    if (result == true) _loadProducts();
+    // Stream auto-updates, no need to manually reload
   }
 
   Future<void> _handleAddProduct(BuildContext context) async {
@@ -182,9 +186,9 @@ class _ShopScreenState extends State<ShopScreen> {
       return;
     }
     if (!context.mounted) return;
-    final result = await Navigator.push(
+    await Navigator.push(
         context, MaterialPageRoute(builder: (_) => const AddProductScreen()));
-    if (result == true) _loadProducts();
+    // Stream auto-updates, no need to manually reload
   }
 
   @override
@@ -200,7 +204,7 @@ class _ShopScreenState extends State<ShopScreen> {
             pinned: true,
             floating: true,
             snap: true,
-            expandedHeight: 120,
+            expandedHeight: 130,
             backgroundColor: AppTheme.primaryPurple,
             foregroundColor: Colors.white,
             elevation: 0,
@@ -216,7 +220,7 @@ class _ShopScreenState extends State<ShopScreen> {
                 ),
                 child: SafeArea(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -274,13 +278,20 @@ class _ShopScreenState extends State<ShopScreen> {
                             ],
                           ],
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 10),
                         // Search bar
                         Container(
-                          height: 42,
+                          height: 44,
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.1),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
                           child: TextField(
                             controller: _searchController,
@@ -338,24 +349,24 @@ class _ShopScreenState extends State<ShopScreen> {
           // ── Products grid / loading ──
           if (_isLoading)
             SliverToBoxAdapter(child: _buildShimmerLoading())
-          else if (_filteredProducts.isEmpty)
+          else if (_gridProducts.isEmpty)
             SliverToBoxAdapter(child: _buildEmptyState())
           else
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 16),
+              padding: const EdgeInsets.fromLTRB(10, 4, 10, 16),
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  childAspectRatio: 0.70,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
+                  childAspectRatio: 0.56,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
                 ),
                 delegate: SliverChildBuilderDelegate(
                   (context, index) => ProductCard(
-                    product: _filteredProducts[index],
-                    onTap: () => _navigateToProductDetail(_filteredProducts[index]),
+                    product: _gridProducts[index],
+                    onTap: () => _navigateToProductDetail(_gridProducts[index]),
                   ),
-                  childCount: _filteredProducts.length,
+                  childCount: _gridProducts.length,
                 ),
               ),
             ),
@@ -498,13 +509,13 @@ class _ShopScreenState extends State<ShopScreen> {
                       color: AppTheme.textPrimary)),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           SizedBox(
-            height: 180,
+            height: 155,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: _featuredProducts.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (context, i) =>
                   _FeaturedCard(product: _featuredProducts[i],
                     onTap: () => _navigateToProductDetail(_featuredProducts[i])),
@@ -515,13 +526,24 @@ class _ShopScreenState extends State<ShopScreen> {
     );
   }
 
+  /// Products for the grid — excludes featured products to avoid repetition
+  List<ProductModel> get _gridProducts {
+    if (_searchQuery.isNotEmpty || _selectedCategory != 'All' || _featuredProducts.isEmpty) {
+      return _filteredProducts;
+    }
+    final featuredIds = _featuredProducts.map((p) => p.id).toSet();
+    final nonFeatured = _filteredProducts.where((p) => !featuredIds.contains(p.id)).toList();
+    return nonFeatured;
+  }
+
   Widget _buildResultsHeader() {
+    final products = _gridProducts;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
       child: Row(
         children: [
           Text(
-            '${_filteredProducts.length} ${_filteredProducts.length == 1 ? 'result' : 'results'}',
+            '${products.length} ${products.length == 1 ? 'result' : 'results'}',
             style: const TextStyle(
                 fontSize: 13,
                 color: Color(0xFF555555),
@@ -603,6 +625,8 @@ class _ShopScreenState extends State<ShopScreen> {
   }
 
   Widget _buildEmptyState() {
+    final isFiltered = _searchQuery.isNotEmpty || _selectedCategory != 'All';
+    final hasAnyProducts = _allProducts.isNotEmpty;
     return Container(
       height: 300,
       alignment: Alignment.center,
@@ -610,17 +634,21 @@ class _ShopScreenState extends State<ShopScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            _searchQuery.isNotEmpty || _selectedCategory != 'All'
+            isFiltered
                 ? Icons.search_off_rounded
-                : Icons.shopping_bag_outlined,
-            size: 72,
+                : hasAnyProducts
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.storefront_rounded,
+            size: 64,
             color: Colors.grey[300],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           Text(
-            _searchQuery.isNotEmpty || _selectedCategory != 'All'
+            isFiltered
                 ? 'No products found'
-                : 'Shop is empty',
+                : hasAnyProducts
+                    ? 'All products shown above'
+                    : 'Products coming soon!',
             style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
@@ -628,9 +656,11 @@ class _ShopScreenState extends State<ShopScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            _searchQuery.isNotEmpty || _selectedCategory != 'All'
+            isFiltered
                 ? 'Try different search terms or category'
-                : 'Be the first to add a product!',
+                : hasAnyProducts
+                    ? 'Check out the featured section above'
+                    : 'Skilled persons will add products here soon. Stay tuned!',
             style: TextStyle(fontSize: 13, color: Colors.grey[500]),
             textAlign: TextAlign.center,
           ),
@@ -651,7 +681,7 @@ class _FeaturedCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 150,
+        width: 130,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(10),
@@ -670,7 +700,7 @@ class _FeaturedCard extends StatelessWidget {
             Stack(
               children: [
                 SizedBox(
-                  height: 100,
+                  height: 85,
                   width: double.infinity,
                   child: product.images.isNotEmpty
                       ? WebImageLoader.loadImage(

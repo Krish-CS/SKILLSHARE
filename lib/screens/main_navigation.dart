@@ -6,6 +6,7 @@ import '../providers/auth_provider.dart';
 import '../utils/app_constants.dart';
 import '../utils/user_roles.dart';
 import '../services/firestore_service.dart';
+import '../services/chat_service.dart';
 import 'home/home_screen.dart';
 import 'jobs/jobs_screen.dart';
 import 'shop/shop_screen.dart';
@@ -27,6 +28,7 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
   final FirestoreService _firestoreService = FirestoreService();
+  final ChatService _chatService = ChatService();
 
   // ── In-app notification banners ─────────────────────────────────────────
   StreamSubscription<QuerySnapshot>? _notifSub;
@@ -174,18 +176,22 @@ class _MainNavigationState extends State<MainNavigation> {
     );
   }
 
-  /// Wraps the cart nav item with a badge showing item count for customers
+  /// Wraps nav items with badges (cart count for customers, unread chats for all)
   List<BottomNavigationBarItem> _buildNavItemsWithBadges(
     List<BottomNavigationBarItem> items,
     String role,
     String? userId,
   ) {
-    if (role != UserRoles.customer || userId == null) return items;
+    if (userId == null) return items;
 
-    // Find cart index (index 2 for customer: Home, Shop, Cart, Chats, Profile)
+    // Chat tab index per role
+    final chatIndex = _getChatTabIndex(role);
+    // Cart tab index (only for customers)
+    const cartIndex = 2; // customer: Home, Shop, Cart, Chats, Profile
+
     return List.generate(items.length, (i) {
-      if (i == 2) {
-        // Cart tab for customer
+      // Cart badge — customer only
+      if (i == cartIndex && role == UserRoles.customer) {
         return BottomNavigationBarItem(
           icon: StreamBuilder<List<dynamic>>(
             stream: _firestoreService.streamCartItems(userId),
@@ -196,41 +202,80 @@ class _MainNavigationState extends State<MainNavigation> {
               if (count <= 0) {
                 return const Icon(Icons.shopping_cart);
               }
-              return Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  const Icon(Icons.shopping_cart),
-                  Positioned(
-                    right: -6,
-                    top: -6,
-                    child: Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: const BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints:
-                          const BoxConstraints(minWidth: 16, minHeight: 16),
-                      child: Text(
-                        count > 9 ? '9+' : '$count',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-                ],
-              );
+              return _badgeIcon(Icons.shopping_cart, count);
             },
           ),
           label: 'Cart',
         );
       }
+
+      // Chat badge — all roles
+      if (i == chatIndex) {
+        return BottomNavigationBarItem(
+          icon: StreamBuilder<List<dynamic>>(
+            stream: _chatService.getUserChats(userId),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const Icon(Icons.chat);
+              final chats = snapshot.data!;
+              int totalUnread = 0;
+              for (final chat in chats) {
+                final unread = (chat as dynamic).unreadCount;
+                if (unread is Map) {
+                  totalUnread += (unread[userId] as int?) ?? 0;
+                }
+              }
+              if (totalUnread <= 0) return const Icon(Icons.chat);
+              return _badgeIcon(Icons.chat, totalUnread);
+            },
+          ),
+          label: 'Chats',
+        );
+      }
+
       return items[i];
     });
+  }
+
+  /// Returns the index of the Chats tab for each user role.
+  int _getChatTabIndex(String role) {
+    switch (role) {
+      case UserRoles.customer:    return 3; // Home, Shop, Cart, *Chats*, Profile
+      case UserRoles.company:     return 3; // Home, Jobs, Shop, *Chats*, Profile
+      case UserRoles.skilledPerson: return 3; // Home, Portfolio, MyShop, *Chats*, Profile
+      case UserRoles.deliveryPartner: return 1; // Deliveries, *Chats*, Profile
+      default:                    return 3;
+    }
+  }
+
+  /// Builds an icon with a red circular badge.
+  Widget _badgeIcon(IconData icon, int count) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Icon(icon),
+        Positioned(
+          right: -6,
+          top: -6,
+          child: Container(
+            padding: const EdgeInsets.all(3),
+            decoration: const BoxDecoration(
+              color: Colors.red,
+              shape: BoxShape.circle,
+            ),
+            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+            child: Text(
+              count > 99 ? '99+' : '$count',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   /// Returns screens based on user role
@@ -336,88 +381,100 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   Color _getGradientColor(int currentIndex, int position, String role) {
-    // Delivery partner uses orange gradient
+    // Delivery partner
     if (role == UserRoles.deliveryPartner) {
-      return position < 2
-          ? const Color(0xFFFF6B35)
-          : const Color(0xFFFF8E53);
+      switch (currentIndex) {
+        case 0: // Deliveries (orange AppBar)
+          return position < 2
+              ? const Color(0xFFFF6B35)
+              : const Color(0xFFFF8E53);
+        case 1: // Chats (purple→pink AppBar)
+          return position < 2
+              ? const Color(0xFF9C27B0)
+              : const Color(0xFFE91E63);
+        case 2: // Profile (purple→purple→pink AppBar)
+          return position < 2
+              ? const Color(0xFF6A0DAD)
+              : const Color(0xFFE91E63);
+        default:
+          return const Color(0xFFFF6B35);
+      }
     }
 
-    // Different color schemes based on role
     if (role == UserRoles.skilledPerson) {
-      // Green/teal gradient for skilled persons
+      // Skilled person: Home, Portfolio, My Shop, Chats, Profile
       switch (currentIndex) {
-        case 0: // Home
+        case 0: // Home (purple→blue AppBar)
           return position < 2
-              ? const Color(0xFF4CAF50)
-              : const Color(0xFF009688);
-        case 1: // Portfolio
+              ? const Color(0xFF6A11CB)
+              : const Color(0xFF2575FC);
+        case 1: // Portfolio (purple→blue AppBar)
           return position < 2
-              ? const Color(0xFF009688)
-              : const Color(0xFF00BCD4);
-        case 2: // My Shop
+              ? const Color(0xFF6A11CB)
+              : const Color(0xFF2575FC);
+        case 2: // My Shop (pink→orange AppBar)
           return position < 2
-              ? const Color(0xFFFF9800)
-              : const Color(0xFFFF5722);
-        case 3: // Chats
+              ? const Color(0xFFE91E63)
+              : const Color(0xFFFF9800);
+        case 3: // Chats (purple→pink AppBar)
           return position < 2
               ? const Color(0xFF9C27B0)
               : const Color(0xFFE91E63);
-        case 4: // Profile
+        case 4: // Profile (purple→purple→pink AppBar)
           return position < 2
-              ? const Color(0xFF4CAF50)
-              : const Color(0xFF009688);
+              ? const Color(0xFF6A0DAD)
+              : const Color(0xFFE91E63);
         default:
-          return const Color(0xFF4CAF50);
+          return const Color(0xFF6A11CB);
       }
     } else if (role == UserRoles.company) {
-      // Blue/indigo gradient for companies
+      // Company: Home, Jobs, Shop, Chats, Profile
       switch (currentIndex) {
-        case 0: // Home
+        case 0: // Home (purple→blue AppBar)
           return position < 2
-              ? const Color(0xFF3F51B5)
-              : const Color(0xFF2196F3);
-        case 1: // Jobs
+              ? const Color(0xFF6A11CB)
+              : const Color(0xFF2575FC);
+        case 1: // Jobs (blue→cyan AppBar)
           return position < 2
               ? const Color(0xFF2196F3)
               : const Color(0xFF00BCD4);
-        case 2: // Shop
-          return position < 2
-              ? const Color(0xFFE91E63)
-              : const Color(0xFFFF9800);
-        case 3: // Chats
+        case 2: // Shop (purple→pink AppBar)
           return position < 2
               ? const Color(0xFF9C27B0)
               : const Color(0xFFE91E63);
-        case 4: // Profile
+        case 3: // Chats (purple→pink AppBar)
           return position < 2
-              ? const Color(0xFF3F51B5)
-              : const Color(0xFF2196F3);
+              ? const Color(0xFF9C27B0)
+              : const Color(0xFFE91E63);
+        case 4: // Profile (purple→purple→pink AppBar)
+          return position < 2
+              ? const Color(0xFF6A0DAD)
+              : const Color(0xFFE91E63);
         default:
-          return const Color(0xFF3F51B5);
+          return const Color(0xFF6A11CB);
       }
     } else {
-      // Purple/pink gradient for customers (Home, Shop, Cart, Chats, Profile)
+      // Customer: Home, Shop, Cart, Chats, Profile
       switch (currentIndex) {
-        case 0: // Home
+        case 0: // Home (purple→blue AppBar)
+          return position < 2
+              ? const Color(0xFF6A11CB)
+              : const Color(0xFF2575FC);
+        case 1: // Shop (purple→pink AppBar)
           return position < 2
               ? const Color(0xFF9C27B0)
               : const Color(0xFFE91E63);
-        case 1: // Shop
-          return position < 2
-              ? const Color(0xFF2196F3)
-              : const Color(0xFF00BCD4);
-        case 2: // Cart
+        case 2: // Cart (pink→orange AppBar)
           return position < 2
               ? const Color(0xFFE91E63)
               : const Color(0xFFFF9800);
-        case 3: // Chats
+        case 3: // Chats (purple→pink AppBar)
           return position < 2
               ? const Color(0xFF9C27B0)
               : const Color(0xFFE91E63);
-        case 4: // Profile
+        case 4: // Profile (purple→purple→pink AppBar)
           return position < 2
-              ? const Color(0xFF9C27B0)
+              ? const Color(0xFF6A0DAD)
               : const Color(0xFFE91E63);
         default:
           return const Color(0xFF9C27B0);

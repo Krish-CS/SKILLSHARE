@@ -10,6 +10,7 @@ import '../../models/service_request_model.dart';
 import '../../services/chat_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/cloudinary_service.dart';
+import '../../services/presence_service.dart';
 import '../../utils/app_helpers.dart';
 import '../../utils/web_image_loader.dart';
 import '../../utils/user_roles.dart';
@@ -53,6 +54,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   bool _workLocked = false;
   List<ServiceRequestModel> _pendingRequests = [];
   List<ServiceRequestModel> _acceptedRequests = [];
+  List<ServiceRequestModel> _allWorkRequests = [];
   StreamSubscription<List<ServiceRequestModel>>? _workReqSubscription;
 
   // Tab controller (used when work is accepted)
@@ -82,6 +84,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       final accepted =
           requests.where((r) => r.status == 'accepted').toList();
       setState(() {
+        _allWorkRequests = requests;
         _pendingRequests = pending;
         _acceptedRequests = accepted;
         _workLocked = accepted.isNotEmpty;
@@ -330,14 +333,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   }
 
   void _showTaskMonitoringSheet(BuildContext context) {
-    final allRequests = [..._pendingRequests, ..._acceptedRequests];
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => DraggableScrollableSheet(
         expand: false,
-        initialChildSize: 0.55,
+        initialChildSize: 0.6,
         maxChildSize: 0.9,
         builder: (_, sc) => Container(
           decoration: const BoxDecoration(
@@ -345,95 +347,129 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(20)),
           ),
-          child: Column(
-            children: [
-              // Handle
-              Center(
-                child: Container(
-                  margin: const EdgeInsets.only(top: 10, bottom: 6),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              // Header
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 8),
-                child: Row(
-                  children: [
-                    const Icon(Icons.format_list_bulleted,
-                        color: Colors.teal, size: 20),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Work Requests List',
-                      style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold),
+          child: StreamBuilder<List<ServiceRequestModel>>(
+            stream: _firestoreService.streamChatWorkRequests(widget.chatId),
+            builder: (context, snapshot) {
+              final allRequests = snapshot.data ?? [];
+              // Group by status
+              final pending = allRequests.where((r) => r.status == 'pending').toList();
+              final accepted = allRequests.where((r) => r.status == 'accepted').toList();
+              final completed = allRequests.where((r) => r.status == 'completed').toList();
+              final rejected = allRequests.where((r) => r.status == 'rejected').toList();
+              final cancelled = allRequests.where((r) => r.status == 'cancelled').toList();
+
+              return Column(
+                children: [
+                  // Handle
+                  Center(
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 10, bottom: 6),
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
-                    const Spacer(),
-                    if (allRequests.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.teal.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
+                  ),
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.format_list_bulleted,
+                            color: Colors.teal, size: 20),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Work Requests List',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold),
                         ),
-                        child: Text(
-                          '${allRequests.length} request${allRequests.length != 1 ? 's' : ''}',
-                          style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.teal,
-                              fontWeight: FontWeight.w600),
+                        const Spacer(),
+                        if (allRequests.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.teal.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '${allRequests.length} request${allRequests.length != 1 ? 's' : ''}',
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.teal,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  if (allRequests.isEmpty)
+                    const Expanded(
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.assignment_outlined,
+                                size: 48, color: Colors.grey),
+                            SizedBox(height: 12),
+                            Text('No work requests yet',
+                                style: TextStyle(
+                                    color: Colors.grey, fontSize: 15)),
+                          ],
                         ),
                       ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              if (allRequests.isEmpty)
-                const Expanded(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.assignment_outlined,
-                            size: 48, color: Colors.grey),
-                        SizedBox(height: 12),
-                        Text('No active requests',
-                            style: TextStyle(
-                                color: Colors.grey, fontSize: 15)),
-                      ],
+                    )
+                  else
+                    Expanded(
+                      child: ListView(
+                        controller: sc,
+                        padding: const EdgeInsets.all(12),
+                        children: [
+                          if (pending.isNotEmpty) ...[
+                            _monitoringSectionLabel(
+                                'Pending', Colors.orange, Icons.hourglass_top),
+                            ...pending.map((r) =>
+                                _monitoringTaskTile(r)),
+                            const SizedBox(height: 8),
+                          ],
+                          if (accepted.isNotEmpty) ...[
+                            _monitoringSectionLabel(
+                                'In Progress', Colors.green, Icons.work),
+                            ...accepted.map((r) =>
+                                _monitoringTaskTile(r)),
+                            const SizedBox(height: 8),
+                          ],
+                          if (completed.isNotEmpty) ...[
+                            _monitoringSectionLabel(
+                                'Completed', Colors.blue, Icons.done_all),
+                            ...completed.map((r) =>
+                                _monitoringTaskTile(r)),
+                            const SizedBox(height: 8),
+                          ],
+                          if (rejected.isNotEmpty) ...[
+                            _monitoringSectionLabel(
+                                'Rejected', Colors.red, Icons.close),
+                            ...rejected.map((r) =>
+                                _monitoringTaskTile(r)),
+                            const SizedBox(height: 8),
+                          ],
+                          if (cancelled.isNotEmpty) ...[
+                            _monitoringSectionLabel(
+                                'Cancelled', Colors.grey, Icons.block),
+                            ...cancelled.map((r) =>
+                                _monitoringTaskTile(r)),
+                          ],
+                        ],
+                      ),
                     ),
-                  ),
-                )
-              else
-                Expanded(
-                  child: ListView(
-                    controller: sc,
-                    padding: const EdgeInsets.all(12),
-                    children: [
-                      if (_pendingRequests.isNotEmpty) ...[
-                        _monitoringSectionLabel(
-                            'Pending', Colors.orange, Icons.hourglass_top),
-                        ..._pendingRequests.map((r) =>
-                            _monitoringTaskTile(r)),
-                        const SizedBox(height: 8),
-                      ],
-                      if (_acceptedRequests.isNotEmpty) ...[
-                        _monitoringSectionLabel(
-                            'In Progress', Colors.green, Icons.work),
-                        ..._acceptedRequests.map((r) =>
-                            _monitoringTaskTile(r)),
-                      ],
-                    ],
-                  ),
-                ),
-            ],
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -462,7 +498,41 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   Widget _monitoringTaskTile(ServiceRequestModel r) {
     final isPending = r.status == 'pending';
-    final statusColor = isPending ? Colors.orange : Colors.green;
+    final isAccepted = r.status == 'accepted';
+    final isCompleted = r.status == 'completed';
+    final isRejected = r.status == 'rejected';
+    final isCancelled = r.status == 'cancelled';
+    
+    Color statusColor;
+    String statusLabel;
+    IconData statusIcon;
+    
+    if (isPending) {
+      statusColor = Colors.orange;
+      statusLabel = 'Pending';
+      statusIcon = Icons.hourglass_empty;
+    } else if (isAccepted) {
+      statusColor = Colors.green;
+      statusLabel = 'Active';
+      statusIcon = Icons.work_outline;
+    } else if (isCompleted) {
+      statusColor = Colors.blue;
+      statusLabel = 'Completed';
+      statusIcon = Icons.done_all;
+    } else if (isRejected) {
+      statusColor = Colors.red;
+      statusLabel = 'Rejected';
+      statusIcon = Icons.close;
+    } else if (isCancelled) {
+      statusColor = Colors.grey;
+      statusLabel = 'Cancelled';
+      statusIcon = Icons.block;
+    } else {
+      statusColor = Colors.grey;
+      statusLabel = r.status;
+      statusIcon = Icons.info_outline;
+    }
+    
     final isMyRequest = r.customerId == _currentUserId;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -477,7 +547,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           Row(
             children: [
               Icon(
-                isPending ? Icons.hourglass_empty : Icons.work_outline,
+                statusIcon,
                 size: 18,
                 color: statusColor,
               ),
@@ -510,7 +580,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  isPending ? 'Pending' : 'Active',
+                  statusLabel,
                   style: TextStyle(
                       fontSize: 10,
                       color: statusColor,
@@ -880,45 +950,86 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: Row(
-            children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundImage:
-                    WebImageLoader.getImageProvider(widget.otherUserPhoto),
-                child: widget.otherUserPhoto == null ||
-                        widget.otherUserPhoto!.isEmpty
-                    ? Text(
-                        widget.otherUserName.isNotEmpty
-                            ? widget.otherUserName[0].toUpperCase()
-                            : 'U',
-                        style: const TextStyle(fontSize: 16),
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      widget.otherUserName,
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 17),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (_workLocked)
-                      const Text(
-                        'Work in progress',
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.white70),
+          title: StreamBuilder<UserPresence>(
+            stream: PresenceService.instance.watchUser(widget.otherUserId),
+            builder: (context, presSnap) {
+              final presence = presSnap.data;
+              final isOnline = presence?.isOnline ?? false;
+              final lastSeen = presence?.lastSeen;
+
+              String subtitle;
+              if (_workLocked) {
+                subtitle = 'Work in progress';
+              } else if (isOnline) {
+                subtitle = 'Online';
+              } else if (lastSeen != null) {
+                subtitle = 'Last seen ${AppHelpers.getRelativeTime(lastSeen)}';
+              } else {
+                subtitle = 'Offline';
+              }
+
+              return Row(
+                children: [
+                  Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundImage:
+                            WebImageLoader.getImageProvider(widget.otherUserPhoto),
+                        child: widget.otherUserPhoto == null ||
+                                widget.otherUserPhoto!.isEmpty
+                            ? Text(
+                                widget.otherUserName.isNotEmpty
+                                    ? widget.otherUserName[0].toUpperCase()
+                                    : 'U',
+                                style: const TextStyle(fontSize: 16),
+                              )
+                            : null,
                       ),
-                  ],
-                ),
-              ),
-            ],
+                      // Online dot on avatar
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: isOnline ? Colors.green : Colors.grey,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 1.5),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          widget.otherUserName,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 17),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isOnline && !_workLocked
+                                ? Colors.greenAccent[100]
+                                : Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           actions: [
             // Work Requests List icon — visible to all participants
@@ -1086,6 +1197,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             otherUserName: widget.otherUserName,
             isCurrentUserCustomer: isCustomer || isCompany,
             isCurrentUserSkilledPerson: isSkilledPerson,
+            workRequests: _allWorkRequests,
           ),
 
         // Lock banner
@@ -2260,7 +2372,7 @@ class _AskWorkSheetState extends State<_AskWorkSheet> {
         description: _descController.text.trim(),
       );
       if (mounted) Navigator.pop(context);
-      if (mounted) {
+      if (mounted && parentCtx.mounted) {
         AppPopup.show(parentCtx,
             message: 'Work request sent. Waiting for approval.',
             type: PopupType.success);
@@ -2268,8 +2380,10 @@ class _AskWorkSheetState extends State<_AskWorkSheet> {
     } catch (e) {
       if (mounted) {
         setState(() => _submitting = false);
-        AppPopup.show(parentCtx,
-            message: 'Error: $e', type: PopupType.error);
+        if (parentCtx.mounted) {
+          AppPopup.show(parentCtx,
+              message: 'Error: $e', type: PopupType.error);
+        }
       }
     }
   }

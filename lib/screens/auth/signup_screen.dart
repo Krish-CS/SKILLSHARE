@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../utils/app_constants.dart';
+import '../../widgets/google_g_logo.dart';
 import '../main_navigation.dart';
 import '../profile/skilled_user_setup_screen.dart';
 import '../profile/customer_setup_screen.dart';
@@ -42,8 +43,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     
+    // Smart email: append @gmail.com if user typed plain name
+    String email = _emailController.text.trim();
+    if (!email.contains('@')) {
+      email = '$email@gmail.com';
+    }
+
     final success = await authProvider.signUp(
-      email: _emailController.text.trim(),
+      email: email,
       password: _passwordController.text,
       name: _nameController.text.trim(),
       role: _selectedRole,
@@ -134,14 +141,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Email',
                     prefixIcon: Icon(Icons.email_outlined),
+                    hintText: 'username@gmail.com',
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please enter your email';
                     }
-                    if (!value.contains('@')) {
-                      return 'Please enter a valid email';
-                    }
+                    // Accept plain username (we append @gmail.com)
                     return null;
                   },
                 ),
@@ -193,7 +199,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     prefixIcon: const Icon(Icons.lock_outlined),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                        _obscurePassword
+                            ? Icons.visibility_off_rounded
+                            : Icons.visibility_rounded,
+                        color: _obscurePassword
+                            ? Colors.grey[400]
+                            : const Color(0xFF6A11CB),
                       ),
                       onPressed: () {
                         setState(() {
@@ -222,7 +233,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     prefixIcon: const Icon(Icons.lock_outlined),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscureConfirmPassword ? Icons.visibility : Icons.visibility_off,
+                        _obscureConfirmPassword
+                            ? Icons.visibility_off_rounded
+                            : Icons.visibility_rounded,
+                        color: _obscureConfirmPassword
+                            ? Colors.grey[400]
+                            : const Color(0xFF6A11CB),
                       ),
                       onPressed: () {
                         setState(() {
@@ -321,13 +337,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         ),
                         backgroundColor: Colors.white,
                       ),
-                      icon: Image.network(
-                        'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
-                        height: 22,
-                        width: 22,
-                        errorBuilder: (_, __, ___) =>
-                            const Icon(Icons.g_mobiledata, size: 24, color: Color(0xFF4285F4)),
-                      ),
+                      icon: const GoogleGLogo(size: 22),
                       label: const Text(
                         'Continue with Google',
                         style: TextStyle(

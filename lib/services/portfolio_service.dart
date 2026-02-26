@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/portfolio_model.dart';
+import '../models/company_profile.dart';
 import '../utils/app_constants.dart';
 
 /// Portfolio Service
@@ -256,6 +257,16 @@ class PortfolioService {
   }
 
   /// Get all public portfolio items (for browsing by customers/companies)
+
+  /// Real-time stream of portfolio items for a user.
+  Stream<List<PortfolioItem>> streamUserPortfolio(String userId) {
+    return _firestore
+        .collection(_portfolioCollection)
+        .where('userId', isEqualTo: userId)
+        .snapshots()
+        .asyncMap((_) => getUserPortfolio(userId));
+  }
+
   Future<List<PortfolioItem>> getPublicPortfolioItems({
     String? category,
     List<String>? tags,

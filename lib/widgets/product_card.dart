@@ -42,7 +42,7 @@ class ProductCard extends StatelessWidget {
           children: [
             // ── Product Image ──
             Expanded(
-              flex: 5,
+              flex: 6,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -119,9 +119,9 @@ class ProductCard extends StatelessWidget {
 
             // ── Info section ──
             Expanded(
-              flex: 4,
+              flex: 5,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -132,12 +132,12 @@ class ProductCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
-                        fontSize: 12,
+                        fontSize: 14,
                         color: AppTheme.textPrimary,
                         height: 1.3,
                       ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 4),
 
                     // Rating row
                     if (product.reviewCount > 0)
@@ -150,14 +150,14 @@ class ProductCard extends StatelessWidget {
                                   ? Icons.star_rounded
                                   : Icons.star_outline_rounded,
                               color: Colors.amber,
-                              size: 11,
+                              size: 13,
                             ),
                           ),
                           const SizedBox(width: 3),
                           Text(
                             '(${product.reviewCount})',
                             style: const TextStyle(
-                                fontSize: 9, color: AppTheme.textSecondary),
+                                fontSize: 10, color: AppTheme.textSecondary),
                           ),
                         ],
                       )
@@ -172,10 +172,10 @@ class ProductCard extends StatelessWidget {
                       style: const TextStyle(
                         color: AppTheme.primaryPink,
                         fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                        fontSize: 17,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
 
                     // Stock indicator
                     if (inStock && product.stock <= 5)
@@ -185,7 +185,7 @@ class ProductCard extends StatelessWidget {
                           'Only ${product.stock} left',
                           style: const TextStyle(
                               fontSize: 10,
-                              color: Color(0xFFCC0C39),
+                              color: AppTheme.primaryPink,
                               fontWeight: FontWeight.w500),
                         ),
                       ),
@@ -193,7 +193,7 @@ class ProductCard extends StatelessWidget {
                     // Add to Cart button
                     SizedBox(
                       width: double.infinity,
-                      height: 28,
+                      height: 32,
                       child: ElevatedButton(
                         onPressed: inStock ? onTap : null,
                         style: ElevatedButton.styleFrom(
@@ -208,7 +208,7 @@ class ProductCard extends StatelessWidget {
                         child: Text(
                           inStock ? 'View' : 'Out of Stock',
                           style: const TextStyle(
-                              fontSize: 11, fontWeight: FontWeight.bold),
+                              fontSize: 12, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),

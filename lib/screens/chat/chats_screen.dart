@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/chat_model.dart';
 import '../../services/chat_service.dart';
+import '../../services/presence_service.dart';
 import '../../utils/app_helpers.dart';
 import '../../utils/web_image_loader.dart';
 import 'chat_detail_screen.dart';
@@ -242,45 +243,66 @@ class _ChatsScreenState extends State<ChatsScreen> {
         child: Row(
           children: [
             // Profile Photo
-            Stack(
-              children: [
-                CircleAvatar(
-                  radius: 28,
-                  backgroundImage: WebImageLoader.getImageProvider(photo),
-                  child: photo == null || photo.isEmpty
-                      ? Text(
-                          name.isNotEmpty ? name[0].toUpperCase() : 'U',
-                          style: const TextStyle(fontSize: 24),
-                        )
-                      : null,
-                ),
-                if (unreadCount > 0)
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFE91E63),
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 20,
-                        minHeight: 20,
-                      ),
-                      child: Center(
-                        child: Text(
-                          unreadCount > 99 ? '99+' : unreadCount.toString(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
+            StreamBuilder<UserPresence>(
+              stream: PresenceService.instance.watchUser(otherUserId),
+              builder: (context, presenceSnap) {
+                final isOnline = presenceSnap.data?.isOnline ?? false;
+                return Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 28,
+                      backgroundImage: WebImageLoader.getImageProvider(photo),
+                      child: photo == null || photo.isEmpty
+                          ? Text(
+                              name.isNotEmpty ? name[0].toUpperCase() : 'U',
+                              style: const TextStyle(fontSize: 24),
+                            )
+                          : null,
+                    ),
+                    // Online indicator dot
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: isOnline ? Colors.green : Colors.grey,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                    // Unread badge
+                    if (unreadCount > 0)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFE91E63),
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 20,
+                            minHeight: 20,
+                          ),
+                          child: Center(
+                            child: Text(
+                              unreadCount > 99 ? '99+' : unreadCount.toString(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
             const SizedBox(width: 12),
 

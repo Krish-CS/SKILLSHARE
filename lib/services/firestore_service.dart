@@ -1133,6 +1133,25 @@ class FirestoreService {
     }
   }
 
+  /// Emits a fresh product list whenever the products collection changes.
+  Stream<List<ProductModel>> streamAllProducts({int limit = 50}) {
+    return _firestore
+        .collection(AppConstants.productsCollection)
+        .limit(limit)
+        .snapshots()
+        .asyncMap((_) => getAllProducts(limit: limit));
+  }
+
+  /// Real-time stream of the base [UserModel] for a given uid.
+  Stream<UserModel?> streamUserModel(String userId) {
+    return _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(userId)
+        .snapshots()
+        .map((snap) =>
+            snap.exists ? UserModel.fromMap(snap.data()!, snap.id) : null);
+  }
+
   Future<void> deleteProduct(String productId) async {
     await _firestore
         .collection(AppConstants.productsCollection)
@@ -1573,6 +1592,22 @@ class FirestoreService {
     await _firestore.collection(AppConstants.jobsCollection).doc(jobId).update({
       'applicants': FieldValue.arrayUnion([userId]),
       'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Real-time stream of open jobs, re-emits whenever the jobs collection changes.
+  Stream<List<JobModel>> streamOpenJobs({int limit = 20}) {
+    return _firestore
+        .collection(AppConstants.jobsCollection)
+        .limit(limit * 2)
+        .snapshots()
+        .map((snapshot) {
+      var jobs = snapshot.docs
+          .map((doc) => JobModel.fromMap(doc.data(), doc.id))
+          .where((job) => job.status == AppConstants.jobStatusOpen)
+          .toList();
+      jobs.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return jobs.take(limit).toList();
     });
   }
 

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/auth_service.dart';
+import '../../widgets/google_g_logo.dart';
 import '../main_navigation.dart';
 import 'signup_screen.dart';
 
@@ -60,8 +61,14 @@ class _LoginScreenState extends State<LoginScreen>
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
+    // Smart email: append @gmail.com if user typed plain name
+    String email = _emailController.text.trim();
+    if (!email.contains('@')) {
+      email = '$email@gmail.com';
+    }
+
     final success = await authProvider.signIn(
-      email: _emailController.text.trim(),
+      email: email,
       password: _passwordController.text,
     );
 
@@ -235,14 +242,18 @@ class _LoginScreenState extends State<LoginScreen>
                                     decoration: _inputDecoration(
                                       label: 'Email',
                                       icon: Icons.email_outlined,
+                                    ).copyWith(
+                                      hintText: 'username@gmail.com',
+                                      hintStyle: TextStyle(
+                                        color: Colors.grey[400],
+                                        fontSize: 14,
+                                      ),
                                     ),
                                     validator: (v) {
                                       if (v == null || v.isEmpty) {
                                         return 'Please enter your email';
                                       }
-                                      if (!v.contains('@')) {
-                                        return 'Please enter a valid email';
-                                      }
+                                      // Accept plain username (we append @gmail.com)
                                       return null;
                                     },
                                   ),
@@ -264,10 +275,12 @@ class _LoginScreenState extends State<LoginScreen>
                                       suffixIcon: IconButton(
                                         icon: Icon(
                                           _obscurePassword
-                                              ? Icons.visibility_outlined
-                                              : Icons.visibility_off_outlined,
-                                          color: Colors.grey[500],
-                                          size: 20,
+                                              ? Icons.visibility_off_rounded
+                                              : Icons.visibility_rounded,
+                                          color: _obscurePassword
+                                              ? Colors.grey[400]
+                                              : const Color(0xFF6A11CB),
+                                          size: 22,
                                         ),
                                         onPressed: () => setState(() =>
                                             _obscurePassword =
@@ -452,17 +465,7 @@ class _LoginScreenState extends State<LoginScreen>
                                                     CircularProgressIndicator(
                                                         strokeWidth: 2),
                                               )
-                                            : Image.network(
-                                                'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
-                                                height: 22,
-                                                width: 22,
-                                                errorBuilder: (_, __, ___) =>
-                                                    const Icon(
-                                                        Icons.g_mobiledata,
-                                                        size: 24,
-                                                        color: Color(
-                                                            0xFF4285F4)),
-                                              ),
+                                            : const GoogleGLogo(size: 22),
                                         label: const Text(
                                           'Continue with Google',
                                           style: TextStyle(

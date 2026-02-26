@@ -1156,23 +1156,46 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                       // Verification Status
                       if (_isVerified)
                         Container(
-                          padding: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
                             color: Colors.green.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.green),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.green.shade300),
                           ),
-                          child: const Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(Icons.verified, color: Colors.green),
-                              SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Identity Verified ✓',
-                                  style: TextStyle(
-                                    color: Colors.green,
-                                    fontWeight: FontWeight.bold,
+                              const Row(
+                                children: [
+                                  Icon(Icons.verified, color: Colors.green, size: 22),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Identity Verified ✓',
+                                      style: TextStyle(
+                                        color: Colors.green,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                      ),
+                                    ),
                                   ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              if (_aadhaarController.text.trim().isNotEmpty)
+                                Text(
+                                  'Aadhaar: ${_maskAadhaar(_aadhaarController.text.trim().replaceAll(' ', ''))}',
+                                  style: TextStyle(
+                                    color: Colors.grey[700],
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Your profile is public and visible to customers.',
+                                style: TextStyle(
+                                  color: Colors.green[700],
+                                  fontSize: 12,
                                 ),
                               ),
                             ],
