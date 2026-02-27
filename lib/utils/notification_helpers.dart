@@ -24,6 +24,7 @@ class NotificationItem {
 }
 
 /// Load up to [limit] recent notifications for [userId].
+/// Includes work requests, orders, AND unread chat messages.
 Future<List<NotificationItem>> loadNotificationsForUser(
   String userId, {
   int limit = 25,
@@ -34,10 +35,16 @@ Future<List<NotificationItem>> loadNotificationsForUser(
   final results = await Future.wait([
     firestoreService.getLatestUserWorkRequests(userId, limit: limit),
     firestoreService.getLatestOrdersForUser(userId, limit: limit),
+    // Also fetch chats with unread messages
+    FirebaseFirestore.instance
+        .collection(AppConstants.chatsCollection)
+        .where('participants', arrayContains: userId)
+        .get(),
   ]);
 
   final requests = results[0] as List<ServiceRequestModel>;
   final orders = results[1] as List<OrderModel>;
+  final chatsSnap = results[2] as QuerySnapshot;
 
   for (final request in requests) {
     notifications.add(
@@ -78,6 +85,47 @@ Future<List<NotificationItem>> loadNotificationsForUser(
         color: isBuyer ? const Color(0xFF2196F3) : const Color(0xFF6A11CB),
       ),
     );
+  }
+
+  notifications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+  // ── Chat messages (unread) ────────────────────────────────────────────────
+  for (final doc in chatsSnap.docs) {
+    final data = doc.data() as Map<String, dynamic>;
+    final unreadMap = data['unreadCount'] as Map<String, dynamic>?;
+    final unread = unreadMap?[userId];
+    final unreadCount = unread is int ? unread : 0;
+    if (unreadCount <= 0) continue;
+
+    // Identify the sender (the other participant)
+    final participants = List<String>.from(data['participants'] ?? []);
+    final otherUserId =
+        participants.firstWhere((id) => id != userId, orElse: () => '');
+
+    String senderName = 'Someone';
+    final participantDetails =
+        data['participantDetails'] as Map<String, dynamic>?;
+    if (participantDetails != null && otherUserId.isNotEmpty) {
+      final details =
+          participantDetails[otherUserId] as Map<String, dynamic>?;
+      senderName = (details?['name'] as String?)?.trim().isNotEmpty == true
+          ? details!['name'] as String
+          : 'Someone';
+    }
+
+    final lastMsg = (data['lastMessage'] as String?)?.trim() ?? '';
+    final lastMsgTime = data['lastMessageTime'];
+    DateTime msgTime = DateTime.now();
+    if (lastMsgTime is Timestamp) msgTime = lastMsgTime.toDate();
+
+    final badge = unreadCount > 1 ? ' (+$unreadCount)' : '';
+    notifications.add(NotificationItem(
+      title: 'New message from $senderName$badge',
+      subtitle: lastMsg.isEmpty ? 'Sent you a message' : lastMsg,
+      createdAt: msgTime,
+      icon: Icons.chat_bubble_rounded,
+      color: const Color(0xFF00ACC1),
+    ));
   }
 
   notifications.sort((a, b) => b.createdAt.compareTo(a.createdAt));

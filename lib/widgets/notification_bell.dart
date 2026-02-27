@@ -40,9 +40,12 @@ class _NotificationBellState extends State<NotificationBell> {
   final _countCtrl = StreamController<int>.broadcast();
   StreamSubscription? _userSub;
   StreamSubscription? _requestSub;
+  StreamSubscription? _chatSub;
 
-  DateTime? _lastSeen;
+  DateTime? _lastSeen;        // lastNotificationSeenAt for requests/orders
+  DateTime? _chatSeenAt;      // time user last opened the bell (clears chat badge)
   QuerySnapshot? _lastRequestSnap;
+  int _chatUnread = 0;
 
   OverlayEntry? _overlayEntry;
   bool _isOpen = false;
@@ -77,20 +80,45 @@ class _NotificationBellState extends State<NotificationBell> {
       _lastRequestSnap = snap;
       _recount();
     });
+
+    // Re-compute badge whenever unread chat count changes for this user
+    _chatSub = _firestore
+        .collection(AppConstants.chatsCollection)
+        .where('participants', arrayContains: widget.userId)
+        .snapshots()
+        .listen((snap) {
+      int total = 0;
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final unread = (data['unreadCount'] as Map?)?[widget.userId];
+        if (unread is int && unread > 0) {
+          // Only count chats where the last message arrived after we last viewed
+          if (_chatSeenAt == null) {
+            total += unread;
+          } else {
+            final lastMsgTime = data['lastMessageTime'];
+            if (lastMsgTime is Timestamp &&
+                lastMsgTime.toDate().isAfter(_chatSeenAt!)) {
+              total += unread;
+            }
+          }
+        }
+      }
+      _chatUnread = total;
+      _recount();
+    });
   }
 
   void _recount() {
     final snap = _lastRequestSnap;
-    if (snap == null) {
-      if (!_countCtrl.isClosed) _countCtrl.add(0);
-      return;
-    }
-    int count = 0;
-    for (final doc in snap.docs) {
-      final data = doc.data() as Map<String, dynamic>;
-      final Timestamp? ts = data['updatedAt'] as Timestamp?;
-      if (ts == null) continue;
-      if (_lastSeen == null || ts.toDate().isAfter(_lastSeen!)) count++;
+    int count = _chatUnread; // always include unread chats
+    if (snap != null) {
+      for (final doc in snap.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final Timestamp? ts = data['updatedAt'] as Timestamp?;
+        if (ts == null) continue;
+        if (_lastSeen == null || ts.toDate().isAfter(_lastSeen!)) count++;
+      }
     }
     if (!_countCtrl.isClosed) _countCtrl.add(count);
   }
@@ -100,6 +128,7 @@ class _NotificationBellState extends State<NotificationBell> {
     _closeDropdown();
     _userSub?.cancel();
     _requestSub?.cancel();
+    _chatSub?.cancel();
     _countCtrl.close();
     super.dispose();
   }
@@ -110,8 +139,13 @@ class _NotificationBellState extends State<NotificationBell> {
       _isOpen ? _closeDropdown() : _openDropdown(context);
 
   void _openDropdown(BuildContext context) {
-    // Stamp notifications as seen → badge resets to 0
+    // Stamp everything as seen → badge resets to 0
     _firestoreService.markNotificationsSeen(widget.userId);
+    // Record the time so any new chat message arriving AFTER this won't be
+    // counted until the bell is opened again
+    _chatSeenAt = DateTime.now();
+    _chatUnread = 0;
+    _recount();
 
     _overlayEntry = OverlayEntry(
       builder: (_) => _NotificationDropdown(

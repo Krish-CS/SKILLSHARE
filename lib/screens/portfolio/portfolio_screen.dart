@@ -76,7 +76,15 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Portfolio', style: TextStyle(color: Colors.white)),
-        backgroundColor: Colors.teal,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFFC2185B), Color(0xFFFF6F61)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         iconTheme: const IconThemeData(color: Colors.white),
         bottom: TabBar(
           controller: _tabController,
@@ -96,11 +104,27 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
           _buildStatisticsTab(authProvider),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _addPortfolioItem(context),
-        backgroundColor: Colors.teal,
-        icon: const Icon(Icons.add_a_photo),
-        label: const Text('Add Work'),
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFC2185B), Color(0xFFFF6F61)],
+          ),
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFC2185B).withValues(alpha: 0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: FloatingActionButton.extended(
+          onPressed: () => _addPortfolioItem(context),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          icon: const Icon(Icons.add_a_photo, color: Colors.white),
+          label: const Text('Add Work', style: TextStyle(color: Colors.white)),
+        ),
       ),
     );
   }
@@ -139,7 +163,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
   Widget _buildPortfolioTab(app_auth.AuthProvider authProvider) {
     if (_isLoading) {
       return const Center(
-        child: CircularProgressIndicator(color: Colors.teal),
+        child: CircularProgressIndicator(color: Color(0xFFC2185B)),
       );
     }
 
@@ -163,47 +187,10 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
 
     return RefreshIndicator(
       onRefresh: () async {}, // Stream auto-updates
-      color: Colors.teal,
+      color: const Color(0xFFC2185B),
       child: CustomScrollView(
         slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.all(16),
-            sliver: SliverToBoxAdapter(
-              child: Card(
-                color: Colors.teal.shade50,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.info_outline, color: Colors.teal),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Portfolio Tips',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.teal.shade900,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        '• Upload high-quality photos of your completed work\n'
-                        '• Add detailed descriptions to showcase your skills\n'
-                        '• Tag your work with relevant skills to get discovered\n'
-                        '• Regular updates improve your visibility',
-                        style: TextStyle(fontSize: 14),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
+          const SliverPadding(padding: EdgeInsets.only(top: 12)),
 
           // Portfolio grid
           if (_portfolioItems.isEmpty)
@@ -229,13 +216,13 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
             )
           else
             SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 0.75,
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: 0.82,
                 ),
                 delegate: SliverChildBuilderDelegate(
                   (context, index) => _buildPortfolioItemCard(_portfolioItems[index]),
@@ -258,7 +245,9 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
+            // Image — always square so it never strips regardless of card width
+            AspectRatio(
+              aspectRatio: 1.0,
               child: item.images.isNotEmpty
                   ? WebImageLoader.loadImage(
                       imageUrl: item.images.first,
@@ -271,7 +260,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
                       child: Center(
                         child: Icon(
                           Icons.image,
-                          size: 60,
+                          size: 40,
                           color: Colors.grey.shade500,
                         ),
                       ),
@@ -324,7 +313,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
           'Total Works',
           '$totalWorks',
           Icons.photo_library,
-          Colors.teal,
+          const Color(0xFFC2185B),
         ),
         const SizedBox(height: 12),
         _buildStatCard(
@@ -431,6 +420,8 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
   }
 
   void _viewPortfolioItem(PortfolioItem item) {
+    // Increment views when opening
+    _portfolioService.incrementPortfolioViews(item.id);
     Navigator.push(
       context,
       MaterialPageRoute(

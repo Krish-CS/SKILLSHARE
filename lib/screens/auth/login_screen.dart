@@ -61,6 +61,103 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
+  // ── Animated page route ────────────────────────────────────────────────────
+  static Route<T> _slideUpRoute<T>(Widget page) {
+    return PageRouteBuilder<T>(
+      transitionDuration: const Duration(milliseconds: 500),
+      reverseTransitionDuration: const Duration(milliseconds: 350),
+      pageBuilder: (_, __, ___) => page,
+      transitionsBuilder: (_, animation, __, child) {
+        final slide = Tween<Offset>(
+          begin: const Offset(0, 0.06),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+        return FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+          child: SlideTransition(position: slide, child: child),
+        );
+      },
+    );
+  }
+
+  // ── Error dialog ────────────────────────────────────────────────────────────
+  void _showErrorDialog(String message) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (ctx) => TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0.8, end: 1.0),
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutBack,
+        builder: (_, scale, child) => Transform.scale(scale: scale, child: child),
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          contentPadding: EdgeInsets.zero,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFFE53935), Color(0xFFFF6F61)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                  ),
+                ),
+                child: const Column(
+                  children: [
+                    Icon(Icons.error_outline_rounded,
+                        color: Colors.white, size: 40),
+                    SizedBox(height: 6),
+                    Text('Sign In Failed',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        )),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+                child: Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 14.5, color: Color(0xFF333333), height: 1.5),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6A11CB),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                    ),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Try Again',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -81,12 +178,10 @@ class _LoginScreenState extends State<LoginScreen>
 
     if (success) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const MainNavigation()),
+        _slideUpRoute(const MainNavigation()),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(authProvider.error ?? 'Login failed')),
-      );
+      _showErrorDialog(authProvider.error ?? 'Login failed. Please try again.');
     }
   }
 
@@ -101,16 +196,12 @@ class _LoginScreenState extends State<LoginScreen>
       final user = authProvider.currentUser;
       if (user != null) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const MainNavigation()),
+          _slideUpRoute(const MainNavigation()),
         );
       }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(authProvider.error ?? 'Google sign-in failed'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showErrorDialog(
+          authProvider.error ?? 'Google sign-in failed. Please try again.');
     }
   }
 
@@ -169,7 +260,9 @@ class _LoginScreenState extends State<LoginScreen>
             // ── Scrollable content ───────────────────────────────────────
             SafeArea(
               child: Center(
-                child: SingleChildScrollView(
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                  child: SingleChildScrollView(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
                   child: ConstrainedBox(
@@ -389,7 +482,7 @@ class _LoginScreenState extends State<LoginScreen>
                                           ],
                                         ),
                                         child: ElevatedButton(
-                                          onPressed: authProvider.isLoading
+                                          onPressed: authProvider.isEmailLoading
                                               ? null
                                               : _handleLogin,
                                           style: ElevatedButton.styleFrom(
@@ -402,7 +495,7 @@ class _LoginScreenState extends State<LoginScreen>
                                                   BorderRadius.circular(14),
                                             ),
                                           ),
-                                          child: authProvider.isLoading
+                                          child: authProvider.isEmailLoading
                                               ? const SizedBox(
                                                   height: 20,
                                                   width: 20,
@@ -461,7 +554,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   Consumer<AuthProvider>(
                                     builder: (context, authProvider, _) {
                                       return OutlinedButton.icon(
-                                        onPressed: authProvider.isLoading
+                                        onPressed: authProvider.isGoogleLoading
                                             ? null
                                             : _handleGoogleSignIn,
                                         style: OutlinedButton.styleFrom(
@@ -476,7 +569,7 @@ class _LoginScreenState extends State<LoginScreen>
                                           ),
                                           backgroundColor: Colors.grey[50],
                                         ),
-                                        icon: authProvider.isLoading
+                                        icon: authProvider.isGoogleLoading
                                             ? const SizedBox(
                                                 height: 18,
                                                 width: 18,
@@ -536,6 +629,7 @@ class _LoginScreenState extends State<LoginScreen>
                       ],
                     ),
                   ),
+                ),
                 ),
               ),
             ),

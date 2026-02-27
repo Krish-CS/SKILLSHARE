@@ -197,10 +197,14 @@ class AuthService {
 
   // Sign out
   Future<void> signOut() async {
-    // Also sign out of Google if it was used
-    final googleSignIn = GoogleSignIn();
-    if (await googleSignIn.isSignedIn()) {
-      await googleSignIn.signOut();
+    // Try to sign out of Google if it was used, but don't let it block logout
+    try {
+      final googleSignIn = GoogleSignIn();
+      if (await googleSignIn.isSignedIn()) {
+        await googleSignIn.signOut();
+      }
+    } catch (_) {
+      // Google Sign-In not configured or not used — ignore
     }
     await _auth.signOut();
   }

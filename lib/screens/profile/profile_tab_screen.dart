@@ -35,6 +35,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
   SkilledUserProfile? _skilledProfile;
   bool _isLoading = true;
   String? _profilePhotoUrl;
+  String? _roleSpecificPhotoUrl; // set once from role profile, not overridden by user stream
+  String? _lastSubscribedRole; // tracks role so we only re-subscribe when it changes
 
   @override
   void initState() {
@@ -60,11 +62,19 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
         if (!mounted) return;
         setState(() {
           _currentUser = user;
-          _profilePhotoUrl = user?.profilePhoto;
+          // Prefer the role-specific photo; fall back to user.profilePhoto
+          _profilePhotoUrl = _roleSpecificPhotoUrl?.isNotEmpty == true
+              ? _roleSpecificPhotoUrl
+              : (user?.profilePhoto?.isNotEmpty == true
+                  ? user!.profilePhoto
+                  : _profilePhotoUrl);
           if (_isLoading) _isLoading = false;
         });
-        // Subscribe to role-specific profile if role is known
-        _subscribeToRoleProfile(userId, user?.role);
+        // Only re-subscribe when role actually changes (avoids constant churn)
+        if (user?.role != _lastSubscribedRole) {
+          _lastSubscribedRole = user?.role;
+          _subscribeToRoleProfile(userId, user?.role);
+        }
       },
       onError: (e) {
         debugPrint('Error streaming user: $e');
@@ -87,6 +97,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
           _skilledProfile = profile;
           if (profile?.profilePicture != null &&
               profile!.profilePicture!.isNotEmpty) {
+            _roleSpecificPhotoUrl = profile.profilePicture;
             _profilePhotoUrl = profile.profilePicture;
           }
         });
@@ -98,6 +109,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
         setState(() {
           if (profile?.profilePicture != null &&
               profile!.profilePicture!.isNotEmpty) {
+            _roleSpecificPhotoUrl = profile.profilePicture;
             _profilePhotoUrl = profile.profilePicture;
           }
         });
@@ -108,6 +120,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
         if (!mounted) return;
         setState(() {
           if (profile?.logoUrl != null && profile!.logoUrl!.isNotEmpty) {
+            _roleSpecificPhotoUrl = profile.logoUrl;
             _profilePhotoUrl = profile.logoUrl;
           }
         });

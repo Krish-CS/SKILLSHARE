@@ -10,11 +10,18 @@ class AuthProvider with ChangeNotifier {
   final AuthService _authService = AuthService();
 
   UserModel? _currentUser;
-  bool _isLoading = false;
+  bool _isLoading = false;      // used by signup / resetPassword
+  bool _isEmailLoading = false; // used by email sign-in only
+  bool _isGoogleLoading = false; // used by Google sign-in only
   String? _error;
 
   UserModel? get currentUser => _currentUser;
-  bool get isLoading => _isLoading;
+  /// True when ANY auth operation is in progress (backward-compat).
+  bool get isLoading => _isLoading || _isEmailLoading || _isGoogleLoading;
+  /// True only while the email/password login button is loading.
+  bool get isEmailLoading => _isEmailLoading;
+  /// True only while the Google sign-in button is loading.
+  bool get isGoogleLoading => _isGoogleLoading;
   String? get error => _error;
   bool get isAuthenticated => _currentUser != null;
 
@@ -133,7 +140,7 @@ class AuthProvider with ChangeNotifier {
     required String password,
   }) async {
     try {
-      _isLoading = true;
+      _isEmailLoading = true;
       _error = null;
       notifyListeners();
 
@@ -142,12 +149,12 @@ class AuthProvider with ChangeNotifier {
         password: password,
       );
 
-      _isLoading = false;
+      _isEmailLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
       _error = e.toString();
-      _isLoading = false;
+      _isEmailLoading = false;
       notifyListeners();
       return false;
     }
@@ -162,18 +169,18 @@ class AuthProvider with ChangeNotifier {
 
   Future<bool> signInWithGoogle({String defaultRole = 'customer'}) async {
     try {
-      _isLoading = true;
+      _isGoogleLoading = true;
       _error = null;
       notifyListeners();
 
       _currentUser = await _authService.signInWithGoogle(defaultRole: defaultRole);
 
-      _isLoading = false;
+      _isGoogleLoading = false;
       notifyListeners();
       return _currentUser != null;
     } catch (e) {
       _error = e.toString();
-      _isLoading = false;
+      _isGoogleLoading = false;
       notifyListeners();
       return false;
     }

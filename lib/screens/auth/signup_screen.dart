@@ -76,6 +76,200 @@ class _SignUpScreenState extends State<SignUpScreen>
     super.dispose();
   }
 
+  // ── Animated page route ─────────────────────────────────────────────────────
+  static Route<T> _slideUpRoute<T>(Widget page) {
+    return PageRouteBuilder<T>(
+      transitionDuration: const Duration(milliseconds: 500),
+      reverseTransitionDuration: const Duration(milliseconds: 350),
+      pageBuilder: (_, __, ___) => page,
+      transitionsBuilder: (_, animation, __, child) {
+        final slide = Tween<Offset>(
+          begin: const Offset(0, 0.06),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+        return FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+          child: SlideTransition(position: slide, child: child),
+        );
+      },
+    );
+  }
+
+  // ── Error dialog ─────────────────────────────────────────────────────────────
+  void _showErrorDialog(String message) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (ctx) => TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0.8, end: 1.0),
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutBack,
+        builder: (_, scale, child) => Transform.scale(scale: scale, child: child),
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          contentPadding: EdgeInsets.zero,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFFE53935), Color(0xFFFF6F61)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                  ),
+                ),
+                child: const Column(
+                  children: [
+                    Icon(Icons.error_outline_rounded,
+                        color: Colors.white, size: 40),
+                    SizedBox(height: 6),
+                    Text('Sign Up Failed',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        )),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+                child: Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 14.5, color: Color(0xFF333333), height: 1.5),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6A11CB),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                    ),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Try Again',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Success dialog ───────────────────────────────────────────────────────────
+  Future<void> _showSuccessDialog(String name, VoidCallback onContinue) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black54,
+      builder: (ctx) => TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0.7, end: 1.0),
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOutBack,
+        builder: (_, scale, child) => Transform.scale(scale: scale, child: child),
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          contentPadding: EdgeInsets.zero,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 28),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.check_rounded,
+                          color: Colors.white, size: 38),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Welcome Aboard!',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        )),
+                    const SizedBox(height: 4),
+                    Text('Account created for $name',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.85),
+                          fontSize: 13,
+                        )),
+                  ],
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(24, 20, 24, 8),
+                child: Text(
+                  "Your account is ready. Let's set up your profile!",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 14.5, color: Color(0xFF555555), height: 1.5),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6A11CB),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      onContinue();
+                    },
+                    child: const Text('Continue to Setup',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _handleSignUp() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -101,23 +295,28 @@ class _SignUpScreenState extends State<SignUpScreen>
 
     if (success) {
       final userId = authProvider.currentUser!.uid;
-      if (_selectedRole == AppConstants.roleSkilledUser) {
-        Navigator.of(context).pushReplacement(MaterialPageRoute(
-            builder: (_) => SkilledUserSetupScreen(userId: userId)));
-      } else if (_selectedRole == AppConstants.roleCustomer) {
-        Navigator.of(context).pushReplacement(MaterialPageRoute(
-            builder: (_) => CustomerSetupScreen(userId: userId)));
-      } else if (_selectedRole == AppConstants.roleCompany) {
-        Navigator.of(context).pushReplacement(MaterialPageRoute(
-            builder: (_) => CompanySetupScreen(userId: userId)));
-      } else {
-        Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const MainNavigation()));
+      final name = _nameController.text.trim();
+
+      void navigate() {
+        if (!mounted) return;
+        if (_selectedRole == AppConstants.roleSkilledUser) {
+          Navigator.of(context).pushReplacement(
+              _slideUpRoute(SkilledUserSetupScreen(userId: userId)));
+        } else if (_selectedRole == AppConstants.roleCustomer) {
+          Navigator.of(context).pushReplacement(
+              _slideUpRoute(CustomerSetupScreen(userId: userId)));
+        } else if (_selectedRole == AppConstants.roleCompany) {
+          Navigator.of(context).pushReplacement(
+              _slideUpRoute(CompanySetupScreen(userId: userId)));
+        } else {
+          Navigator.of(context).pushReplacement(
+              _slideUpRoute(const MainNavigation()));
+        }
       }
+
+      await _showSuccessDialog(name, navigate);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(authProvider.error ?? 'Sign up failed')),
-      );
+      _showErrorDialog(authProvider.error ?? 'Sign up failed. Please try again.');
     }
   }
 
@@ -128,12 +327,10 @@ class _SignUpScreenState extends State<SignUpScreen>
     if (!mounted) return;
     if (success) {
       Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const MainNavigation()));
+          _slideUpRoute(const MainNavigation()));
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(authProvider.error ?? 'Google sign-in failed'),
-        backgroundColor: Colors.red,
-      ));
+      _showErrorDialog(
+          authProvider.error ?? 'Google sign-in failed. Please try again.');
     }
   }
 
@@ -192,7 +389,9 @@ class _SignUpScreenState extends State<SignUpScreen>
             // â”€â”€ Scrollable content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             SafeArea(
               child: Center(
-                child: SingleChildScrollView(
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                  child: SingleChildScrollView(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
                   child: ConstrainedBox(
@@ -315,25 +514,41 @@ class _SignUpScreenState extends State<SignUpScreen>
                                   DropdownButtonFormField<String>(
                                     value: _selectedRole,
                                     style: const TextStyle(
+                                        fontFamily: 'SourceSerif4',
                                         fontSize: 15,
                                         color: Color(0xFF1A1A2E)),
                                     decoration: _inputDecoration(
                                       label: 'I am a',
-                                      icon: Icons.work_outlined,
+                                      icon: null,
                                     ),
                                     items: const [
                                       DropdownMenuItem(
-                                          value:
-                                              AppConstants.roleCustomer,
-                                          child: Text('Customer')),
+                                          value: AppConstants.roleCustomer,
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.person_outline, size: 20, color: Color(0xFF6A11CB)),
+                                              SizedBox(width: 10),
+                                              Text('Customer', style: TextStyle(fontFamily: 'SourceSerif4', fontSize: 15)),
+                                            ],
+                                          )),
                                       DropdownMenuItem(
-                                          value: AppConstants
-                                              .roleSkilledUser,
-                                          child:
-                                              Text('Skilled Professional')),
+                                          value: AppConstants.roleSkilledUser,
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.engineering, size: 20, color: Color(0xFF6A11CB)),
+                                              SizedBox(width: 10),
+                                              Text('Skilled Professional', style: TextStyle(fontFamily: 'SourceSerif4', fontSize: 15)),
+                                            ],
+                                          )),
                                       DropdownMenuItem(
                                           value: AppConstants.roleCompany,
-                                          child: Text('Company')),
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.business, size: 20, color: Color(0xFF6A11CB)),
+                                              SizedBox(width: 10),
+                                              Text('Company', style: TextStyle(fontFamily: 'SourceSerif4', fontSize: 15)),
+                                            ],
+                                          )),
                                     ],
                                     onChanged: (v) =>
                                         setState(() => _selectedRole = v!),
@@ -593,6 +808,7 @@ class _SignUpScreenState extends State<SignUpScreen>
                     ),
                   ),
                 ),
+                ),
               ),
             ),
           ],
@@ -602,11 +818,11 @@ class _SignUpScreenState extends State<SignUpScreen>
   }
 
   InputDecoration _inputDecoration(
-      {required String label, required IconData icon}) {
+      {required String label, required IconData? icon}) {
     return InputDecoration(
       labelText: label,
       labelStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
-      prefixIcon: Icon(icon, color: const Color(0xFF6A11CB), size: 20),
+      prefixIcon: icon != null ? Icon(icon, color: const Color(0xFF6A11CB), size: 20) : null,
       filled: true,
       fillColor: Colors.grey[50],
       contentPadding:

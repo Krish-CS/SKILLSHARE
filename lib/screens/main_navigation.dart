@@ -135,15 +135,21 @@ class _MainNavigationState extends State<MainNavigation> {
 
     // Admin has a special simple layout (single screen)
     if (userRole == UserRoles.admin) {
-      return const AdminScreen();
+      return const PopScope(
+        canPop: false,
+        child: AdminScreen(),
+      );
     }
 
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: screens,
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        body: IndexedStack(
+          index: _currentIndex,
+          children: screens,
+        ),
+        bottomNavigationBar: _buildCustomBottomNav(navItems, userRole, currentUserId),
       ),
-      bottomNavigationBar: _buildCustomBottomNav(navItems, userRole, currentUserId),
     );
   }
 
@@ -485,10 +491,10 @@ class _MainNavigationState extends State<MainNavigation> {
           return position < 2
               ? const Color(0xFF6A11CB)
               : const Color(0xFF2575FC);
-        case 1: // Portfolio (purple→blue AppBar)
+        case 1: // Portfolio (deep-rose→coral)
           return position < 2
-              ? const Color(0xFF6A11CB)
-              : const Color(0xFF2575FC);
+              ? const Color(0xFFC2185B)
+              : const Color(0xFFFF6F61);
         case 2: // My Shop (pink→orange AppBar)
           return position < 2
               ? const Color(0xFFE91E63)

@@ -264,7 +264,14 @@ class PortfolioService {
         .collection(_portfolioCollection)
         .where('userId', isEqualTo: userId)
         .snapshots()
-        .asyncMap((_) => getUserPortfolio(userId));
+        .map((snap) {
+          final items = snap.docs
+              .map((doc) => PortfolioItem.fromMap(
+                  doc.data(), doc.id))
+              .toList();
+          items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return items;
+        });
   }
 
   Future<List<PortfolioItem>> getPublicPortfolioItems({
