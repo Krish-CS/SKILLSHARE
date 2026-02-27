@@ -302,40 +302,44 @@ class ChatService {
 
   // Mark messages as read
   Future<void> markMessagesAsRead(String chatId, String userId) async {
-    final chatRef =
-        _firestore.collection(AppConstants.chatsCollection).doc(chatId);
+    try {
+      final chatRef =
+          _firestore.collection(AppConstants.chatsCollection).doc(chatId);
 
-    await chatRef.update({
-      'unreadCount.$userId': 0,
-    });
+      await chatRef.update({
+        'unreadCount.$userId': 0,
+      });
 
-    // Mark messages as read - simplified query to avoid index
-    final messages = await _firestore
-        .collection(AppConstants.chatsCollection)
-        .doc(chatId)
-        .collection(AppConstants.messagesCollection)
-        .where('isRead', isEqualTo: false)
-        .get();
+      // Mark messages as read - simplified query to avoid index
+      final messages = await _firestore
+          .collection(AppConstants.chatsCollection)
+          .doc(chatId)
+          .collection(AppConstants.messagesCollection)
+          .where('isRead', isEqualTo: false)
+          .get();
 
-    final refsToUpdate = messages.docs
-        .where((doc) => doc.data()['senderId'] != userId)
-        .map((doc) => doc.reference)
-        .toList();
-    if (refsToUpdate.isEmpty) return;
+      final refsToUpdate = messages.docs
+          .where((doc) => doc.data()['senderId'] != userId)
+          .map((doc) => doc.reference)
+          .toList();
+      if (refsToUpdate.isEmpty) return;
 
-    final readTimestamp = FieldValue.serverTimestamp();
+      final readTimestamp = FieldValue.serverTimestamp();
 
-    // Update in chunks to stay under Firestore batch limits.
-    const chunkSize = 400;
-    for (var i = 0; i < refsToUpdate.length; i += chunkSize) {
-      final end = (i + chunkSize > refsToUpdate.length)
-          ? refsToUpdate.length
-          : i + chunkSize;
-      final batch = _firestore.batch();
-      for (final ref in refsToUpdate.sublist(i, end)) {
-        batch.update(ref, {'isRead': true, 'readAt': readTimestamp});
+      // Update in chunks to stay under Firestore batch limits.
+      const chunkSize = 400;
+      for (var i = 0; i < refsToUpdate.length; i += chunkSize) {
+        final end = (i + chunkSize > refsToUpdate.length)
+            ? refsToUpdate.length
+            : i + chunkSize;
+        final batch = _firestore.batch();
+        for (final ref in refsToUpdate.sublist(i, end)) {
+          batch.update(ref, {'isRead': true, 'readAt': readTimestamp});
+        }
+        await batch.commit();
       }
-      await batch.commit();
+    } catch (e) {
+      debugPrint('markMessagesAsRead error: $e');
     }
   }
 

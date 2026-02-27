@@ -170,7 +170,7 @@ class _MainNavigationState extends State<MainNavigation> {
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 72,
+          height: 80,
           child: Row(
             children: List.generate(rawItems.length, (i) {
               final selected = i == _currentIndex;
@@ -258,6 +258,7 @@ class _MainNavigationState extends State<MainNavigation> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: 8),
                     ],
                   ),
                 ),
@@ -464,14 +465,14 @@ class _MainNavigationState extends State<MainNavigation> {
           return position < 2
               ? const Color(0xFFFF6B35)
               : const Color(0xFFFF8E53);
-        case 1: // Chats (purple→pink AppBar)
+        case 1: // Chats (violet AppBar)
           return position < 2
-              ? const Color(0xFF9C27B0)
-              : const Color(0xFFE91E63);
-        case 2: // Profile (purple→purple→pink AppBar)
+              ? const Color(0xFF7B1FA2)
+              : const Color(0xFFAB47BC);
+        case 2: // Profile (orange AppBar)
           return position < 2
-              ? const Color(0xFF6A0DAD)
-              : const Color(0xFFE91E63);
+              ? const Color(0xFFE65100)
+              : const Color(0xFFFF9800);
         default:
           return const Color(0xFFFF6B35);
       }
@@ -492,14 +493,14 @@ class _MainNavigationState extends State<MainNavigation> {
           return position < 2
               ? const Color(0xFFE91E63)
               : const Color(0xFFFF9800);
-        case 3: // Chats (purple→pink AppBar)
+        case 3: // Chats (violet AppBar)
           return position < 2
-              ? const Color(0xFF9C27B0)
-              : const Color(0xFFE91E63);
-        case 4: // Profile (purple→purple→pink AppBar)
+              ? const Color(0xFF7B1FA2)
+              : const Color(0xFFAB47BC);
+        case 4: // Profile (orange AppBar)
           return position < 2
-              ? const Color(0xFF6A0DAD)
-              : const Color(0xFFE91E63);
+              ? const Color(0xFFE65100)
+              : const Color(0xFFFF9800);
         default:
           return const Color(0xFF6A11CB);
       }
@@ -518,14 +519,14 @@ class _MainNavigationState extends State<MainNavigation> {
           return position < 2
               ? const Color(0xFF9C27B0)
               : const Color(0xFFE91E63);
-        case 3: // Chats (purple→pink AppBar)
+        case 3: // Chats (violet AppBar)
           return position < 2
-              ? const Color(0xFF9C27B0)
-              : const Color(0xFFE91E63);
-        case 4: // Profile (purple→purple→pink AppBar)
+              ? const Color(0xFF7B1FA2)
+              : const Color(0xFFAB47BC);
+        case 4: // Profile (orange AppBar)
           return position < 2
-              ? const Color(0xFF6A0DAD)
-              : const Color(0xFFE91E63);
+              ? const Color(0xFFE65100)
+              : const Color(0xFFFF9800);
         default:
           return const Color(0xFF6A11CB);
       }
@@ -544,14 +545,14 @@ class _MainNavigationState extends State<MainNavigation> {
           return position < 2
               ? const Color(0xFFE91E63)
               : const Color(0xFFFF9800);
-        case 3: // Chats (purple→pink AppBar)
+        case 3: // Chats (violet AppBar)
           return position < 2
-              ? const Color(0xFF9C27B0)
-              : const Color(0xFFE91E63);
-        case 4: // Profile (purple→purple→pink AppBar)
+              ? const Color(0xFF7B1FA2)
+              : const Color(0xFFAB47BC);
+        case 4: // Profile (orange AppBar)
           return position < 2
-              ? const Color(0xFF6A0DAD)
-              : const Color(0xFFE91E63);
+              ? const Color(0xFFE65100)
+              : const Color(0xFFFF9800);
         default:
           return const Color(0xFF9C27B0);
       }

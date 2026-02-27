@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -15,7 +16,6 @@ import '../../utils/app_helpers.dart';
 import '../../utils/web_image_loader.dart';
 import '../../utils/user_roles.dart';
 import '../../providers/auth_provider.dart' as app_auth;
-import '../../widgets/chat/chat_work_request_section.dart';
 import '../../widgets/app_popup.dart';
 
 class ChatDetailScreen extends StatefulWidget {
@@ -37,7 +37,7 @@ class ChatDetailScreen extends StatefulWidget {
 }
 
 class _ChatDetailScreenState extends State<ChatDetailScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final ChatService _chatService = ChatService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
   final FirestoreService _firestoreService = FirestoreService();
@@ -67,12 +67,58 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   // Edit mode
   MessageModel? _editingMessage;
 
+  // Other user online status (for WhatsApp-style ticks)
+  bool _otherUserOnline = false;
+  StreamSubscription<UserPresence>? _presenceSubscription;
+
+  // AppBar bubble animation
+  late final AnimationController _bubbleCtrl;
+
+  // AppBar cycling gradient animation
+  late final AnimationController _gradientCtrl;
+  static const _gradientPhases = [
+    [Color(0xFF4A148C), Color(0xFF7B1FA2), Color(0xFF00B0FF)],  // purple→blue
+    [Color(0xFF1A237E), Color(0xFF3949AB), Color(0xFFE91E63)],  // indigo→pink
+    [Color(0xFF004D40), Color(0xFF00897B), Color(0xFF1565C0)],  // teal→blue
+    [Color(0xFF880E4F), Color(0xFFAD1457), Color(0xFFFF6F00)],  // magenta→amber
+    [Color(0xFF311B92), Color(0xFF6200EA), Color(0xFF00BFA5)],  // deep purple→teal
+    [Color(0xFF0D47A1), Color(0xFF1976D2), Color(0xFFE040FB)],  // blue→pink
+  ];
+  int _gradientPhase = 0;
+
   @override
   void initState() {
     super.initState();
     _currentUserId = FirebaseAuth.instance.currentUser?.uid;
-    _messageStream = _chatService.getMessages(widget.chatId);
+    _messageStream = _chatService.getMessages(widget.chatId).asBroadcastStream();
     _tabController = TabController(length: 2, vsync: this);
+    _bubbleCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    )..repeat();
+
+    // Cycling gradient for chat AppBar
+    _gradientCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    )..addStatusListener((s) {
+        if (s == AnimationStatus.completed) {
+          setState(() => _gradientPhase = (_gradientPhase + 1) % _gradientPhases.length);
+          _gradientCtrl.forward(from: 0);
+        }
+      });
+    _gradientCtrl.forward();
+
+    // Track other user's online status (for WhatsApp-style ticks)
+    _presenceSubscription = PresenceService.instance
+        .watchUser(widget.otherUserId)
+        .listen((presence) {
+      if (!mounted) return;
+      final online = presence.isOnline;
+      if (online != _otherUserOnline) {
+        setState(() => _otherUserOnline = online);
+      }
+    });
 
     // Subscribe to work requests
     _workReqSubscription = _firestoreService
@@ -91,7 +137,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       });
     });
 
-    // Reactive read receipt
+    // Eagerly mark existing messages as read when opening chat
+    if (_currentUserId != null) {
+      _chatService.markMessagesAsRead(widget.chatId, _currentUserId!);
+    }
+
+    // Reactive read receipt — also marks new incoming messages as read
     _messageReadSubscription = _messageStream.listen((messages) {
       final uid = _currentUserId;
       if (uid == null) return;
@@ -115,6 +166,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   void dispose() {
     _workReqSubscription?.cancel();
     _messageReadSubscription?.cancel();
+    _presenceSubscription?.cancel();
+    _bubbleCtrl.dispose();
+    _gradientCtrl.dispose();
     _tabController.dispose();
     _messageController.dispose();
     _scrollController.dispose();
@@ -333,6 +387,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   }
 
   void _showTaskMonitoringSheet(BuildContext context) {
+    // Use the parent's already-active subscription data — avoids a second
+    // Firestore listener that can temporarily show empty while the new
+    // stream reconnects to the server.
+    final allRequests = List<ServiceRequestModel>.from(_allWorkRequests);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -347,11 +405,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             borderRadius:
                 BorderRadius.vertical(top: Radius.circular(20)),
           ),
-          child: StreamBuilder<List<ServiceRequestModel>>(
-            stream: _firestoreService.streamChatWorkRequests(widget.chatId),
-            builder: (context, snapshot) {
-              final allRequests = snapshot.data ?? [];
-              // Group by status
+          child: Builder(
+            builder: (context) {
+              // allRequests is a snapshot — stable for this sheet session
               final pending = allRequests.where((r) => r.status == 'pending').toList();
               final accepted = allRequests.where((r) => r.status == 'accepted').toList();
               final completed = allRequests.where((r) => r.status == 'completed').toList();
@@ -439,7 +495,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           ],
                           if (accepted.isNotEmpty) ...[
                             _monitoringSectionLabel(
-                                'In Progress', Colors.green, Icons.work),
+                                'In Progress', Colors.blue, Icons.work),
                             ...accepted.map((r) =>
                                 _monitoringTaskTile(r)),
                             const SizedBox(height: 8),
@@ -512,7 +568,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       statusLabel = 'Pending';
       statusIcon = Icons.hourglass_empty;
     } else if (isAccepted) {
-      statusColor = Colors.green;
+      statusColor = Colors.blue;
       statusLabel = 'Active';
       statusIcon = Icons.work_outline;
     } else if (isCompleted) {
@@ -936,6 +992,91 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     }
   }
 
+  // ── Animated chat AppBar background ────────────────────────────────────────
+
+  Widget _buildChatAppBarBackground() {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_bubbleCtrl, _gradientCtrl]),
+      builder: (context, _) {
+        final t = _bubbleCtrl.value;
+        // Cycling gradient lerp
+        final gt = _gradientCtrl.value;
+        final curr = _gradientPhases[_gradientPhase];
+        final next = _gradientPhases[(_gradientPhase + 1) % _gradientPhases.length];
+        final c1 = Color.lerp(curr[0], next[0], gt)!;
+        final c2 = Color.lerp(curr[1], next[1], gt)!;
+        final c3 = Color.lerp(curr[2], next[2], gt)!;
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // Gradient base — cycling colors
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [c1, c2, c3],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+            // Bubble 1 — large, drifts right
+            Positioned(
+              right: -10 + 28 * math.sin(t * 2 * math.pi),
+              top: 4 + 12 * math.cos(t * 2 * math.pi),
+              child: Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.09),
+                ),
+              ),
+            ),
+            // Bubble 2 — medium, drifts left
+            Positioned(
+              right: 70 + 22 * math.cos(t * 2 * math.pi + 1.2),
+              top: -8 + 16 * math.sin(t * 2 * math.pi + 1.2),
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.07),
+                ),
+              ),
+            ),
+            // Bubble 3 — small, bottom area
+            Positioned(
+              left: 60 + 18 * math.sin(t * 2 * math.pi + 2.4),
+              bottom: 4 + 8 * math.cos(t * 2 * math.pi + 2.4),
+              child: Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.06),
+                ),
+              ),
+            ),
+            // Bubble 4 — tiny, floats near center-right
+            Positioned(
+              right: 150 + 20 * math.cos(t * 2 * math.pi + 0.8),
+              top: 8 + 10 * math.sin(t * 2 * math.pi + 0.8),
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: c3.withValues(alpha: 0.18),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   // ── Build ────────────────────────────────────────────────────────────────────
 
   @override
@@ -950,6 +1091,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       length: 2,
       child: Scaffold(
         appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
           title: StreamBuilder<UserPresence>(
             stream: PresenceService.instance.watchUser(widget.otherUserId),
             builder: (context, presSnap) {
@@ -1020,7 +1163,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           style: TextStyle(
                             fontSize: 11,
                             color: isOnline && !_workLocked
-                                ? Colors.greenAccent[100]
+                                ? Colors.cyanAccent[100]
                                 : Colors.white70,
                           ),
                         ),
@@ -1159,15 +1302,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   ],
                 )
               : null,
-          flexibleSpace: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF9C27B0), Color(0xFFE91E63)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-          ),
+          flexibleSpace: _buildChatAppBarBackground(),
         ),
         body: _workLocked
             ? TabBarView(
@@ -1182,24 +1317,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   // ── Chat body (tab 0 / only body when unlocked) ──────────────────────────────
 
   Widget _buildChatBody() {
-    final isCustomer = _currentUserRole == UserRoles.customer;
-    final isSkilledPerson = _currentUserRole == UserRoles.skilledPerson;
-    final isCompany = _currentUserRole == UserRoles.company;
-
     return Column(
       children: [
-        // Work requests section (pending cards)
-        if (_currentUserId != null)
-          ChatWorkRequestSection(
-            chatId: widget.chatId,
-            currentUserId: _currentUserId!,
-            otherUserId: widget.otherUserId,
-            otherUserName: widget.otherUserName,
-            isCurrentUserCustomer: isCustomer || isCompany,
-            isCurrentUserSkilledPerson: isSkilledPerson,
-            workRequests: _allWorkRequests,
-          ),
-
         // Lock banner
         if (_workLocked)
           Container(
@@ -1603,10 +1722,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           fontSize: 11, color: Colors.grey[600])),
                   if (isMe && !isDeleted) ...[
                     const SizedBox(width: 4),
-                    Icon(Icons.done_all,
+                    Icon(
+                        // WhatsApp-style: double tick when read OR when other user is online
+                        (message.isRead || _otherUserOnline)
+                            ? Icons.done_all
+                            : Icons.done,
                         size: 14,
+                        // Purple only when actually read
                         color: message.isRead
-                            ? const Color(0xFF1B5E20)
+                            ? const Color(0xFF7C3AED)
                             : Colors.grey[400]),
                   ],
                 ],
@@ -1661,7 +1785,7 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
               child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green),
+                backgroundColor: Colors.blue),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Confirm',
                 style: TextStyle(color: Colors.white)),
@@ -1698,10 +1822,10 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF4CAF50), width: 1.5),
+        border: Border.all(color: const Color(0xFF5E35B1), width: 1.5),
         boxShadow: [
           BoxShadow(
-              color: Colors.green.withValues(alpha: 0.1),
+              color: const Color(0xFF5E35B1).withValues(alpha: 0.1),
               blurRadius: 8,
               offset: const Offset(0, 2)),
         ],
@@ -1714,7 +1838,7 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF388E3C), Color(0xFF66BB6A)],
+                colors: [Color(0xFF5E35B1), Color(0xFF9C27B0)],
               ),
               borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(14),
@@ -1845,12 +1969,12 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
                     width: double.infinity,
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFF388E3C), Color(0xFF66BB6A)],
+                        colors: [Color(0xFF5E35B1), Color(0xFF9C27B0)],
                       ),
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                            color: const Color(0xFF388E3C).withValues(alpha: 0.3),
+                            color: const Color(0xFF5E35B1).withValues(alpha: 0.3),
                             blurRadius: 8, offset: const Offset(0, 3)),
                       ],
                     ),

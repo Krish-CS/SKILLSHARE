@@ -118,6 +118,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
   Future<void> _handleLogout() async {
     final confirm = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('Logout'),
         content: const Text('Are you sure you want to logout?'),
@@ -135,7 +136,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
       ),
     );
 
-    if (confirm == true && mounted) {
+    if (confirm != true || !mounted) return;
+    try {
       final authProvider =
           Provider.of<app_auth.AuthProvider>(context, listen: false);
       await authProvider.signOut();
@@ -143,6 +145,12 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const LoginScreen()),
           (route) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Logout failed: $e')),
         );
       }
     }
@@ -293,43 +301,39 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                             ),
                           ),
                           const SizedBox(height: 10),
-                          // Role Badge
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 18, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.4),
-                                  width: 1.2),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  _currentUser?.role == UserRoles.company
-                                      ? Icons.business_rounded
-                                      : _currentUser?.role ==
-                                              UserRoles.skilledPerson
-                                          ? Icons.star_rounded
-                                          : Icons.person_rounded,
-                                  color: Colors.white,
-                                  size: 14,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  UserRoles.getDisplayName(
-                                      _currentUser?.role ?? UserRoles.customer),
-                                  style: const TextStyle(
+                          // Role Badge — company only
+                          if (_currentUser?.role == UserRoles.company)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 18, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.4),
+                                    width: 1.2),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.business_rounded,
                                     color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
+                                    size: 14,
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    UserRoles.getDisplayName(
+                                        _currentUser?.role ?? UserRoles.company),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
                           const SizedBox(height: 20),
                           // Verified badge for skilled users
                           if (_currentUser?.role == UserRoles.skilledPerson) ...[
@@ -540,43 +544,48 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
               // Logout Button
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: GestureDetector(
-                  onTap: _handleLogout,
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFE53935), Color(0xFFFF7043)],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color:
-                              const Color(0xFFE53935).withValues(alpha: 0.35),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
+                child: Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                  child: InkWell(
+                    onTap: _handleLogout,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Ink(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFE53935), Color(0xFFFF7043)],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
                         ),
-                      ],
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.logout_rounded,
-                            color: Colors.white, size: 20),
-                        SizedBox(width: 10),
-                        Text(
-                          'Logout',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                const Color(0xFFE53935).withValues(alpha: 0.35),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.logout_rounded,
+                              color: Colors.white, size: 20),
+                          SizedBox(width: 10),
+                          Text(
+                            'Logout',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

@@ -243,7 +243,11 @@ class _LoginScreenState extends State<LoginScreen>
                                     keyboardType: TextInputType.emailAddress,
                                     autofillHints: const [AutofillHints.email],
                                     enableInteractiveSelection: true,
+                                    textInputAction: TextInputAction.next,
                                     style: const TextStyle(fontSize: 15),
+                                    onFieldSubmitted: (_) {
+                                      _passwordFocusNode.requestFocus();
+                                    },
                                     decoration: _inputDecoration(
                                       label: 'Email',
                                       icon: Icons.email_outlined,
@@ -272,8 +276,12 @@ class _LoginScreenState extends State<LoginScreen>
                                       AutofillHints.password
                                     ],
                                     enableInteractiveSelection: true,
+                                    textInputAction: TextInputAction.done,
                                     style: const TextStyle(fontSize: 15),
                                     focusNode: _passwordFocusNode,
+                                    onFieldSubmitted: (_) {
+                                      _handleLogin();
+                                    },
                                     decoration: _inputDecoration(
                                       label: 'Password',
                                       icon: Icons.lock_outline,

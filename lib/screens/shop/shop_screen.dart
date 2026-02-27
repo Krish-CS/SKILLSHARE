@@ -357,7 +357,7 @@ class _ShopScreenState extends State<ShopScreen> {
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  childAspectRatio: 0.56,
+                  childAspectRatio: 0.50,
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
                 ),
@@ -511,11 +511,11 @@ class _ShopScreenState extends State<ShopScreen> {
           ),
           const SizedBox(height: 8),
           SizedBox(
-            height: 155,
+            height: 210,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: _featuredProducts.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
               itemBuilder: (context, i) =>
                   _FeaturedCard(product: _featuredProducts[i],
                     onTap: () => _navigateToProductDetail(_featuredProducts[i])),
@@ -681,7 +681,7 @@ class _FeaturedCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 130,
+        width: 170,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(10),
@@ -700,7 +700,7 @@ class _FeaturedCard extends StatelessWidget {
             Stack(
               children: [
                 SizedBox(
-                  height: 85,
+                  height: 120,
                   width: double.infinity,
                   child: product.images.isNotEmpty
                       ? WebImageLoader.loadImage(

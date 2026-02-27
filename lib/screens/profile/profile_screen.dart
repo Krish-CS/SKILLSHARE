@@ -668,6 +668,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     if (_profile == null) {
+      // Delivery partner and admin get a simple editable profile view
+      if (_userRole == AppConstants.roleDeliveryPartner ||
+          _userRole == AppConstants.roleAdmin) {
+        return _buildBasicProfileView();
+      }
+
       // If it's own profile, redirect to role-specific setup
       if (isOwnProfile) {
         final authProvider =
@@ -748,24 +754,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             foregroundColor: Colors.white,
             elevation: 0,
             actions: [
-              if (isOwnProfile)
-                _appBarIcon(Icons.edit_rounded, () async {
-                  final authProvider = Provider.of<app_auth.AuthProvider>(
-                      context,
-                      listen: false);
-                  final currentUser = authProvider.currentUser;
-                  Widget editScreen =
-                      SkilledUserSetupScreen(userId: widget.userId);
-                  if (currentUser?.role == AppConstants.roleCustomer) {
-                    editScreen = CustomerSetupScreen(userId: widget.userId);
-                  } else if (currentUser?.role == AppConstants.roleCompany) {
-                    editScreen = CompanySetupScreen(userId: widget.userId);
-                  }
-                  await Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => editScreen));
-                  _loadProfile();
-                })
-              else ...[
+              if (!isOwnProfile) ...[
                 _appBarIcon(Icons.share_rounded, () {
                   Share.share(
                     'Check out ${_userData?.name ?? 'this profile'} on SkillShare!\n'
@@ -950,6 +939,265 @@ class _ProfileScreenState extends State<ProfileScreen> {
         onPressed: onTap,
       );
 
+  // ─── Minimal profile view for delivery partner / admin ────────────────────
+  Widget _buildBasicProfileView() {
+    const coverHeight = 200.0;
+    const avatarRadius = 48.0;
+    const avatarBorder = 3.0;
+    final coverColors = _getUserColorGradient(widget.userId);
+    final imageUrl = _userData?.profilePhoto;
+    final isDelivery = _userRole == AppConstants.roleDeliveryPartner;
+    final roleLabel = isDelivery ? 'Delivery Partner' : 'Administrator';
+    final roleIcon = isDelivery
+        ? Icons.delivery_dining_rounded
+        : Icons.admin_panel_settings_rounded;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF6F7FB),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              coverColors.first.withValues(alpha: 0.07),
+              const Color(0xFFF6F7FB),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: CustomScrollView(
+          clipBehavior: Clip.none,
+          slivers: [
+            SliverAppBar(
+              clipBehavior: Clip.none,
+              pinned: true,
+              expandedHeight: coverHeight,
+              backgroundColor: coverColors.first,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              actions: [
+                if (!isOwnProfile)
+                  IconButton(
+                    icon: const Icon(Icons.chat_bubble_rounded,
+                        color: Colors.white),
+                    onPressed: () async {
+                      final nav = Navigator.of(context);
+                      final messenger = ScaffoldMessenger.of(context);
+                      try {
+                        final cu = FirebaseAuth.instance.currentUser;
+                        if (cu == null) return;
+                        final cuData =
+                            await _firestoreService.getUserById(cu.uid);
+                        if (cuData == null || _userData == null) return;
+                        if (!mounted) return;
+                        showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (_) => const Center(
+                                child: CircularProgressIndicator()));
+                        final chatId = await _chatService.getOrCreateChat(
+                          cu.uid,
+                          widget.userId,
+                          {
+                            'name': cuData.name,
+                            'profilePhoto': cuData.profilePhoto
+                          },
+                          {
+                            'name': _userData!.name,
+                            'profilePhoto': _userData!.profilePhoto
+                          },
+                        );
+                        if (!mounted) return;
+                        nav.pop();
+                        nav.push(MaterialPageRoute(
+                            builder: (_) => ChatDetailScreen(
+                                chatId: chatId,
+                                otherUserId: widget.userId,
+                                otherUserName: _userData!.name,
+                                otherUserPhoto: _userData!.profilePhoto)));
+                      } catch (e) {
+                        if (!mounted) return;
+                        nav.pop();
+                        messenger.showSnackBar(
+                            SnackBar(content: Text('Error: $e')));
+                      }
+                    },
+                  ),
+              ],
+              flexibleSpace: LayoutBuilder(
+                builder: (context, constraints) {
+                  final top = MediaQuery.of(context).padding.top;
+                  final t = ((constraints.biggest.height -
+                              kToolbarHeight -
+                              top) /
+                          (coverHeight - kToolbarHeight))
+                      .clamp(0.0, 1.0);
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    fit: StackFit.expand,
+                    children: [
+                      FlexibleSpaceBar(
+                        background: BannerDisplay(
+                          bannerData: _profile?.bannerData ?? {
+                            'type': 'text',
+                            'text': _userData?.name ?? '',
+                            'fontKey': 'default',
+                            'textColor': 0xFFFFFFFF,
+                            'fontSize': 28.0,
+                            'animation': 'none',
+                          },
+                          defaultColors: coverColors,
+                          height: coverHeight,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            clipBehavior: Clip.none,
+                            children: [
+                              if (isOwnProfile)
+                                Positioned(
+                                  top: 12,
+                                  right: 12,
+                                  child: GestureDetector(
+                                    onTap: _openBannerEditor,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.45),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(Icons.edit_rounded,
+                                          color: Colors.white, size: 18),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (t > 0.05)
+                        Positioned(
+                          bottom: -(avatarRadius + avatarBorder),
+                          left: 20,
+                          child: Opacity(
+                            opacity: t,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(
+                                    colors: coverColors,
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight),
+                                boxShadow: [
+                                  BoxShadow(
+                                      color: coverColors.last
+                                          .withValues(alpha: 0.45),
+                                      blurRadius: 20,
+                                      spreadRadius: 2,
+                                      offset: const Offset(0, 6)),
+                                ],
+                              ),
+                              padding:
+                                  const EdgeInsets.all(avatarBorder),
+                              child: CircleAvatar(
+                                radius: avatarRadius,
+                                backgroundColor: Colors.white,
+                                child: WebImageLoader.loadAvatar(
+                                  imageUrl: imageUrl,
+                                  radius: avatarRadius - 1,
+                                  fallbackText: _userData?.name,
+                                  backgroundColor:
+                                      const Color(0xFFF3E5F5),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+
+            // ── Identity: name centered under avatar ──
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    16, avatarRadius + avatarBorder + 12, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: SizedBox(
+                        width: 2 * (avatarRadius + avatarBorder),
+                        child: Text(
+                          (_userData?.name ?? 'User').toUpperCase(),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF1A1A2E),
+                              letterSpacing: 1.2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        gradient:
+                            LinearGradient(colors: coverColors),
+                        borderRadius:
+                            BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(roleIcon,
+                              size: 12, color: Colors.white),
+                          const SizedBox(width: 4),
+                          Text(roleLabel,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Own-profile edit button ──
+            if (isOwnProfile)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                  child: _gradientButton(
+                    label: 'Edit Profile',
+                    icon: Icons.edit_rounded,
+                    colors: coverColors,
+                    onTap: () async {
+                      await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => SkilledUserSetupScreen(
+                                  userId: widget.userId)));
+                      _loadProfile();
+                    },
+                  ),
+                ),
+              ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 48)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildCoverBanner(List<Color> colors, double height) {
     return BannerDisplay(
       bannerData: _profile?.bannerData ?? {
@@ -966,10 +1214,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         fit: StackFit.expand,
         clipBehavior: Clip.none,
         children: [
-          // Edit banner button (own profile only)
+          // Edit banner button (own profile only) — top right
           if (isOwnProfile)
             Positioned(
-              bottom: 12,
+              top: 12,
               right: 12,
               child: GestureDetector(
                 onTap: _openBannerEditor,
@@ -992,111 +1240,112 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildProfileIdentitySection(
       double avatarRadius, List<Color> coverColors) {
     const avatarBorder = 3.0;
-    final avatarDiameter = 2 * (avatarRadius + avatarBorder); // 110
+    final avatarDiameter = 2 * (avatarRadius + avatarBorder);
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, avatarRadius + avatarBorder + 12, 16, 0),
+      padding: EdgeInsets.fromLTRB(16, avatarRadius + avatarBorder + 8, 16, 0),
       child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-          // Stats row — sits to the right of the overlapping avatar
-          Row(
-            children: [
-              SizedBox(width: avatarDiameter + 10),
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _miniStat(_profile!.rating.toStringAsFixed(1),
-                        'Rating', Icons.star_rounded, Colors.amber),
-                    _miniStat(_profile!.reviewCount.toString(), 'Reviews',
-                        Icons.reviews_rounded, const Color(0xFF2196F3)),
-                    _miniStat(_profile!.projectCount.toString(), 'Projects',
-                        Icons.work_rounded, const Color(0xFF4CAF50)),
-                  ],
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Name centered under avatar circle ──
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: SizedBox(
+              width: avatarDiameter,
+              child: Text(
+                (_userData?.name ?? 'User').toUpperCase(),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF1A1A2E),
+                  letterSpacing: 1.2,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Name
-          Text(
-            _userData?.name ?? 'User',
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1A1A2E),
-              letterSpacing: -0.3,
             ),
           ),
-          if (_profile!.category?.isNotEmpty == true) ...[
-            const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(colors: coverColors),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.auto_awesome_rounded, size: 12, color: Colors.white),
-                  const SizedBox(width: 4),
-                  Text(
-                    _profile!.category ?? '',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 4),
-          // Location + Verified badge row
-          Row(
+          const SizedBox(height: 10),
+          // ── Category badge ──
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (_profile!.city != null || _profile!.address != null) ...[
-                const Icon(Icons.location_on_rounded,
-                    size: 14, color: Color(0xFF9E9E9E)),
-                const SizedBox(width: 3),
-                Text(
-                  _profile!.city ?? _profile!.address ?? '',
-                  style: const TextStyle(
-                      color: Color(0xFF9E9E9E), fontSize: 13),
-                ),
-                const SizedBox(width: 8),
-              ],
-              if (_profile!.isVerified) ...[
+              if (_profile!.category?.isNotEmpty == true) ...[
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                      horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
-                    ),
+                    gradient: LinearGradient(colors: coverColors),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.verified_rounded,
+                      const Icon(Icons.auto_awesome_rounded,
                           size: 12, color: Colors.white),
-                      SizedBox(width: 4),
-                      Text('Verified Expert',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 4),
+                      Text(
+                        _profile!.category ?? '',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold),
+                      ),
                     ],
                   ),
                 ),
               ],
             ],
           ),
-          const SizedBox(height: 8),
-          // Star rating bar
+
+          const SizedBox(height: 12),
+
+          // ── Location + Verified badge ──
+          if (_profile!.city != null ||
+              _profile!.address != null ||
+              _profile!.isVerified)
+            Row(
+              children: [
+                if (_profile!.city != null || _profile!.address != null) ...[
+                  const Icon(Icons.location_on_rounded,
+                      size: 14, color: Color(0xFF9E9E9E)),
+                  const SizedBox(width: 3),
+                  Text(
+                    _profile!.city ?? _profile!.address ?? '',
+                    style: const TextStyle(
+                        color: Color(0xFF9E9E9E), fontSize: 13),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                if (_profile!.isVerified)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.verified_rounded,
+                            size: 12, color: Colors.white),
+                        SizedBox(width: 4),
+                        Text('Verified Expert',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+
+          const SizedBox(height: 10),
+
+          // ── Star rating bar ──
           Row(
             children: [
               RatingBarIndicator(
@@ -1106,7 +1355,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 itemCount: 5,
                 itemSize: 18,
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Text(
                 '${_profile!.rating.toStringAsFixed(1)}  •  ${_profile!.reviewCount} reviews',
                 style: TextStyle(
@@ -1116,6 +1365,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ],
           ),
+
+          const SizedBox(height: 16),
+
+          // ── Stats row — compact, left-aligned ──
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _miniStat(_profile!.rating.toStringAsFixed(1),
+                  'Rating', Icons.star_rounded, Colors.amber),
+              const SizedBox(width: 24),
+              _miniStat(_profile!.reviewCount.toString(), 'Reviews',
+                  Icons.reviews_rounded, const Color(0xFF2196F3)),
+              const SizedBox(width: 24),
+              _miniStat(_profile!.projectCount.toString(), 'Projects',
+                  Icons.work_rounded, const Color(0xFF4CAF50)),
+            ],
+          ),
+
+          const SizedBox(height: 4),
         ],
       ),
     );
@@ -1148,7 +1416,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildActionButtons() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
       child: Row(
         children: [
           // Message button
@@ -1156,7 +1424,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: _gradientButton(
               label: 'Message',
               icon: Icons.chat_bubble_rounded,
-              colors: const [Color(0xFF2979FF), Color(0xFF00B0FF)],
+              colors: const [Color(0xFF5E35B1), Color(0xFF8E24AA)],
               onTap: () async {
                 final nav = Navigator.of(context);
                 final messenger = ScaffoldMessenger.of(context);
@@ -1208,7 +1476,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: _gradientButton(
                 label: 'Review',
                 icon: Icons.star_rate_rounded,
-                colors: const [Color(0xFF43E97B), Color(0xFF38F9D7)],
+                colors: const [Color(0xFF5E35B1), Color(0xFFAB47BC)],
                 onTap: _showAddReviewDialog,
               ),
             ),
@@ -1217,7 +1485,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: _gradientButton(
                 label: 'Hire',
                 icon: Icons.handshake_rounded,
-                colors: const [Color(0xFFFF6B6B), Color(0xFFFF8E53)],
+                colors: const [Color(0xFF1565C0), Color(0xFF1976D2)],
                 onTap: _showHireRequestDialog,
               ),
             ),
@@ -1389,7 +1657,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildBioSection() {
     if (_profile!.bio.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1429,7 +1697,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       const Color(0xFF00BCD4),
     ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1478,7 +1746,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildServicesSection() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1887,66 +2155,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
               foregroundColor: Colors.white,
               elevation: 0,
               actions: [
-                if (isOwnProfile)
+                if (!isOwnProfile)
                   IconButton(
-                    icon: const Icon(Icons.edit_rounded, color: Colors.white),
+                    icon: const Icon(Icons.chat_bubble_rounded,
+                        color: Colors.white),
                     onPressed: () async {
-                      await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) =>
-                                  CustomerSetupScreen(userId: widget.userId)));
-                      _loadProfile();
+                      final nav = Navigator.of(context);
+                      final messenger = ScaffoldMessenger.of(context);
+                      try {
+                        final cu = FirebaseAuth.instance.currentUser;
+                        if (cu == null) return;
+                        final cuData =
+                            await _firestoreService.getUserById(cu.uid);
+                        if (cuData == null || _userData == null) return;
+                        if (!mounted) return;
+                        showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (_) => const Center(
+                                child: CircularProgressIndicator()));
+                        final chatId = await _chatService.getOrCreateChat(
+                          cu.uid,
+                          widget.userId,
+                          {
+                            'name': cuData.name,
+                            'profilePhoto': cuData.profilePhoto
+                          },
+                          {
+                            'name': _userData!.name,
+                            'profilePhoto': _userData!.profilePhoto
+                          },
+                        );
+                        if (!mounted) return;
+                        nav.pop();
+                        nav.push(MaterialPageRoute(
+                            builder: (_) => ChatDetailScreen(
+                                chatId: chatId,
+                                otherUserId: widget.userId,
+                                otherUserName: _userData!.name,
+                                otherUserPhoto: _userData!.profilePhoto)));
+                      } catch (e) {
+                        if (!mounted) return;
+                        nav.pop();
+                        messenger.showSnackBar(
+                            SnackBar(content: Text('Error: $e')));
+                      }
                     },
-                  )
-              else
-                IconButton(
-                  icon: const Icon(Icons.chat_bubble_rounded,
-                      color: Colors.white),
-                  onPressed: () async {
-                    final nav = Navigator.of(context);
-                    final messenger = ScaffoldMessenger.of(context);
-                    try {
-                      final cu = FirebaseAuth.instance.currentUser;
-                      if (cu == null) return;
-                      final cuData =
-                          await _firestoreService.getUserById(cu.uid);
-                      if (cuData == null || _userData == null) return;
-                      if (!mounted) return;
-                      showDialog(
-                          context: context,
-                          barrierDismissible: false,
-                          builder: (_) => const Center(
-                              child: CircularProgressIndicator()));
-                      final chatId = await _chatService.getOrCreateChat(
-                        cu.uid,
-                        widget.userId,
-                        {
-                          'name': cuData.name,
-                          'profilePhoto': cuData.profilePhoto
-                        },
-                        {
-                          'name': _userData!.name,
-                          'profilePhoto': _userData!.profilePhoto
-                        },
-                      );
-                      if (!mounted) return;
-                      nav.pop();
-                      nav.push(MaterialPageRoute(
-                          builder: (_) => ChatDetailScreen(
-                              chatId: chatId,
-                              otherUserId: widget.userId,
-                              otherUserName: _userData!.name,
-                              otherUserPhoto: _userData!.profilePhoto)));
-                    } catch (e) {
-                      if (!mounted) return;
-                      nav.pop();
-                      messenger.showSnackBar(
-                          SnackBar(content: Text('Error: $e')));
-                    }
-                  },
-                ),
-            ],
+                  ),
+              ],
             flexibleSpace: LayoutBuilder(
               builder: (context, constraints) {
                 final top = MediaQuery.of(context).padding.top;
@@ -1976,7 +2232,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           children: [
                             if (isOwnProfile)
                               Positioned(
-                                bottom: 12,
+                                top: 12,
                                 right: 12,
                                 child: GestureDetector(
                                   onTap: _openBannerEditor,
@@ -2036,7 +2292,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
 
-          // ── Identity row (name + action button) ──
+          // ── Identity: name centered under avatar ──
           SliverToBoxAdapter(
             child: Padding(
                   padding: const EdgeInsets.fromLTRB(
@@ -2044,40 +2300,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // Space reserved for avatar
-                      const SizedBox(
-                          width: 2 * (avatarRadius + avatarBorder) + 12),
-                      // Name + location
+                      // Name centered under avatar
                       Expanded(
                         child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          _userData?.name ?? 'Customer',
-                          style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1A1A2E),
-                              letterSpacing: -0.3),
-                        ),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(colors: coverColors),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.person_rounded, size: 12, color: Colors.white),
-                              SizedBox(width: 4),
-                              Text('Customer',
-                                  style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold)),
-                            ],
+                        SizedBox(
+                          width: 2 * (avatarRadius + avatarBorder),
+                          child: Text(
+                            (_userData?.name ?? 'Customer').toUpperCase(),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF1A1A2E),
+                                letterSpacing: 1.2),
                           ),
                         ),
                         if (locationText.isNotEmpty) ...[
@@ -2436,44 +2673,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
               foregroundColor: Colors.white,
               elevation: 0,
             actions: [
-              if (isOwnProfile)
+              if (!isOwnProfile) ...[
                 IconButton(
-                  icon: const Icon(Icons.edit_rounded, color: Colors.white),
-                  onPressed: () async {
-                    await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                CompanySetupScreen(userId: widget.userId)));
-                    _loadProfile();
+                  icon: const Icon(Icons.share_rounded,
+                      color: Colors.white),
+                  onPressed: () => Share.share(
+                      'Check out ${profile.companyName} on SkillShare!\nIndustry: ${profile.industry}',
+                      subject: 'SkillShare Company'),
+                ),
+                PopupMenuButton<String>(
+                  icon:
+                      const Icon(Icons.more_vert, color: Colors.white),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                        value: 'report',
+                        child: Row(children: [
+                          Icon(Icons.report, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Report')
+                        ])),
+                  ],
+                  onSelected: (v) {
+                    if (v == 'report') _showReportDialog();
                   },
-                )
-              else ...
-                [
-                  IconButton(
-                    icon: const Icon(Icons.share_rounded,
-                        color: Colors.white),
-                    onPressed: () => Share.share(
-                        'Check out ${profile.companyName} on SkillShare!\nIndustry: ${profile.industry}',
-                        subject: 'SkillShare Company'),
-                  ),
-                  PopupMenuButton<String>(
-                    icon:
-                        const Icon(Icons.more_vert, color: Colors.white),
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(
-                          value: 'report',
-                          child: Row(children: [
-                            Icon(Icons.report, color: Colors.red),
-                            SizedBox(width: 8),
-                            Text('Report')
-                          ])),
-                    ],
-                    onSelected: (v) {
-                      if (v == 'report') _showReportDialog();
-                    },
-                  ),
-                ],
+                ),
+              ],
             ],
             flexibleSpace: LayoutBuilder(
               builder: (context, constraints) {
@@ -2506,7 +2730,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           if (isOwnProfile)
                             Positioned(
-                              bottom: 12,
+                              top: 12,
                               right: 12,
                               child: GestureDetector(
                                 onTap: _openBannerEditor,
@@ -2565,7 +2789,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
 
-          // ── Identity row ──
+          // ── Identity: name centered under avatar ──
           SliverToBoxAdapter(
             child: Padding(
                   padding: const EdgeInsets.fromLTRB(
@@ -2573,23 +2797,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Space reserved for avatar
-                      const SizedBox(
-                          width: 2 * (avatarRadius + avatarBorder) + 12),
-                      // Name + industry details
+                      // Name centered under avatar
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              profile.companyName.isNotEmpty
-                                  ? profile.companyName
-                                  : 'Company',
-                              style: const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1A1A2E),
-                                  letterSpacing: -0.3),
+                            SizedBox(
+                              width: 2 * (avatarRadius + avatarBorder),
+                              child: Text(
+                                (profile.companyName.isNotEmpty
+                                    ? profile.companyName
+                                    : 'Company').toUpperCase(),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF1A1A2E),
+                                    letterSpacing: 1.2),
+                              ),
                             ),
                             const SizedBox(height: 6),
                             Container(

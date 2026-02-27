@@ -228,7 +228,7 @@ class _WorkRequestCardState extends State<_WorkRequestCard> {
   Color get _statusColor {
     switch (widget.request.status) {
       case 'accepted':
-        return Colors.green;
+        return Colors.blue;
       case 'rejected':
         return Colors.red;
       case 'completed':
@@ -275,7 +275,7 @@ class _WorkRequestCardState extends State<_WorkRequestCard> {
       case 'pending':
         return const Color(0xFFFFFDE7); // sticky-note yellow
       case 'accepted':
-        return const Color(0xFFF1F8E9); // light green
+        return const Color(0xFFE3F2FD); // light blue
       default:
         return Colors.white;
     }
@@ -522,16 +522,16 @@ class _WorkRequestCardState extends State<_WorkRequestCard> {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  // Approve — green gradient
+                  // Approve — blue gradient
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [Color(0xFF43A047), Color(0xFF66BB6A)],
+                          colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
                         ),
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
-                          BoxShadow(color: const Color(0xFF43A047).withValues(alpha: 0.3),
+                          BoxShadow(color: const Color(0xFF1565C0).withValues(alpha: 0.3),
                               blurRadius: 6, offset: const Offset(0, 2)),
                         ],
                       ),

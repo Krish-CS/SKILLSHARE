@@ -106,13 +106,16 @@ class _GPaySimulationDialogState extends State<GPaySimulationDialog>
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       insetPadding: EdgeInsets.fromLTRB(24, 24, 24, bottomInset + 24),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: _step == _PayStep.success
-            ? _buildSuccess()
-            : _step == _PayStep.processing
-                ? _buildProcessing()
-                : _buildEnterUpi(),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: _step == _PayStep.success
+              ? _buildSuccess()
+              : _step == _PayStep.processing
+                  ? _buildProcessing()
+                  : _buildEnterUpi(),
+        ),
       ),
     );
   }
