@@ -192,7 +192,7 @@ class _MainNavigationState extends State<MainNavigation> {
                 size: 22,
               );
 
-              // Badge overlay for cart / chat
+              // Badge overlay for cart / chat / work requests
               if (uid != null) {
                 if (role == UserRoles.customer && i == cartIdx) {
                   iconW = StreamBuilder<List<dynamic>>(
@@ -205,15 +205,38 @@ class _MainNavigationState extends State<MainNavigation> {
                     },
                   );
                 } else if (i == chatIdx) {
+                  // Stack both chat unread (red) and work request (amber) badges
                   iconW = StreamBuilder<List<dynamic>>(
                     stream: _chatService.getUserChats(uid),
-                    builder: (_, snap) {
+                    builder: (_, chatSnap) {
                       int unread = 0;
-                      for (final c in snap.data ?? []) {
+                      for (final c in chatSnap.data ?? []) {
                         final u = (c as dynamic).unreadCount;
                         if (u is Map) unread += (u[uid] as int?) ?? 0;
                       }
-                      return _navBadge(Icons.chat, selected, unread);
+                      return StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection(AppConstants.requestsCollection)
+                            .where('participants', arrayContains: uid)
+                            .snapshots(),
+                        builder: (_, reqSnap) {
+                          int pendingWork = 0;
+                          if (reqSnap.hasData) {
+                            for (final doc in reqSnap.data!.docs) {
+                              final d = doc.data() as Map<String, dynamic>;
+                              final status = (d['status'] as String?) ?? '';
+                              final type = (d['type'] as String?) ?? '';
+                              if (type == 'chat_work_request' &&
+                                  status == 'pending') {
+                                pendingWork++;
+                              }
+                            }
+                          }
+                          return _navDoubleBadge(
+                            Icons.chat, selected, unread, pendingWork,
+                          );
+                        },
+                      );
                     },
                   );
                 }
@@ -294,6 +317,60 @@ class _MainNavigationState extends State<MainNavigation> {
                   const BoxConstraints(minWidth: 14, minHeight: 14),
               child: Text(
                 count > 99 ? '99+' : '$count',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Double-badge icon: red badge (top-right) for chat unread,
+  /// amber badge (top-left) for pending work requests.
+  Widget _navDoubleBadge(
+      IconData icon, bool selected, int chatUnread, int workReqCount) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Icon(icon, color: selected ? Colors.white : Colors.grey[500], size: 22),
+        // Chat unread — red, top-right
+        if (chatUnread > 0)
+          Positioned(
+            right: -6,
+            top: -6,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(
+                  color: Colors.red, shape: BoxShape.circle),
+              constraints:
+                  const BoxConstraints(minWidth: 14, minHeight: 14),
+              child: Text(
+                chatUnread > 99 ? '99+' : '$chatUnread',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        // Work requests — amber, top-left
+        if (workReqCount > 0)
+          Positioned(
+            left: -6,
+            top: -6,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(
+                  color: Color(0xFFFF8F00), shape: BoxShape.circle),
+              constraints:
+                  const BoxConstraints(minWidth: 14, minHeight: 14),
+              child: Text(
+                workReqCount > 99 ? '99+' : '$workReqCount',
                 style: const TextStyle(
                     color: Colors.white,
                     fontSize: 9,

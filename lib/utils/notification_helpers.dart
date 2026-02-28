@@ -6,7 +6,10 @@ import '../services/firestore_service.dart';
 import 'app_constants.dart';
 import 'app_helpers.dart';
 
-/// A single notification item (work-request or order update).
+/// Type of notification — used for click-based navigation.
+enum NotificationType { workRequest, order, chatMessage }
+
+/// A single notification item (work-request, order update, or chat message).
 class NotificationItem {
   final String title;
   final String subtitle;
@@ -14,12 +17,28 @@ class NotificationItem {
   final IconData icon;
   final Color color;
 
+  /// Navigation metadata — used when the user taps a notification card.
+  final NotificationType type;
+  final String? chatId;       // For work-request & chat notifications
+  final String? otherUserId;  // The other participant
+  final String? otherUserName;
+  final String? otherUserPhoto;
+  final String? requestId;    // For work-request notifications
+  final OrderModel? orderData; // For order notifications
+
   const NotificationItem({
     required this.title,
     required this.subtitle,
     required this.createdAt,
     required this.icon,
     required this.color,
+    this.type = NotificationType.workRequest,
+    this.chatId,
+    this.otherUserId,
+    this.otherUserName,
+    this.otherUserPhoto,
+    this.requestId,
+    this.orderData,
   });
 }
 
@@ -47,6 +66,11 @@ Future<List<NotificationItem>> loadNotificationsForUser(
   final chatsSnap = results[2] as QuerySnapshot;
 
   for (final request in requests) {
+    // Determine the other user (to navigate to the correct chat)
+    final otherUserId = request.customerId == userId
+        ? request.skilledUserId
+        : request.customerId;
+
     notifications.add(
       NotificationItem(
         title: 'Work request: ${request.title}',
@@ -63,6 +87,10 @@ Future<List<NotificationItem>> loadNotificationsForUser(
             : request.status == AppConstants.requestStatusRejected
                 ? Colors.red
                 : Colors.orange,
+        type: NotificationType.workRequest,
+        chatId: request.chatId,
+        requestId: request.id,
+        otherUserId: otherUserId,
       ),
     );
   }
@@ -83,6 +111,8 @@ Future<List<NotificationItem>> loadNotificationsForUser(
         createdAt: order.updatedAt,
         icon: isBuyer ? Icons.shopping_bag : Icons.store,
         color: isBuyer ? const Color(0xFF2196F3) : const Color(0xFF6A11CB),
+        type: NotificationType.order,
+        orderData: order,
       ),
     );
   }
@@ -103,6 +133,7 @@ Future<List<NotificationItem>> loadNotificationsForUser(
         participants.firstWhere((id) => id != userId, orElse: () => '');
 
     String senderName = 'Someone';
+    String? senderPhoto;
     final participantDetails =
         data['participantDetails'] as Map<String, dynamic>?;
     if (participantDetails != null && otherUserId.isNotEmpty) {
@@ -111,6 +142,7 @@ Future<List<NotificationItem>> loadNotificationsForUser(
       senderName = (details?['name'] as String?)?.trim().isNotEmpty == true
           ? details!['name'] as String
           : 'Someone';
+      senderPhoto = details?['photo'] as String?;
     }
 
     final lastMsg = (data['lastMessage'] as String?)?.trim() ?? '';
@@ -125,6 +157,11 @@ Future<List<NotificationItem>> loadNotificationsForUser(
       createdAt: msgTime,
       icon: Icons.chat_bubble_rounded,
       color: const Color(0xFF00ACC1),
+      type: NotificationType.chatMessage,
+      chatId: doc.id,
+      otherUserId: otherUserId,
+      otherUserName: senderName,
+      otherUserPhoto: senderPhoto,
     ));
   }
 

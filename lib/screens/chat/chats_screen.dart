@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/chat_model.dart';
 import '../../services/chat_service.dart';
 import '../../services/presence_service.dart';
 import '../../utils/app_helpers.dart';
+import '../../utils/app_constants.dart';
 import '../../utils/web_image_loader.dart';
 import 'chat_detail_screen.dart';
 
@@ -22,12 +24,21 @@ class _ChatsScreenState extends State<ChatsScreen> {
   String? _currentUserId;
   Stream<List<ChatModel>>? _chatsStream;
 
+  /// Map of chatId → number of pending work requests for that chat
+  Map<String, int> _pendingWorkCounts = {};
+  Stream<QuerySnapshot>? _workRequestStream;
+
   @override
   void initState() {
     super.initState();
     _currentUserId = FirebaseAuth.instance.currentUser?.uid;
     if (_currentUserId != null) {
       _chatsStream = _chatService.getUserChats(_currentUserId!);
+      // Stream all work requests where this user is a participant
+      _workRequestStream = FirebaseFirestore.instance
+          .collection(AppConstants.requestsCollection)
+          .where('participants', arrayContains: _currentUserId)
+          .snapshots();
     }
   }
 
@@ -127,9 +138,29 @@ class _ChatsScreenState extends State<ChatsScreen> {
             ),
           ),
 
-          // Chats List
+          // Chats List (wrapped with work request stream)
           Expanded(
-            child: StreamBuilder<List<ChatModel>>(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _workRequestStream,
+              builder: (context, workSnap) {
+                // Build a map of chatId → pending work request count
+                _pendingWorkCounts = {};
+                if (workSnap.hasData) {
+                  for (final doc in workSnap.data!.docs) {
+                    final d = doc.data() as Map<String, dynamic>;
+                    final type = (d['type'] as String?) ?? '';
+                    final status = (d['status'] as String?) ?? '';
+                    final chatId = (d['chatId'] as String?) ?? '';
+                    if (type == 'chat_work_request' &&
+                        status == 'pending' &&
+                        chatId.isNotEmpty) {
+                      _pendingWorkCounts[chatId] =
+                          (_pendingWorkCounts[chatId] ?? 0) + 1;
+                    }
+                  }
+                }
+
+                return StreamBuilder<List<ChatModel>>(
               stream: _chatsStream,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -202,7 +233,9 @@ class _ChatsScreenState extends State<ChatsScreen> {
                   },
                 );
               },
-            ),
+            );  // end inner StreamBuilder (chats)
+              },
+            ),  // end outer StreamBuilder (work requests)
           ),
         ],
       ),
@@ -218,6 +251,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
     final name = otherUserDetails?['name'] ?? 'Unknown';
     final photo = otherUserDetails?['photo'];
     final unreadCount = chat.unreadCount[_currentUserId] ?? 0;
+    final pendingWork = _pendingWorkCounts[chat.id] ?? 0;
 
     return InkWell(
       onTap: () {
@@ -273,7 +307,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                         ),
                       ),
                     ),
-                    // Unread badge
+                    // Unread badge (red, top-right)
                     if (unreadCount > 0)
                       Positioned(
                         right: 0,
@@ -291,6 +325,33 @@ class _ChatsScreenState extends State<ChatsScreen> {
                           child: Center(
                             child: Text(
                               unreadCount > 99 ? '99+' : unreadCount.toString(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    // Pending work request badge (amber, top-left)
+                    if (pendingWork > 0)
+                      Positioned(
+                        left: 0,
+                        top: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFFF8F00),
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 20,
+                            minHeight: 20,
+                          ),
+                          child: Center(
+                            child: Text(
+                              pendingWork > 99 ? '99+' : pendingWork.toString(),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 10,
