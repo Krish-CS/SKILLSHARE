@@ -64,6 +64,11 @@ class _BannerDisplayState extends State<BannerDisplay>
     [Color(0xFF000428), Color(0xFF004E92)], // dark-navy
     [Color(0xFF093637), Color(0xFF0D7377)], // teal
     [Color(0xFF1a1a2e), Color(0xFFe43396)], // dark-pink
+    [Color(0xFF11998e), Color(0xFF38ef7d)], // green
+    [Color(0xFFf12711), Color(0xFFf5af19)], // sunset
+    [Color(0xFF654ea3), Color(0xFFeaafc8)], // soft purple
+    [Color(0xFF0F2027), Color(0xFF2C5364)], // dark teal
+    [Color(0xFFDA4453), Color(0xFF89216B)], // berry
   ];
 
   List<Color> get _resolvedGradient {
@@ -97,6 +102,18 @@ class _BannerDisplayState extends State<BannerDisplay>
         return GoogleFonts.lexend(textStyle: base);
       case 'playfair':
         return GoogleFonts.playfairDisplay(textStyle: base);
+      case 'lobster':
+        return GoogleFonts.lobster(textStyle: base);
+      case 'raleway':
+        return GoogleFonts.raleway(textStyle: base);
+      case 'mono':
+        return GoogleFonts.spaceMono(textStyle: base);
+      case 'caveat':
+        return GoogleFonts.caveat(textStyle: base);
+      case 'satisfy':
+        return GoogleFonts.satisfy(textStyle: base);
+      case 'righteous':
+        return GoogleFonts.righteous(textStyle: base);
       default:
         return base;
     }
@@ -152,6 +169,49 @@ class _BannerDisplayState extends State<BannerDisplay>
         );
       case 'wave':
         return _WaveText(text: text, style: style, animation: _anim);
+      case 'bounce':
+        return AnimatedBuilder(
+          animation: _ctrl,
+          builder: (_, __) {
+            final bounce = -12.0 * (1 - (2 * _ctrl.value - 1).abs());
+            return Transform.translate(
+              offset: Offset(0, bounce),
+              child: Text(text, style: style, textAlign: TextAlign.center),
+            );
+          },
+        );
+      case 'glow':
+        return AnimatedBuilder(
+          animation: _ctrl,
+          builder: (_, __) {
+            final glowRadius = 4.0 + 16.0 * _ctrl.value;
+            return Text(
+              text,
+              textAlign: TextAlign.center,
+              style: style.copyWith(
+                shadows: [
+                  Shadow(color: color.withValues(alpha: 0.8), blurRadius: glowRadius),
+                  Shadow(color: color.withValues(alpha: 0.4), blurRadius: glowRadius * 2),
+                  Shadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 8),
+                ],
+              ),
+            );
+          },
+        );
+      case 'typewriter':
+        return AnimatedBuilder(
+          animation: _ctrl,
+          builder: (_, __) {
+            final charCount = (text.length * _ctrl.value).ceil().clamp(0, text.length);
+            final visible = text.substring(0, charCount);
+            return Text(visible, style: style, textAlign: TextAlign.center);
+          },
+        );
+      case 'rotate':
+        return RotationTransition(
+          turns: Tween<double>(begin: -0.02, end: 0.02).animate(_anim),
+          child: Text(text, style: style, textAlign: TextAlign.center),
+        );
       default:
         return Text(text, style: style, textAlign: TextAlign.center);
     }
@@ -281,6 +341,12 @@ class BannerFonts {
     _FontOption(label: 'Oswald', key: 'oswald'),
     _FontOption(label: 'Lexend', key: 'lexend'),
     _FontOption(label: 'Playfair', key: 'playfair'),
+    _FontOption(label: 'Lobster', key: 'lobster'),
+    _FontOption(label: 'Raleway', key: 'raleway'),
+    _FontOption(label: 'Mono', key: 'mono'),
+    _FontOption(label: 'Caveat', key: 'caveat'),
+    _FontOption(label: 'Satisfy', key: 'satisfy'),
+    _FontOption(label: 'Righteous', key: 'righteous'),
   ];
 }
 

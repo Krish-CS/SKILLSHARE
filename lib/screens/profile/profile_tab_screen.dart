@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -26,7 +28,8 @@ class ProfileTabScreen extends StatefulWidget {
   State<ProfileTabScreen> createState() => _ProfileTabScreenState();
 }
 
-class _ProfileTabScreenState extends State<ProfileTabScreen> {
+class _ProfileTabScreenState extends State<ProfileTabScreen>
+    with TickerProviderStateMixin {
   final FirestoreService _firestoreService = FirestoreService();
   StreamSubscription<UserModel?>? _userSub;
   StreamSubscription<SkilledUserProfile?>? _skilledSub;
@@ -38,19 +41,60 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
   String? _profilePhotoUrl;
   String? _lastSubscribedRole;
 
+  // Animated gradient
+  late AnimationController _gradientCtrl;
+  late Animation<double> _gradientAnim;
+
+  static const _gradientPalettes = <List<Color>>[
+    [Color(0xFF6A0DAD), Color(0xFF9C27B0), Color(0xFFE91E63)],
+    [Color(0xFF2196F3), Color(0xFF673AB7), Color(0xFFE91E63)],
+    [Color(0xFF00BCD4), Color(0xFF3F51B5), Color(0xFF9C27B0)],
+    [Color(0xFFFF5722), Color(0xFFE91E63), Color(0xFF9C27B0)],
+    [Color(0xFF009688), Color(0xFF2196F3), Color(0xFF673AB7)],
+    [Color(0xFF4A148C), Color(0xFFAA00FF), Color(0xFFFF4081)],
+  ];
+
   @override
   void initState() {
     super.initState();
+    _gradientCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 6),
+    )..repeat();
+    _gradientAnim = CurvedAnimation(parent: _gradientCtrl, curve: Curves.linear);
     _subscribeToUserData();
   }
 
   @override
   void dispose() {
+    _gradientCtrl.dispose();
     _userSub?.cancel();
     _skilledSub?.cancel();
     _customerSub?.cancel();
     _companySub?.cancel();
     super.dispose();
+  }
+
+  /// Returns smoothly interpolated gradient colors based on animation value.
+  List<Color> _animatedGradientColors() {
+    final t = _gradientAnim.value * _gradientPalettes.length;
+    final idx = t.floor() % _gradientPalettes.length;
+    final next = (idx + 1) % _gradientPalettes.length;
+    final frac = t - t.floor();
+    return List.generate(3, (i) {
+      return Color.lerp(_gradientPalettes[idx][i], _gradientPalettes[next][i], frac)!;
+    });
+  }
+
+  /// Animated alignment for gradient direction
+  Alignment _animatedBegin() {
+    final a = _gradientAnim.value * 2 * math.pi;
+    return Alignment(math.cos(a), math.sin(a));
+  }
+
+  Alignment _animatedEnd() {
+    final a = _gradientAnim.value * 2 * math.pi + math.pi;
+    return Alignment(math.cos(a), math.sin(a));
   }
 
   void _subscribeToUserData() {
@@ -187,23 +231,26 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
           child: Column(
             children: [
               // ── Attractive Profile Header ──
-              Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFF6A0DAD),
-                      Color(0xFF9C27B0),
-                      Color(0xFFE91E63)
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.only(
-                    bottomLeft: Radius.circular(36),
-                    bottomRight: Radius.circular(36),
-                  ),
-                ),
+              AnimatedBuilder(
+                animation: _gradientAnim,
+                builder: (context, child) {
+                  final colors = _animatedGradientColors();
+                  return Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: colors,
+                        begin: _animatedBegin(),
+                        end: _animatedEnd(),
+                      ),
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(36),
+                        bottomRight: Radius.circular(36),
+                      ),
+                    ),
+                    child: child,
+                  );
+                },
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [

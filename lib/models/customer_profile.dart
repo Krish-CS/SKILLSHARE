@@ -20,6 +20,8 @@ class CustomerProfile {
   final List<Map<String, dynamic>> assignedProjects;
   /// Banner customisation data (image or styled text).
   final Map<String, dynamic>? bannerData;
+  /// Emoji avatar key (e.g. 'avatar_smile'). When set, shown instead of photo.
+  final String? avatarKey;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -38,6 +40,7 @@ class CustomerProfile {
     this.preferences,
     this.assignedProjects = const [],
     this.bannerData,
+    this.avatarKey,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -62,6 +65,7 @@ class CustomerProfile {
       bannerData: map['bannerData'] is Map
           ? Map<String, dynamic>.from(map['bannerData'] as Map)
           : null,
+      avatarKey: map['avatarKey'] as String?,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -82,6 +86,7 @@ class CustomerProfile {
       'preferences': preferences,
       'assignedProjects': assignedProjects,
       if (bannerData != null) 'bannerData': bannerData,
+      if (avatarKey != null) 'avatarKey': avatarKey,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -102,6 +107,8 @@ class CustomerProfile {
     List<Map<String, dynamic>>? assignedProjects,
     Map<String, dynamic>? bannerData,
     bool clearBanner = false,
+    String? avatarKey,
+    bool clearAvatar = false,
   }) {
     return CustomerProfile(
       userId: userId,
@@ -118,6 +125,7 @@ class CustomerProfile {
       preferences: preferences ?? this.preferences,
       assignedProjects: assignedProjects ?? this.assignedProjects,
       bannerData: clearBanner ? null : (bannerData ?? this.bannerData),
+      avatarKey: clearAvatar ? null : (avatarKey ?? this.avatarKey),
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );

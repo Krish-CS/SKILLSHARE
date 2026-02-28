@@ -11,6 +11,7 @@ import '../../services/cloudinary_service.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/web_image_loader.dart';
 import '../../utils/app_dialog.dart';
+import '../../widgets/avatar_picker.dart';
 import '../main_navigation.dart';
 
 class CustomerSetupScreen extends StatefulWidget {
@@ -39,6 +40,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
   File? _profileImage;
   Uint8List? _profileImageBytes; // For web
   String? _profileImageUrl;
+  String? _avatarKey; // WhatsApp-style emoji avatar
 
   final List<String> _serviceCategories = [
     'Home Baking',
@@ -77,6 +79,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
           ? profile.profilePicture
           : null;
       _locationController.text = profile.location ?? '';
+      _avatarKey = profile.avatarKey;
     }
 
     setState(() {
@@ -211,6 +214,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
         profilePicture: effectiveProfileUrl,
         location: _locationController.text.trim(),
         preferredCategories: _lookingFor,
+        avatarKey: _avatarKey,
         createdAt: currentProfile?.createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -301,51 +305,119 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                   child: Center(
                     child: Padding(
                       padding: const EdgeInsets.only(top: 24),
-                      child: GestureDetector(
-                        onTap: _pickProfileImage,
-                        child: Stack(
-                          children: [
-                            Container(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          GestureDetector(
+                            onTap: _pickProfileImage,
+                            child: Stack(
+                              children: [
+                                Container(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 3),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.3),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: _avatarKey != null && _avatarKey!.isNotEmpty
+                                      ? buildAvatarOrPhoto(
+                                          avatarKey: _avatarKey,
+                                          radius: 52,
+                                          fallback: const CircleAvatar(
+                                            radius: 52,
+                                            backgroundColor: Colors.white,
+                                            child: Icon(Icons.person,
+                                                size: 52, color: Color(0xFF00695C)),
+                                          ),
+                                        )
+                                      : CircleAvatar(
+                                          radius: 52,
+                                          backgroundColor: Colors.white,
+                                          backgroundImage: _getProfileImage(),
+                                          onBackgroundImageError:
+                                              _getProfileImage() != null
+                                                  ? (_, __) {}
+                                                  : null,
+                                          child: _profileImage == null &&
+                                                  _profileImageBytes == null &&
+                                                  (_profileImageUrl == null ||
+                                                      _profileImageUrl!.isEmpty)
+                                              ? const Icon(Icons.person,
+                                                  size: 52, color: Color(0xFF00695C))
+                                              : null,
+                                        ),
+                                ),
+                                Positioned(
+                                  bottom: 0,
+                                  right: 0,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF00695C),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                          color: Colors.white, width: 2),
+                                    ),
+                                    child: const Icon(Icons.camera_alt,
+                                        color: Colors.white, size: 16),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          // Avatar option button
+                          GestureDetector(
+                            onTap: () async {
+                              final key = await AvatarPickerSheet.show(
+                                context,
+                                currentAvatar: _avatarKey,
+                              );
+                              if (key == null) return;
+                              setState(() {
+                                if (key == 'remove_avatar') {
+                                  _avatarKey = null;
+                                } else {
+                                  _avatarKey = key;
+                                }
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 5),
                               decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 3),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.3),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 4),
+                                color: Colors.white.withValues(alpha: 0.25),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.face_rounded,
+                                      color: Colors.white, size: 14),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _avatarKey != null
+                                        ? 'Change Avatar'
+                                        : 'Use Avatar',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ],
                               ),
-                              child: CircleAvatar(
-                                radius: 52,
-                                backgroundColor: Colors.white,
-                                backgroundImage: _getProfileImage(),
-                                onBackgroundImageError: _getProfileImage() != null
-                                    ? (_, __) {} // silently handle load errors
-                                    : null,
-                                child: _profileImage == null &&
-                                        _profileImageBytes == null &&
-                                        (_profileImageUrl == null || _profileImageUrl!.isEmpty)
-                                    ? const Icon(Icons.person, size: 52, color: Color(0xFF00695C))
-                                    : null,
-                              ),
                             ),
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF00695C),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white, width: 2),
-                                ),
-                                child: const Icon(Icons.camera_alt, color: Colors.white, size: 16),
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),

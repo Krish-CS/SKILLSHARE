@@ -12,6 +12,7 @@ import '../../utils/app_constants.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/app_helpers.dart';
 import '../../utils/web_image_loader.dart';
+import '../../widgets/filter_bottom_sheet.dart';
 import 'add_product_screen.dart';
 import 'product_detail_screen.dart';
 import 'cart_screen.dart';
@@ -77,6 +78,22 @@ class _ShopScreenState extends State<ShopScreen> {
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _openFilterSheet() async {
+    final result = await FilterBottomSheet.show(
+      context,
+      mode: 'products',
+      initialCategory: _selectedCategory == 'All' ? null : _selectedCategory,
+      initialSortBy: _sortBy,
+      initialMinRating: 0,
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _selectedCategory = result.category ?? 'All';
+      _sortBy = result.sortBy ?? 'newest';
+    });
+    _applyFilters();
   }
 
   void _subscribeToProducts() {
@@ -315,7 +332,27 @@ class _ShopScreenState extends State<ShopScreen> {
                                         _applyFilters();
                                       },
                                     )
-                                  : null,
+                                  : GestureDetector(
+                                      onTap: _openFilterSheet,
+                                      child: Container(
+                                        margin: const EdgeInsets.all(6),
+                                        padding: const EdgeInsets.all(5),
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            colors: [
+                                              AppTheme.primaryPurple,
+                                              AppTheme.primaryPink,
+                                            ],
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: const Icon(
+                                            Icons.tune_rounded,
+                                            color: Colors.white,
+                                            size: 16),
+                                      ),
+                                    ),
                               border: InputBorder.none,
                               contentPadding:
                                   const EdgeInsets.symmetric(vertical: 11),
@@ -330,21 +367,39 @@ class _ShopScreenState extends State<ShopScreen> {
             ),
             // Sort chips in the collapsed bar
             bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(36),
+              preferredSize: const Size.fromHeight(42),
               child: _buildSortChips(),
             ),
           ),
 
           // ── Category chips ──
-          SliverToBoxAdapter(child: _buildCategoryChips()),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: _buildCategoryChips(),
+            ),
+          ),
+
+          // Spacer between categories and featured
+          const SliverToBoxAdapter(child: SizedBox(height: 10)),
 
           // ── Featured / Top Rated horizontal section ──
           if (!_isLoading && _featuredProducts.isNotEmpty && _searchQuery.isEmpty && _selectedCategory == 'All')
-            SliverToBoxAdapter(child: _buildFeaturedSection()),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: _buildFeaturedSection(),
+              ),
+            ),
 
           // ── Result count row ──
           if (!_isLoading)
-            SliverToBoxAdapter(child: _buildResultsHeader()),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: _buildResultsHeader(),
+              ),
+            ),
 
           // ── Products grid / loading ──
           if (_isLoading)
@@ -383,11 +438,11 @@ class _ShopScreenState extends State<ShopScreen> {
       ('price_high', 'Price ↓'),
     ];
     return Container(
-      height: 36,
+      height: 42,
       color: AppTheme.primaryPurple.withValues(alpha: 0.9),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         itemCount: sortOptions.length,
         separatorBuilder: (_, __) => const SizedBox(width: 6),
         itemBuilder: (context, i) {
@@ -425,10 +480,10 @@ class _ShopScreenState extends State<ShopScreen> {
   Widget _buildCategoryChips() {
     return Container(
       color: Colors.white,
-      height: 76,
+      height: 82,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         itemCount: _categories.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, i) {
@@ -481,7 +536,7 @@ class _ShopScreenState extends State<ShopScreen> {
     return Container(
       color: Colors.white,
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

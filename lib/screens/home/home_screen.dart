@@ -15,6 +15,7 @@ import '../../services/chat_service.dart';
 import '../profile/profile_screen.dart';
 import 'explore_screen.dart';
 import '../../widgets/notification_bell.dart';
+import '../../widgets/filter_bottom_sheet.dart';
 import '../../utils/app_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -75,6 +76,24 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onSearchChanged() {
     setState(() {
       _searchQuery = _searchController.text.toLowerCase();
+    });
+  }
+
+  Future<void> _openFilterSheet() async {
+    final result = await FilterBottomSheet.show(
+      context,
+      mode: 'experts',
+      initialCategory: _selectedCategory,
+      initialSortBy: _sortBy,
+      initialMinRating: 0,
+      initialViewMode: _isGridView ? 'grid' : 'list',
+    );
+    if (result == null) return;
+    setState(() {
+      _selectedCategory = result.category;
+      _sortBy = result.sortBy ?? 'rating';
+      _isGridView = result.viewMode == 'grid';
+      _showFilters = false; // close inline filter if open
     });
   }
 
@@ -471,8 +490,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           )
                                         : GestureDetector(
                                             key: const ValueKey('filter'),
-                                            onTap: () => setState(() =>
-                                                _showFilters = !_showFilters),
+                                            onTap: () => _openFilterSheet(),
                                             child: Container(
                                               padding: const EdgeInsets.all(6),
                                               decoration: BoxDecoration(
@@ -756,9 +774,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               TextButton.icon(
                                 onPressed: () {
-                                  setState(() {
-                                    _showFilters = !_showFilters;
-                                  });
+                                  _openFilterSheet();
                                 },
                                 icon: Icon(
                                   _showFilters

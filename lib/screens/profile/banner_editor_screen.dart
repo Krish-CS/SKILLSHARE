@@ -54,6 +54,11 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
     [Color(0xFF000428), Color(0xFF004E92)],
     [Color(0xFF093637), Color(0xFF0D7377)],
     [Color(0xFF1a1a2e), Color(0xFFe43396)],
+    [Color(0xFF11998e), Color(0xFF38ef7d)],
+    [Color(0xFFf12711), Color(0xFFf5af19)],
+    [Color(0xFF654ea3), Color(0xFFeaafc8)],
+    [Color(0xFF0F2027), Color(0xFF2C5364)],
+    [Color(0xFFDA4453), Color(0xFF89216B)],
   ];
 
   // ─── Font options ──────────────────────────────────────────────────────────
@@ -64,6 +69,12 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
     ('oswald', 'Oswald'),
     ('lexend', 'Lexend'),
     ('playfair', 'Playfair'),
+    ('lobster', 'Lobster'),
+    ('raleway', 'Raleway'),
+    ('mono', 'Mono'),
+    ('caveat', 'Caveat'),
+    ('satisfy', 'Satisfy'),
+    ('righteous', 'Righteous'),
   ];
 
   // ─── Preset text colors ────────────────────────────────────────────────────
@@ -88,6 +99,10 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
     ('shimmer', 'Shimmer', Icons.auto_awesome),
     ('slide', 'Slide', Icons.swap_horiz),
     ('wave', 'Wave', Icons.waves),
+    ('bounce', 'Bounce', Icons.arrow_upward),
+    ('glow', 'Glow', Icons.flare),
+    ('typewriter', 'Typewriter', Icons.keyboard),
+    ('rotate', 'Rotate', Icons.rotate_right),
   ];
 
   @override
@@ -214,6 +229,18 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
         return GoogleFonts.lexend(textStyle: base);
       case 'playfair':
         return GoogleFonts.playfairDisplay(textStyle: base);
+      case 'lobster':
+        return GoogleFonts.lobster(textStyle: base);
+      case 'raleway':
+        return GoogleFonts.raleway(textStyle: base);
+      case 'mono':
+        return GoogleFonts.spaceMono(textStyle: base);
+      case 'caveat':
+        return GoogleFonts.caveat(textStyle: base);
+      case 'satisfy':
+        return GoogleFonts.satisfy(textStyle: base);
+      case 'righteous':
+        return GoogleFonts.righteous(textStyle: base);
       default:
         return base;
     }

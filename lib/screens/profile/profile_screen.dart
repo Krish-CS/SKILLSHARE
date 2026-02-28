@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -35,7 +36,8 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen>
+    with TickerProviderStateMixin {
   final FirestoreService _firestoreService = FirestoreService();
   final ChatService _chatService = ChatService();
 
@@ -47,6 +49,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _userRole;
   bool _isLoading = true;
   StreamSubscription? _profileSub;
+
+  // Animated gradient controller for profile backgrounds
+  late AnimationController _gradAnimCtrl;
+  late Animation<double> _gradAnim;
 
   // Check if user is viewing their own profile
   bool get isOwnProfile =>
@@ -377,11 +383,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _gradAnimCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 8),
+    )..repeat();
+    _gradAnim = CurvedAnimation(parent: _gradAnimCtrl, curve: Curves.linear);
     _loadProfile().then((_) => _subscribeToProfileStream());
   }
 
   @override
   void dispose() {
+    _gradAnimCtrl.dispose();
     _profileSub?.cancel();
     super.dispose();
   }
@@ -740,17 +752,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              coverColors.first.withValues(alpha: 0.08),
-              const Color(0xFFF6F7FB),
-              coverColors.last.withValues(alpha: 0.04),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
+      body: AnimatedBuilder(
+        animation: _gradAnim,
+        builder: (context, child) => Container(
+          decoration: _animatedBodyGradient(coverColors),
+          child: child,
         ),
         child: CustomScrollView(
           clipBehavior: Clip.none,
@@ -949,6 +955,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
         onPressed: onTap,
       );
 
+  /// Animated body gradient that shifts direction & brightness over time
+  BoxDecoration _animatedBodyGradient(List<Color> coverColors) {
+    final a = _gradAnim.value * 2 * math.pi;
+    return BoxDecoration(
+      gradient: LinearGradient(
+        colors: [
+          Color.lerp(coverColors.first.withValues(alpha: 0.06),
+              coverColors.last.withValues(alpha: 0.10), _gradAnim.value)!,
+          const Color(0xFFF6F7FB),
+          Color.lerp(coverColors.last.withValues(alpha: 0.04),
+              coverColors.first.withValues(alpha: 0.08), _gradAnim.value)!,
+        ],
+        begin: Alignment(math.cos(a) * 0.5, -1),
+        end: Alignment(math.sin(a) * 0.5, 1),
+      ),
+    );
+  }
+
   // ─── Minimal profile view for delivery partner / admin ────────────────────
   Widget _buildBasicProfileView() {
     const coverHeight = 200.0;
@@ -964,16 +988,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              coverColors.first.withValues(alpha: 0.07),
-              const Color(0xFFF6F7FB),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
+      body: AnimatedBuilder(
+        animation: _gradAnim,
+        builder: (context, child) => Container(
+          decoration: _animatedBodyGradient(coverColors),
+          child: child,
         ),
         child: CustomScrollView(
           clipBehavior: Clip.none,
@@ -2146,17 +2165,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              coverColors.first.withValues(alpha: 0.08),
-              const Color(0xFFF6F7FB),
-              coverColors.last.withValues(alpha: 0.04),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
+      body: AnimatedBuilder(
+        animation: _gradAnim,
+        builder: (context, child) => Container(
+          decoration: _animatedBodyGradient(coverColors),
+          child: child,
         ),
         child: CustomScrollView(
           clipBehavior: Clip.none,

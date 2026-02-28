@@ -5,6 +5,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/user_provider.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/web_image_loader.dart';
+import '../../widgets/filter_bottom_sheet.dart';
 import '../profile/profile_screen.dart';
 
 class ExploreScreen extends StatefulWidget {
@@ -39,6 +40,24 @@ class _ExploreScreenState extends State<ExploreScreen> {
     _selectedCategory = widget.initialCategory;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<UserProvider>(context, listen: false).loadVerifiedUsers();
+    });
+  }
+
+  Future<void> _openFilterSheet() async {
+    final result = await FilterBottomSheet.show(
+      context,
+      mode: 'experts',
+      initialCategory: _selectedCategory,
+      initialSortBy: _sortBy,
+      initialMinRating: _minRating,
+      initialViewMode: _isGridView ? 'grid' : 'list',
+    );
+    if (result == null) return;
+    setState(() {
+      _selectedCategory = result.category;
+      _sortBy = result.sortBy ?? 'rating';
+      _minRating = result.minRating ?? 0;
+      _isGridView = result.viewMode == 'grid';
     });
   }
 
@@ -158,7 +177,24 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                 setState(() => _searchQuery = '');
                               },
                             )
-                          : null,
+                          : GestureDetector(
+                              onTap: () => _openFilterSheet(),
+                              child: Container(
+                                margin: const EdgeInsets.all(6),
+                                padding: const EdgeInsets.all(5),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFF6A11CB),
+                                      Color(0xFF2575FC),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.tune_rounded,
+                                    color: Colors.white, size: 16),
+                              ),
+                            ),
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 14),
