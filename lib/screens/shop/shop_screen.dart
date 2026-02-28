@@ -221,7 +221,7 @@ class _ShopScreenState extends State<ShopScreen> {
             pinned: true,
             floating: true,
             snap: true,
-            expandedHeight: 130,
+            expandedHeight: 145,
             backgroundColor: AppTheme.primaryPurple,
             foregroundColor: Colors.white,
             elevation: 0,
@@ -237,7 +237,7 @@ class _ShopScreenState extends State<ShopScreen> {
                 ),
                 child: SafeArea(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 18),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -367,21 +367,23 @@ class _ShopScreenState extends State<ShopScreen> {
             ),
             // Sort chips in the collapsed bar
             bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(42),
-              child: _buildSortChips(),
+              preferredSize: const Size.fromHeight(52),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 6, bottom: 6),
+                child: _buildSortChips(),
+              ),
             ),
           ),
 
           // ── Category chips ──
+          const SliverToBoxAdapter(child: SizedBox(height: 12)),
+
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: _buildCategoryChips(),
-            ),
+            child: _buildCategoryChips(),
           ),
 
           // Spacer between categories and featured
-          const SliverToBoxAdapter(child: SizedBox(height: 10)),
+          const SliverToBoxAdapter(child: SizedBox(height: 12)),
 
           // ── Featured / Top Rated horizontal section ──
           if (!_isLoading && _featuredProducts.isNotEmpty && _searchQuery.isEmpty && _selectedCategory == 'All')
@@ -438,11 +440,11 @@ class _ShopScreenState extends State<ShopScreen> {
       ('price_high', 'Price ↓'),
     ];
     return Container(
-      height: 42,
+      height: 40,
       color: AppTheme.primaryPurple.withValues(alpha: 0.9),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
         itemCount: sortOptions.length,
         separatorBuilder: (_, __) => const SizedBox(width: 6),
         itemBuilder: (context, i) {
