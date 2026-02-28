@@ -3,7 +3,7 @@
 > **Last updated:** 2026-02-28
 > **Flutter:** 3.27.1 | **Target:** Web (Chrome)
 > **Backend:** Firebase/Firestore, Cloudinary for images
-> **Latest commit:** `562f336` on `origin/main`
+> **Latest commit:** `4e16120` on `origin/main`
 
 ---
 
@@ -23,89 +23,88 @@ Commit `da82c65` pushed to `origin/main`.
 
 ### Phase 5 — Five New UI Features (commit `52b87b6`)
 
-1. **Search Filter Bottom Sheet** — New `lib/widgets/filter_bottom_sheet.dart`
+1. **Search Filter Bottom Sheet** — `lib/widgets/filter_bottom_sheet.dart`
    - Reusable filter UI with sort, category, rating, price range filters
    - Integrated into: `home_screen.dart`, `shop_screen.dart`, `explore_screen.dart`
-   - `FilterBottomSheet.show(context, mode: 'experts'|'products', ...)`
 
 2. **Shop Screen Spacing** — `lib/screens/shop/shop_screen.dart`
-   - Added breathing room between search bar, sort chips, category chips, featured section
-   - `expandedHeight: 145`, bottom padding on search, 12px spacers between sections
+   - Breathing room between search bar, sort chips, category chips, featured section
 
 3. **Dynamic Gradient Backgrounds** — Profile screens
-   - `lib/screens/profile/profile_tab_screen.dart` — AnimatedBuilder with 6 rotating gradient palettes, 6s cycle
+   - `lib/screens/profile/profile_tab_screen.dart` — 6 rotating gradient palettes, 6s cycle
    - `lib/screens/profile/profile_screen.dart` — Same treatment, 8s cycle
-   - Uses `TickerProviderStateMixin`, cos/sin for gradient direction rotation
 
 4. **Banner Fonts & Animations Expansion**
-   - `lib/screens/profile/banner_editor_screen.dart` and `lib/widgets/banner_display.dart`
-   - Fonts: 6→12 (added lobster, raleway, mono, caveat, satisfy, righteous)
-   - Animations: 6→10 (added bounce, glow, typewriter, rotate)
-   - Gradients: 5→10
+   - Fonts: 6→12 | Animations: 6→10 | Gradients: 5→10
+   - Files: `banner_editor_screen.dart`, `banner_display.dart`
 
 5. **Avatar Picker** — WhatsApp-style emoji avatars
-   - New `lib/widgets/avatar_picker.dart` — 32 avatars in 4 categories
+   - `lib/widgets/avatar_picker.dart` — 32 avatars in 4 categories
    - `avatarKey` field added to `lib/models/customer_profile.dart`
-   - Integrated into `lib/screens/profile/customer_setup_screen.dart`
 
 ### Phase 6 — Shop Spacing Fix (commit `562f336`)
-Further refined spacing in shop_screen.dart per user feedback.
+Further refined spacing in `shop_screen.dart` per user feedback.
+
+### Phase 7 — Work Request Badges, Notification Navigation & Banner UX (commit `209f5cd`)
+
+1. **Chat list — amber work-request badges (reliable)**
+   - `lib/screens/chat/chats_screen.dart`
+   - `StreamBuilder` approach replaced with `StreamSubscription` in `initState` calling `setState` — badges always reflect live Firestore state
+   - Per chat row: amber circle badge top-left of avatar (count), amber 4px left-border + light amber row tint, "● N pending work request(s)" text under last message
+
+2. **Notification cards — tappable with navigation**
+   - `lib/screens/notifications/notifications_screen.dart`
+   - Work request & chat message notifications → `ChatDetailScreen` (which contains the Approve/Decline UI)
+   - Order notifications → `OrderTrackingScreen`
+   - Tappable cards: colored border, "Tap to view" pill, chevron `›`
+
+3. **In-app banner — tap to open Chats tab**
+   - `lib/screens/main_navigation.dart`
+   - Banner navigates to Chats tab on tap; shows "Tap to open chats →" hint
+   - Fixed `use_build_context_synchronously` lint warning — role captured synchronously before stream listener fires
+
+### Phase 8 — Skilled Person Job Discovery, Portfolio in Profile & Company Verification (commit `4e16120`)
+
+1. **Skilled Person bottom nav: Portfolio → Find Jobs**
+   - `lib/screens/main_navigation.dart`
+   - SkilledPerson nav index 1 changed from `PortfolioScreen()` → `JobsScreen()` (already role-aware)
+   - Icon: `Icons.photo_library` → `Icons.work_outline`; label: `'Portfolio'` → `'Find Jobs'`
+   - Gradient colour for that tab changed from deep-rose to blue→cyan
+
+2. **Portfolio accessible from Profile tab**
+   - `lib/screens/profile/profile_tab_screen.dart`
+   - Added "My Portfolio" menu tile (pink `Icons.photo_library_rounded`) in the menu section, only for `UserRoles.skilledPerson`
+   - Navigates to `PortfolioScreen`
+
+3. **Company business verification badge in profile**
+   - `lib/screens/profile/profile_tab_screen.dart`
+   - Tracks `_companyProfile` via `companyProfileStream` in `_subscribeToRoleProfile`
+   - Shows: green "Business Verified" / blue "Verification Pending" (hourglass) / orange tappable "Tap to Verify Business" → navigates to `CompanySetupScreen`
+
+4. **Business Verification section in Company Setup**
+   - `lib/screens/profile/company_setup_screen.dart`
+   - New state vars: `_businessRegController`, `_isVerifying`, `_verificationStatus`
+   - New "Business Verification" section card before Legal Details
+   - Fields: Business Registration Number; Submit button → saves `verificationData: {businessRegNumber, gstNumber, submittedAt}` and sets `verificationStatus: 'submitted'`
+   - Displays status-appropriate UI: green approved banner / blue pending banner / red rejected banner / input form
+   - On save, preserves existing `isVerified` & `verificationStatus` (no longer hardcodes `false`/`'pending'`)
+
+5. **Company verification gate on job posting**
+   - `lib/screens/jobs/jobs_screen.dart`
+   - Subscribes to `companyProfileStream` for company users
+   - `_navigateToPostJob()` helper: if `!isCompanyVerified` → shows dialog prompting to complete verification; otherwise navigates to `CreateJobScreen`
+   - Both "+ add" AppBar icon and empty-state "Post a Job" button routed through the gate
+
+6. **Company in-chat hire requests — already supported**
+   - `lib/screens/chat/chat_detail_screen.dart`
+   - `canAskForWork = (isCustomer || isCompany)` — companies already see the work/hire request button in chat
+   - `createChatWorkRequest()` already allows `company` role as sender
 
 ---
 
-## IN-PROGRESS WORK (INCOMPLETE — MUST BE FINISHED)
+## IN-PROGRESS WORK
 
-### Work Request & Notification System Enhancement
-
-**What the user requested:**
-1. Work request notifications should show badge counts — red for chat unread, amber/orange for pending work requests — on **both** the bottom navigation chat icon AND individual chat items in the chat list
-2. Skilled person needs a proper **accept/reject UI** for incoming work requests (when they open from notification)
-3. Notification bell taps should **navigate to the relevant page** (chat detail for work requests/messages, order tracking for orders)
-4. Work request count badge should be visible in bottom nav AND chat list separately
-
-**What has been done so far:**
-
-#### A. `lib/utils/notification_helpers.dart` — MODIFIED ✅
-- `NotificationItem` class expanded with navigation fields:
-  - `NotificationType type` enum (workRequest, order, chatMessage)
-  - `String? chatId`, `otherUserId`, `otherUserName`, `otherUserPhoto`
-  - `String? requestId` (for work requests)
-  - `OrderModel? orderData` (for orders)
-- `loadNotificationsForUser()` updated to populate all navigation fields
-
-#### B. `lib/screens/main_navigation.dart` — MODIFIED ✅
-- Bottom nav chat icon now shows DUAL badges:
-  - Red (top-right): unread chat messages
-  - Amber (top-left): pending work requests
-- New `_navDoubleBadge()` method added
-- Uses nested `StreamBuilder<QuerySnapshot>` for work requests collection
-
-#### C. `lib/screens/chat/chats_screen.dart` — PARTIALLY MODIFIED ⚠️
-- Added imports: `cloud_firestore`, `app_constants`
-- Added `_pendingWorkCounts` map and `_workRequestStream`
-- Wrapped chat list with outer `StreamBuilder<QuerySnapshot>` for work requests
-- Each chat item now shows:
-  - Red badge (top-right): unread messages (existing)
-  - Amber badge (top-left): pending work requests for that chat (NEW)
-- **Status:** The code changes ARE in the file but have NOT been verified with `dart analyze` yet
-
-#### D. `lib/screens/notifications/notifications_screen.dart` — NOT YET MODIFIED ❌
-- Need to make notification cards **tappable** with navigation:
-  - Work request → navigate to `ChatDetailScreen` with the relevant chat
-  - Order → navigate to `OrderTrackingScreen`
-  - Chat message → navigate to `ChatDetailScreen`
-- The `NotificationItem` already has all the navigation data, just need to add `onTap` handlers to `_NotificationCard`
-
-#### E. Skilled Person Accept/Reject UI — ALREADY EXISTS ✅
-- `lib/widgets/chat/chat_work_request_section.dart` already has full accept/reject/cancel/remind/payment UI
-- The `_WorkRequestCard` widget shows Approve/Decline buttons for skilled persons when status is pending
-- **No new UI needed** — the navigation from notifications to the chat (where the work request section is) will solve this
-
-**What still needs to be done:**
-1. ✅ Verify `chats_screen.dart` compiles (run `dart analyze`)
-2. ❌ Update `notifications_screen.dart` to make cards tappable with proper navigation
-3. ❌ Run `dart analyze lib` to verify zero errors
-4. ❌ Git commit and push all changes
+None — all features are complete. `dart analyze lib` returns **No issues found.**
 
 ---
 
@@ -120,19 +119,21 @@ Further refined spacing in shop_screen.dart per user feedback.
 ### Navigation
 - `lib/screens/main_navigation.dart` — IndexedStack with role-based tabs
   - Customer: Home(0), Shop(1), Cart(2), Chats(3), Profile(4)
-  - SkilledPerson: Home(0), Portfolio(1), MyShop(2), Chats(3), Profile(4)
+  - SkilledPerson: Home(0), **Find Jobs**(1), MyShop(2), Chats(3), Profile(4)
   - Company: Home(0), Jobs(1), Shop(2), Chats(3), Profile(4)
   - DeliveryPartner: Deliveries(0), Chats(1), Profile(2)
+  - Chat tab dual-badge: red top-right (unread messages), amber top-left (pending work requests)
+  - Skilled person portfolio is now accessible from Profile tab menu ("My Portfolio" tile)
 
 ### Screens
-- `lib/screens/chat/chats_screen.dart` — Chat list
+- `lib/screens/chat/chats_screen.dart` — Chat list with per-row amber work-request badge
 - `lib/screens/chat/chat_detail_screen.dart` — Individual chat (constructor: chatId, otherUserId, otherUserName, otherUserPhoto)
-- `lib/screens/notifications/notifications_screen.dart` — Notification list (constructor: userId)
+- `lib/screens/notifications/notifications_screen.dart` — Tappable notification list (constructor: userId)
 - `lib/screens/shop/order_tracking_screen.dart` — Order tracking (constructor: order: OrderModel)
 
 ### Widgets
 - `lib/widgets/notification_bell.dart` — Bell icon with badge in app bars
-- `lib/widgets/chat/chat_work_request_section.dart` — Full work request UI inside chat (accept/reject/cancel/remind/pay)
+- `lib/widgets/chat/chat_work_request_section.dart` — Full work request UI (Approve/Decline/Cancel/Remind/Pay) shown inside ChatDetailScreen
 - `lib/widgets/filter_bottom_sheet.dart` — Reusable filter sheet
 - `lib/widgets/avatar_picker.dart` — Emoji avatar picker
 - `lib/widgets/app_popup.dart` — `AppPopup.show()` for toast-style messages
@@ -153,9 +154,19 @@ Further refined spacing in shop_screen.dart per user feedback.
 - `AppConstants.requestStatusPending/Accepted/Rejected` — Status strings
 - Chat work request type string: `'chat_work_request'`
 
+### Notification Flow (end-to-end)
+1. Customer sends a work request from `ChatDetailScreen`
+2. Firestore document created in `requests` collection (type: `chat_work_request`, status: `pending`)
+3. Skilled person sees:
+   - **Bottom nav** chat icon: amber badge (top-left) with pending count
+   - **Chat list row**: amber left-border, amber text "N pending work request(s)"
+   - **In-app banner** slides down from top; tapping it opens the Chats tab
+   - **Notification bell**: opens `NotificationsScreen` — card is tappable → opens `ChatDetailScreen`
+4. Inside `ChatDetailScreen`, `ChatWorkRequestSection` renders **Approve / Decline** buttons
+5. On approval: `respondToChatWorkRequest()` updates status → customer sees accepted state with **Pay** button
+
 ---
 
 ## HOW TO CONTINUE IN NEW CHAT
 
-Tell the new chat:
-> "Read `D:\SKILLSHARE\PROJECT_CONTEXT.md` to understand the full project context and what work is in progress. Continue from where the previous session left off — specifically finish the notification click navigation and verify everything compiles."
+> "Read `D:\SKILLSHARE\PROJECT_CONTEXT.md` to understand the full project context. All work is complete and pushed to `origin/main`. Ask what the user wants to build or fix next."
