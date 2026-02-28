@@ -253,6 +253,10 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
+              icon: const Icon(Icons.edit, color: Colors.blue),
+              onPressed: () => _editProduct(product),
+            ),
+            IconButton(
               icon: const Icon(Icons.delete, color: Colors.red),
               onPressed: () => _deleteProduct(product),
             ),
@@ -538,6 +542,18 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
         builder: (context) => ProductDetailScreen(product: product),
       ),
     );
+  }
+
+  void _editProduct(ProductModel product) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddProductScreen(existingProduct: product),
+      ),
+    );
+    if (result == true && mounted) {
+      _loadProducts();
+    }
   }
 
   Future<void> _deleteProduct(ProductModel product) async {

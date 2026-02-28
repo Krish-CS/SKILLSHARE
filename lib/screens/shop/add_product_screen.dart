@@ -13,7 +13,8 @@ import '../../utils/app_constants.dart';
 import '../../utils/app_dialog.dart';
 
 class AddProductScreen extends StatefulWidget {
-  const AddProductScreen({super.key});
+  final ProductModel? existingProduct;
+  const AddProductScreen({super.key, this.existingProduct});
 
   @override
   State<AddProductScreen> createState() => _AddProductScreenState();
@@ -35,8 +36,23 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final List<Uint8List> _selectedImageBytes = [];
   bool _isLoading = false;
   bool _isUploading = false;
+  bool get _isEditing => widget.existingProduct != null;
 
   final List<String> _categories = AppConstants.categories;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isEditing) {
+      final p = widget.existingProduct!;
+      _nameController.text = p.name;
+      _descriptionController.text = p.description;
+      _priceController.text = p.price.toString();
+      _stockController.text = p.stock.toString();
+      _selectedCategory = p.category;
+      _imageUrls.addAll(p.images);
+    }
+  }
 
   @override
   void dispose() {
@@ -143,7 +159,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       }
       
       final product = ProductModel(
-        id: '', // Will be set by Firestore
+        id: _isEditing ? widget.existingProduct!.id : '', // Preserve ID when editing
         userId: userId,
         name: _nameController.text.trim(),
         description: _descriptionController.text.trim(),
@@ -151,18 +167,25 @@ class _AddProductScreenState extends State<AddProductScreen> {
         images: finalImageUrls,
         category: _selectedCategory!,
         stock: int.parse(_stockController.text.trim()),
-        isAvailable: true,
-        rating: 0.0,
-        reviewCount: 0,
-        createdAt: now,
+        isAvailable: _isEditing ? widget.existingProduct!.isAvailable : true,
+        rating: _isEditing ? widget.existingProduct!.rating : 0.0,
+        reviewCount: _isEditing ? widget.existingProduct!.reviewCount : 0,
+        createdAt: _isEditing ? widget.existingProduct!.createdAt : now,
         updatedAt: now,
       );
 
-      await _firestoreService.createProduct(product);
+      if (_isEditing) {
+        await _firestoreService.updateProduct(product);
+      } else {
+        await _firestoreService.createProduct(product);
+      }
 
       if (mounted) {
-        AppDialog.success(context, 'Product added successfully!',
-            onDismiss: () => Navigator.of(context).pop(true));
+        AppDialog.success(
+          context,
+          _isEditing ? 'Product updated successfully!' : 'Product added successfully!',
+          onDismiss: () => Navigator.of(context).pop(true),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -279,7 +302,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Product', style: TextStyle(color: Colors.white)),
+        title: Text(_isEditing ? 'Edit Product' : 'Add Product', style: const TextStyle(color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
         flexibleSpace: Container(
           decoration: const BoxDecoration(
@@ -712,9 +735,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         strokeWidth: 2,
                       ),
                     )
-                  : const Text(
-                      'Add Product',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  : Text(
+                      _isEditing ? 'Update Product' : 'Add Product',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
             ),
           ],

@@ -747,12 +747,136 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               ],
             ),
           ],
+          // Accept & Reject buttons for skilled person receiving a work request
+          if (isPending && !isMyRequest) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                SizedBox(
+                  height: 30,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                          title: const Text('Accept Work Request'),
+                          content: Text(
+                              'Accept "${r.title}"? You will be committed to this work.'),
+                          actions: [
+                            TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('Not Now')),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Accept',
+                                  style: TextStyle(color: Colors.white)),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed == true) {
+                        try {
+                          await _firestoreService.respondToChatWorkRequest(
+                            requestId: r.id,
+                            skilledUserId: _currentUserId!,
+                            approve: true,
+                          );
+                          if (mounted) {
+                            AppPopup.show(context,
+                                message: 'Work request accepted!',
+                                type: PopupType.success);
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            AppPopup.show(context,
+                                message: 'Error: $e',
+                                type: PopupType.error);
+                          }
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.check_circle, size: 14),
+                    label: const Text('Accept', style: TextStyle(fontSize: 11)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 30,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                          title: const Text('Reject Work Request'),
+                          content: Text(
+                              'Reject "${r.title}"? This cannot be undone.'),
+                          actions: [
+                            TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('Keep')),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Reject',
+                                  style: TextStyle(color: Colors.white)),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed == true) {
+                        try {
+                          await _firestoreService.respondToChatWorkRequest(
+                            requestId: r.id,
+                            skilledUserId: _currentUserId!,
+                            approve: false,
+                          );
+                          if (mounted) {
+                            AppPopup.show(context,
+                                message: 'Work request rejected.',
+                                type: PopupType.info);
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            AppPopup.show(context,
+                                message: 'Error: $e',
+                                type: PopupType.error);
+                          }
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.cancel_outlined, size: 14),
+                    label: const Text('Reject', style: TextStyle(fontSize: 11)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
   }
-
-  // ── Image helpers ────────────────────────────────────────────────────────────
 
   Future<void> _pickAndSendImage() async {
     try {
@@ -2270,6 +2394,54 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
     }
   }
 
+  Future<void> _respondToRequest(bool approve) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: Text('${approve ? 'Accept' : 'Reject'} Work Request'),
+        content: Text(
+            '${approve ? 'Accept' : 'Reject'} "${widget.request.title}"?${approve ? ' You will be committed to this work.' : ' This cannot be undone.'}'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Not Now')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: approve ? Colors.green : Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(approve ? 'Accept' : 'Reject',
+                style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _loading = true);
+    try {
+      await widget.firestoreService.respondToChatWorkRequest(
+        requestId: widget.request.id,
+        skilledUserId: widget.currentUserId,
+        approve: approve,
+      );
+      if (mounted) {
+        AppPopup.show(context,
+            message: 'Work request ${approve ? 'accepted' : 'rejected'}.',
+            type: approve ? PopupType.success : PopupType.info);
+        widget.onActionDone();
+      }
+    } catch (e) {
+      if (mounted) {
+        AppPopup.show(context,
+            message: 'Error: $e', type: PopupType.error);
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final req = widget.request;
@@ -2427,6 +2599,80 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
                                     color: Color(0xFFD32F2F)),
                                 SizedBox(width: 5),
                                 Text('Cancel', style: TextStyle(
+                                  color: Color(0xFFD32F2F), fontSize: 13,
+                                  fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+            // Accept & Reject actions for the skilled person receiving the request
+            if (!_isMine) ...[
+              const SizedBox(height: 12),
+              if (_loading)
+                const LinearProgressIndicator()
+              else
+                Row(
+                  children: [
+                    // Accept — green gradient
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                              colors: [Color(0xFF388E3C), Color(0xFF66BB6A)]),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                                color: const Color(0xFF388E3C).withValues(alpha: 0.25),
+                                blurRadius: 6, offset: const Offset(0, 2)),
+                          ],
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () => _respondToRequest(true),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.check_circle, size: 16,
+                                      color: Colors.white),
+                                  SizedBox(width: 5),
+                                  Text('Accept', style: TextStyle(
+                                    color: Colors.white, fontSize: 13,
+                                    fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    // Reject — soft red bg
+                    Expanded(
+                      child: Material(
+                        color: const Color(0xFFFFF0F0),
+                        borderRadius: BorderRadius.circular(12),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => _respondToRequest(false),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.cancel_outlined, size: 16,
+                                    color: Color(0xFFD32F2F)),
+                                SizedBox(width: 5),
+                                Text('Reject', style: TextStyle(
                                   color: Color(0xFFD32F2F), fontSize: 13,
                                   fontWeight: FontWeight.w600)),
                               ],
