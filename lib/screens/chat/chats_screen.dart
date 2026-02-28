@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -24,9 +25,10 @@ class _ChatsScreenState extends State<ChatsScreen> {
   String? _currentUserId;
   Stream<List<ChatModel>>? _chatsStream;
 
-  /// Map of chatId → number of pending work requests for that chat
+  /// Map of chatId → number of pending work requests for that chat.
+  /// Updated via a real subscription so amber badges are always in sync.
   Map<String, int> _pendingWorkCounts = {};
-  Stream<QuerySnapshot>? _workRequestStream;
+  StreamSubscription<QuerySnapshot>? _workReqSub;
 
   @override
   void initState() {
@@ -34,16 +36,34 @@ class _ChatsScreenState extends State<ChatsScreen> {
     _currentUserId = FirebaseAuth.instance.currentUser?.uid;
     if (_currentUserId != null) {
       _chatsStream = _chatService.getUserChats(_currentUserId!);
-      // Stream all work requests where this user is a participant
-      _workRequestStream = FirebaseFirestore.instance
+
+      // Listen to pending work requests for this user and keep the count map
+      // updated via setState so every rebuild of the chat list uses fresh data.
+      _workReqSub = FirebaseFirestore.instance
           .collection(AppConstants.requestsCollection)
           .where('participants', arrayContains: _currentUserId)
-          .snapshots();
+          .snapshots()
+          .listen((snap) {
+        final newCounts = <String, int>{};
+        for (final doc in snap.docs) {
+          final d = doc.data();
+          final type   = (d['type']   as String?) ?? '';
+          final status = (d['status'] as String?) ?? '';
+          final chatId = (d['chatId'] as String?) ?? '';
+          if (type == 'chat_work_request' &&
+              status == AppConstants.requestStatusPending &&
+              chatId.isNotEmpty) {
+            newCounts[chatId] = (newCounts[chatId] ?? 0) + 1;
+          }
+        }
+        if (mounted) setState(() => _pendingWorkCounts = newCounts);
+      });
     }
   }
 
   @override
   void dispose() {
+    _workReqSub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -138,29 +158,9 @@ class _ChatsScreenState extends State<ChatsScreen> {
             ),
           ),
 
-          // Chats List (wrapped with work request stream)
+          // Chats List
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: _workRequestStream,
-              builder: (context, workSnap) {
-                // Build a map of chatId → pending work request count
-                _pendingWorkCounts = {};
-                if (workSnap.hasData) {
-                  for (final doc in workSnap.data!.docs) {
-                    final d = doc.data() as Map<String, dynamic>;
-                    final type = (d['type'] as String?) ?? '';
-                    final status = (d['status'] as String?) ?? '';
-                    final chatId = (d['chatId'] as String?) ?? '';
-                    if (type == 'chat_work_request' &&
-                        status == 'pending' &&
-                        chatId.isNotEmpty) {
-                      _pendingWorkCounts[chatId] =
-                          (_pendingWorkCounts[chatId] ?? 0) + 1;
-                    }
-                  }
-                }
-
-                return StreamBuilder<List<ChatModel>>(
+            child: StreamBuilder<List<ChatModel>>(
               stream: _chatsStream,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -233,9 +233,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                   },
                 );
               },
-            );  // end inner StreamBuilder (chats)
-              },
-            ),  // end outer StreamBuilder (work requests)
+            ),
           ),
         ],
       ),
@@ -270,8 +268,15 @@ class _ChatsScreenState extends State<ChatsScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
+          // Amber left-border accent when there are pending work requests
+          color: pendingWork > 0
+              ? const Color(0xFFFFF8E1) // very light amber tint
+              : null,
           border: Border(
             bottom: BorderSide(color: Colors.grey[200]!),
+            left: pendingWork > 0
+                ? const BorderSide(color: Color(0xFFFF8F00), width: 4)
+                : BorderSide.none,
           ),
         ),
         child: Row(
@@ -433,6 +438,27 @@ class _ChatsScreenState extends State<ChatsScreen> {
                       ),
                     ],
                   ),
+                  // Amber work-request indicator row
+                  if (pendingWork > 0) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.work_outline,
+                            size: 13, color: Color(0xFFFF8F00)),
+                        const SizedBox(width: 4),
+                        Text(
+                          pendingWork == 1
+                              ? '1 pending work request'
+                              : '$pendingWork pending work requests',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFFFF8F00),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

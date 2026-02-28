@@ -46,6 +46,9 @@ class _MainNavigationState extends State<MainNavigation> {
   void _initBannerStream() {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final uid = auth.currentUser?.uid;
+    // Capture role synchronously — used inside the async listener to avoid
+    // accessing BuildContext across an async gap.
+    final capturedRole = auth.userRole ?? UserRoles.customer;
     if (uid == null || uid == _watchingUserId) return;
     _watchingUserId = uid;
     _notifSub?.cancel();
@@ -72,11 +75,13 @@ class _MainNavigationState extends State<MainNavigation> {
             .toList();
         if (newDocs.isNotEmpty) {
           final data = newDocs.first.data();
+          final chatIdx = _getChatTabIndex(capturedRole);
           _showTopBanner(
-            'New notification',
+            'New work request',
             (data['title'] as String?) ??
                 (data['description'] as String?) ??
                 'You have a new update',
+            navigateToIndex: chatIdx,
           );
         }
       }
@@ -84,7 +89,7 @@ class _MainNavigationState extends State<MainNavigation> {
     });
   }
 
-  void _showTopBanner(String title, String subtitle) {
+  void _showTopBanner(String title, String subtitle, {int? navigateToIndex}) {
     _bannerTimer?.cancel();
     _bannerEntry?.remove();
 
@@ -97,6 +102,13 @@ class _MainNavigationState extends State<MainNavigation> {
           _bannerEntry?.remove();
           _bannerEntry = null;
         },
+        onTap: navigateToIndex != null
+            ? () {
+                _bannerEntry?.remove();
+                _bannerEntry = null;
+                if (mounted) setState(() => _currentIndex = navigateToIndex);
+              }
+            : null,
       ),
     );
     overlay.insert(_bannerEntry!);
@@ -650,11 +662,14 @@ class _InAppBanner extends StatefulWidget {
     required this.title,
     required this.subtitle,
     required this.onDismiss,
+    this.onTap,
   });
 
   final String title;
   final String subtitle;
   final VoidCallback onDismiss;
+  /// If set, tapping the banner body calls this instead of onDismiss.
+  final VoidCallback? onTap;
 
   @override
   State<_InAppBanner> createState() => _InAppBannerState();
@@ -698,7 +713,7 @@ class _InAppBannerState extends State<_InAppBanner>
         child: Material(
           color: Colors.transparent,
           child: GestureDetector(
-            onTap: widget.onDismiss,
+            onTap: widget.onTap ?? widget.onDismiss,
             child: Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -750,6 +765,14 @@ class _InAppBannerState extends State<_InAppBanner>
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
+                        if (widget.onTap != null)
+                          const Text(
+                            'Tap to open chats →',
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 11,
+                            ),
+                          ),
                       ],
                     ),
                   ),

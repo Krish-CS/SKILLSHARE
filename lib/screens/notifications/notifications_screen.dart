@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../utils/notification_helpers.dart';
 import '../../utils/app_helpers.dart';
 import '../../services/firestore_service.dart';
+import '../chat/chat_detail_screen.dart';
+import '../shop/order_tracking_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key, required this.userId});
@@ -112,61 +114,152 @@ class _NotificationCard extends StatelessWidget {
   const _NotificationCard({required this.item});
   final NotificationItem item;
 
+  bool get _isTappable {
+    switch (item.type) {
+      case NotificationType.workRequest:
+      case NotificationType.chatMessage:
+        return item.chatId != null && item.otherUserId != null;
+      case NotificationType.order:
+        return item.orderData != null;
+    }
+  }
+
+  void _navigate(BuildContext context) {
+    switch (item.type) {
+      case NotificationType.workRequest:
+      case NotificationType.chatMessage:
+        if (item.chatId != null && item.otherUserId != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ChatDetailScreen(
+                chatId: item.chatId!,
+                otherUserId: item.otherUserId!,
+                otherUserName: item.otherUserName ?? 'User',
+                otherUserPhoto: item.otherUserPhoto,
+              ),
+            ),
+          );
+        }
+        break;
+      case NotificationType.order:
+        if (item.orderData != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => OrderTrackingScreen(order: item.orderData!),
+            ),
+          );
+        }
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _isTappable ? () => _navigate(context) : null,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: _isTappable
+                ? Border.all(color: item.color.withValues(alpha: 0.25), width: 1)
+                : null,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: item.color.withValues(alpha: 0.15),
-            child: Icon(item.icon, color: item.color, size: 20),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Icon badge
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: item.color.withValues(alpha: 0.15),
+                child: Icon(item.icon, color: item.color, size: 20),
+              ),
+              const SizedBox(width: 12),
+              // Text content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item.subtitle,
+                      style: TextStyle(
+                        color: Colors.grey[700],
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Text(
+                          AppHelpers.getRelativeTime(item.createdAt),
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 12,
+                          ),
+                        ),
+                        if (_isTappable) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: item.color.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.touch_app_outlined,
+                                    size: 11, color: item.color),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'Tap to view',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: item.color,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              // Chevron for tappable cards
+              if (_isTappable)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Icon(Icons.chevron_right,
+                      color: Colors.grey[400], size: 20),
+                ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  item.subtitle,
-                  style: TextStyle(
-                    color: Colors.grey[700],
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  AppHelpers.getRelativeTime(item.createdAt),
-                  style: TextStyle(
-                    color: Colors.grey[500],
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
