@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../models/job_model.dart';
 import '../../models/user_model.dart';
+import '../../models/company_profile.dart';
 import '../../services/firestore_service.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../utils/user_roles.dart';
@@ -12,6 +13,7 @@ import '../../widgets/job_card.dart';
 import 'create_job_screen.dart';
 import 'job_detail_screen.dart';
 import '../../utils/app_constants.dart';
+import '../profile/company_setup_screen.dart';
 
 class JobsScreen extends StatefulWidget {
   const JobsScreen({super.key});
@@ -26,10 +28,12 @@ class _JobsScreenState extends State<JobsScreen> {
 
   StreamSubscription<List<JobModel>>? _jobsSub;
   StreamSubscription<UserModel?>? _userSub;
+  StreamSubscription<CompanyProfile?>? _companySub;
 
   List<JobModel> _allJobs = [];
   List<JobModel> _filteredJobs = [];
   UserModel? _currentUser;
+  CompanyProfile? _companyProfile;
   bool _isLoading = true;
 
   String _searchQuery = '';
@@ -54,6 +58,7 @@ class _JobsScreenState extends State<JobsScreen> {
   void dispose() {
     _jobsSub?.cancel();
     _userSub?.cancel();
+    _companySub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -63,6 +68,13 @@ class _JobsScreenState extends State<JobsScreen> {
     if (userId != null) {
       _userSub = _firestoreService.streamUserModel(userId).listen((user) {
         if (mounted) setState(() => _currentUser = user);
+        // Subscribe to company profile once we know the role is company
+        if (user?.role == AppConstants.roleCompany && _companySub == null) {
+          _companySub =
+              _firestoreService.companyProfileStream(userId).listen((profile) {
+            if (mounted) setState(() => _companyProfile = profile);
+          });
+        }
       });
     }
 
@@ -147,6 +159,64 @@ class _JobsScreenState extends State<JobsScreen> {
     return _currentUser?.role == AppConstants.roleCompany;
   }
 
+  /// Returns true if the company is verified (or about to be — submitted).
+  bool get _isCompanyVerified {
+    if (_companyProfile == null) return false;
+    return _companyProfile!.isVerified ||
+        _companyProfile!.verificationStatus == 'submitted';
+  }
+
+  /// Shows a gate dialog if company is not verified; navigates to
+  /// CreateJobScreen otherwise.
+  Future<void> _navigateToPostJob() async {
+    if (!_isCompanyVerified) {
+      final goVerify = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.verified_user_outlined, color: Color(0xFF4527A0)),
+              SizedBox(width: 8),
+              Text('Verify Your Business'),
+            ],
+          ),
+          content: const Text(
+            'You need to verify your business details before you can post jobs or hire skilled persons.\n\nTap \'Verify Now\' to complete the quick verification process.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Later'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4527A0)),
+              child: const Text('Verify Now',
+                  style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+      if (goVerify == true && mounted) {
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        if (uid != null) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => CompanySetupScreen(userId: uid)),
+          );
+        }
+      }
+      return;
+    }
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CreateJobScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<app_auth.AuthProvider>(context);
@@ -179,15 +249,7 @@ class _JobsScreenState extends State<JobsScreen> {
           if (_canPostJobs)
             IconButton(
               icon: const Icon(Icons.add),
-              onPressed: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const CreateJobScreen(),
-                  ),
-                );
-                // Stream auto-updates
-              },
+              onPressed: _navigateToPostJob,
             ),
         ],
       ),
@@ -460,15 +522,7 @@ class _JobsScreenState extends State<JobsScreen> {
             Padding(
               padding: const EdgeInsets.only(top: 24),
               child: ElevatedButton.icon(
-                onPressed: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const CreateJobScreen(),
-                    ),
-                  );
-                  // Stream auto-updates
-                },
+                onPressed: _navigateToPostJob,
                 icon: const Icon(Icons.add),
                 label: const Text('Post a Job'),
                 style: ElevatedButton.styleFrom(

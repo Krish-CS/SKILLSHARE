@@ -17,6 +17,7 @@ import 'edit_skilled_profile_screen.dart';
 import 'skilled_user_setup_screen.dart';
 import 'customer_setup_screen.dart';
 import 'company_setup_screen.dart';
+import '../portfolio/portfolio_screen.dart';
 import '../auth/login_screen.dart';
 import 'settings_screen.dart';
 import '../../utils/app_dialog.dart';
@@ -37,6 +38,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
   StreamSubscription<CompanyProfile?>? _companySub;
   UserModel? _currentUser;
   SkilledUserProfile? _skilledProfile;
+  CompanyProfile? _companyProfile;
   bool _isLoading = true;
   String? _profilePhotoUrl;
   String? _lastSubscribedRole;
@@ -166,6 +168,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
           _firestoreService.companyProfileStream(userId).listen((profile) {
         if (!mounted) return;
         setState(() {
+          _companyProfile = profile;
           if (profile?.logoUrl != null && profile!.logoUrl!.isNotEmpty) {
             _profilePhotoUrl = profile.logoUrl;
           }
@@ -394,6 +397,109 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                 ],
                               ),
                             ),
+                          // Business verification badge for companies
+                          if (_currentUser?.role == UserRoles.company) ...[  
+                            const SizedBox(height: 8),
+                            if (_companyProfile?.isVerified == true)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withValues(alpha: 0.25),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                      color: Colors.greenAccent.withValues(
+                                          alpha: 0.7),
+                                      width: 1.2),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.verified,
+                                        color: Colors.greenAccent, size: 14),
+                                    SizedBox(width: 5),
+                                    Text(
+                                      'Business Verified',
+                                      style: TextStyle(
+                                        color: Colors.greenAccent,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else if (_companyProfile?.verificationStatus == 'submitted')
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withValues(alpha: 0.25),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                      color: Colors.blueAccent.withValues(
+                                          alpha: 0.7),
+                                      width: 1.2),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.hourglass_top,
+                                        color: Colors.blueAccent, size: 14),
+                                    SizedBox(width: 5),
+                                    Text(
+                                      'Verification Pending',
+                                      style: TextStyle(
+                                        color: Colors.blueAccent,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              GestureDetector(
+                                onTap: () async {
+                                  if (_currentUser == null) return;
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => CompanySetupScreen(
+                                          userId: _currentUser!.uid),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 14, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withValues(alpha: 0.25),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                        color: Colors.orange.withValues(
+                                            alpha: 0.7),
+                                        width: 1.2),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.business_center,
+                                          color: Colors.orange, size: 14),
+                                      SizedBox(width: 5),
+                                      Text(
+                                        'Tap to Verify Business',
+                                        style: TextStyle(
+                                          color: Colors.orange,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
                           const SizedBox(height: 20),
                           // Verified badge for skilled users
                           if (_currentUser?.role == UserRoles.skilledPerson) ...[
@@ -549,6 +655,22 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                   ),
                   child: Column(
                     children: [
+                      // My Portfolio — skilled persons only
+                      if (_currentUser?.role == UserRoles.skilledPerson) ...[  
+                        _buildMenuTile(
+                          icon: Icons.photo_library_rounded,
+                          iconColor: const Color(0xFFC2185B),
+                          title: 'My Portfolio',
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => const PortfolioScreen()),
+                            );
+                          },
+                        ),
+                        const Divider(height: 1, indent: 60),
+                      ],
                       _buildMenuTile(
                         icon: Icons.settings_rounded,
                         iconColor: const Color(0xFF607D8B),

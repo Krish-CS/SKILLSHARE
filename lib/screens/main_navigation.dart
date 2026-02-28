@@ -13,7 +13,6 @@ import 'shop/shop_screen.dart';
 import 'shop/cart_screen.dart';
 import 'chat/chats_screen.dart';
 import 'profile/profile_tab_screen.dart';
-import 'portfolio/portfolio_screen.dart';
 import 'portfolio/my_shop_screen.dart';
 import 'admin/admin_screen.dart';
 import 'delivery/delivery_screen.dart';
@@ -417,7 +416,7 @@ class _MainNavigationState extends State<MainNavigation> {
       case UserRoles.skilledPerson:
         return const [
           Icons.home,
-          Icons.photo_library,
+          Icons.work_outline,
           Icons.store,
           Icons.chat,
           Icons.person
@@ -474,7 +473,7 @@ class _MainNavigationState extends State<MainNavigation> {
       case UserRoles.skilledPerson:
         return const [
           HomeScreen(), // Dashboard/overview
-          PortfolioScreen(), // Manage portfolio (showcase work)
+          JobsScreen(), // Browse & apply for jobs
           MyShopScreen(), // Manage their shop/products
           ChatsScreen(),
           ProfileTabScreen(),
@@ -526,7 +525,7 @@ class _MainNavigationState extends State<MainNavigation> {
         return const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(
-              icon: Icon(Icons.photo_library), label: 'Portfolio'),
+              icon: Icon(Icons.work_outline), label: 'Find Jobs'),
           BottomNavigationBarItem(icon: Icon(Icons.store), label: 'My Shop'),
           BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chats'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
@@ -580,10 +579,10 @@ class _MainNavigationState extends State<MainNavigation> {
           return position < 2
               ? const Color(0xFF6A11CB)
               : const Color(0xFF2575FC);
-        case 1: // Portfolio (deep-rose→coral)
+        case 1: // Find Jobs (blue→cyan, matching company Jobs tab)
           return position < 2
-              ? const Color(0xFFC2185B)
-              : const Color(0xFFFF6F61);
+              ? const Color(0xFF2196F3)
+              : const Color(0xFF00BCD4);
         case 2: // My Shop (pink→orange AppBar)
           return position < 2
               ? const Color(0xFFE91E63)

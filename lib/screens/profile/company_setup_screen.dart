@@ -28,6 +28,7 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
   final _websiteController = TextEditingController();
   final _headOfficeController = TextEditingController();
   final _gstController = TextEditingController();
+  final _businessRegController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   final CloudinaryService _cloudinaryService = CloudinaryService();
 
@@ -35,6 +36,8 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
   String _selectedEmployeeCount = '1-10';
   bool _isLoading = true;
   bool _isUploading = false;
+  bool _isVerifying = false;
+  String _verificationStatus = 'pending'; // pending / submitted / approved / rejected
 
   // Image variables
   File? _logoImage;
@@ -91,6 +94,11 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
           profile.industry.isNotEmpty ? profile.industry : 'Technology';
       _selectedEmployeeCount = profile.employeeCount ?? '1-10';
       _logoUrl = profile.logoUrl;
+      _verificationStatus = profile.verificationStatus;
+      if (profile.verificationData != null) {
+        _businessRegController.text =
+            (profile.verificationData!['businessRegNumber'] as String?) ?? '';
+      }
     }
 
     setState(() {
@@ -105,6 +113,7 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
     _websiteController.dispose();
     _headOfficeController.dispose();
     _gstController.dispose();
+    _businessRegController.dispose();
     super.dispose();
   }
 
@@ -177,8 +186,9 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
         gstNumber: _gstController.text.trim().isNotEmpty
             ? _gstController.text.trim()
             : null,
-        isVerified: false,
-        verificationStatus: 'pending',
+        isVerified: currentProfile?.isVerified ?? false,
+        verificationStatus: currentProfile?.verificationStatus ?? 'pending',
+        verificationData: currentProfile?.verificationData,
         createdAt: currentProfile?.createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -441,6 +451,223 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
                             ),
                             keyboardType: TextInputType.url,
                           ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // ── Business Verification ─────────────────────────
+                    _sectionCard(
+                      title: 'Business Verification',
+                      icon: Icons.verified_user_outlined,
+                      subtitle: 'Required to post jobs and hire skilled persons',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (_verificationStatus == 'approved') ...
+                            [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color: Colors.green.withValues(alpha: 0.4)),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Icon(Icons.verified,
+                                        color: Colors.green, size: 20),
+                                    SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Your business is verified! You can now post jobs and hire skilled persons.',
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.green,
+                                            fontWeight: FontWeight.w500),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ]
+                          else if (_verificationStatus == 'submitted') ...
+                            [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color: Colors.blue.withValues(alpha: 0.35)),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Icon(Icons.hourglass_top,
+                                        color: Colors.blue, size: 20),
+                                    SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Verification request submitted. Our team will review it within 24–48 hours.',
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.blue,
+                                            fontWeight: FontWeight.w500),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ]
+                          else ...
+                            [
+                              if (_verificationStatus == 'rejected')
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.only(bottom: 12),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.withValues(alpha: 0.08),
+                                      borderRadius:
+                                          BorderRadius.circular(10),
+                                      border: Border.all(
+                                          color: Colors.red
+                                              .withValues(alpha: 0.35)),
+                                    ),
+                                    child: const Row(
+                                      children: [
+                                        Icon(Icons.cancel_outlined,
+                                            color: Colors.red, size: 18),
+                                        SizedBox(width: 7),
+                                        Expanded(
+                                          child: Text(
+                                            'Previous verification was rejected. Please re-submit with correct details.',
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.red),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              Text(
+                                'Provide your business registration details below to get verified. This helps build trust with skilled professionals.',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600]),
+                              ),
+                              const SizedBox(height: 12),
+                              TextFormField(
+                                controller: _businessRegController,
+                                decoration: _inputDeco(
+                                  label: 'Business Registration Number',
+                                  hint: 'e.g. CIN / MSME / Shop Act No.',
+                                  icon: Icons.article_outlined,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed: _isVerifying
+                                      ? null
+                                      : () async {
+                                          final reg = _businessRegController
+                                              .text
+                                              .trim();
+                                          if (reg.isEmpty) {
+                                            AppDialog.info(context,
+                                                'Please enter your business registration number');
+                                            return;
+                                          }
+                                          setState(
+                                              () => _isVerifying = true);
+                                          try {
+                                            final userProvider =
+                                                Provider.of<UserProvider>(
+                                                    context,
+                                                    listen: false);
+                                            final current =
+                                                userProvider.companyProfile;
+                                            if (current != null) {
+                                              final updated = CompanyProfile(
+                                                userId: current.userId,
+                                                companyName:
+                                                    current.companyName,
+                                                description:
+                                                    current.description,
+                                                industry: current.industry,
+                                                website: current.website,
+                                                logoUrl: current.logoUrl,
+                                                employeeCount:
+                                                    current.employeeCount,
+                                                headOfficeLocation:
+                                                    current.headOfficeLocation,
+                                                gstNumber: current.gstNumber,
+                                                isVerified: false,
+                                                verificationStatus: 'submitted',
+                                                verificationData: {
+                                                  'businessRegNumber': reg,
+                                                  'gstNumber':
+                                                      _gstController.text
+                                                          .trim(),
+                                                  'submittedAt': DateTime.now()
+                                                      .toIso8601String(),
+                                                },
+                                                createdAt: current.createdAt,
+                                                updatedAt: DateTime.now(),
+                                              );
+                                              await userProvider
+                                                  .updateCompanyProfile(
+                                                      updated);
+                                              if (mounted) {
+                                                setState(() {
+                                                  _verificationStatus =
+                                                      'submitted';
+                                                  _isVerifying = false;
+                                                });
+                                                // ignore: use_build_context_synchronously
+                                                AppDialog.success(context, 'Verification request submitted! We\'ll review your details within 24\u201348 hours.');
+                                              }
+                                            }
+                                          } catch (e) {
+                                            if (mounted) {
+                                              setState(
+                                                  () => _isVerifying = false);
+                                              // ignore: use_build_context_synchronously
+                                              AppDialog.error(context, 'Failed to submit verification', detail: e.toString());
+                                            }
+                                          }
+                                        },
+                                  icon: _isVerifying
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: _primary))
+                                      : const Icon(Icons.send_outlined,
+                                          size: 18),
+                                  label: Text(_isVerifying
+                                      ? 'Submitting...'
+                                      : 'Submit for Verification'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: _primary,
+                                    side:
+                                        const BorderSide(color: _primary),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(12)),
+                                  ),
+                                ),
+                              ),
+                            ],
                         ],
                       ),
                     ),
