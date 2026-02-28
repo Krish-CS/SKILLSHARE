@@ -13,6 +13,7 @@ import '../../services/firestore_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/presence_service.dart';
 import '../../utils/app_helpers.dart';
+import '../../utils/app_dialog.dart';
 import '../../utils/web_image_loader.dart';
 import '../../utils/user_roles.dart';
 import '../../providers/auth_provider.dart' as app_auth;
@@ -775,8 +776,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       if (mounted &&
           e.toString().isNotEmpty &&
           !e.toString().contains('cancel')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error uploading image: $e')));
+        AppDialog.error(context, 'Error uploading image', detail: e.toString());
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);

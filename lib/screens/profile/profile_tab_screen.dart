@@ -17,6 +17,7 @@ import 'customer_setup_screen.dart';
 import 'company_setup_screen.dart';
 import '../auth/login_screen.dart';
 import 'settings_screen.dart';
+import '../../utils/app_dialog.dart';
 
 class ProfileTabScreen extends StatefulWidget {
   const ProfileTabScreen({super.key});
@@ -35,8 +36,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
   SkilledUserProfile? _skilledProfile;
   bool _isLoading = true;
   String? _profilePhotoUrl;
-  String? _roleSpecificPhotoUrl; // set once from role profile, not overridden by user stream
-  String? _lastSubscribedRole; // tracks role so we only re-subscribe when it changes
+  String? _lastSubscribedRole;
 
   @override
   void initState() {
@@ -62,15 +62,20 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
         if (!mounted) return;
         setState(() {
           _currentUser = user;
-          // Prefer the role-specific photo; fall back to user.profilePhoto
-          _profilePhotoUrl = _roleSpecificPhotoUrl?.isNotEmpty == true
-              ? _roleSpecificPhotoUrl
-              : (user?.profilePhoto?.isNotEmpty == true
-                  ? user!.profilePhoto
-                  : _profilePhotoUrl);
+          // Only update photo from user-doc if it's non-null.
+          // Role-specific streams (customerProfileStream etc.) will override
+          // with the correct photo. Never reset to null here — the user-doc
+          // fires frequently (lastSeen, isOnline) and customer/company photo
+          // is stored in the role-specific collection, not users collection.
+          final userPhoto = user?.profilePhoto;
+          if (userPhoto != null && userPhoto.isNotEmpty) {
+            _profilePhotoUrl = userPhoto;
+          }
           if (_isLoading) _isLoading = false;
         });
-        // Only re-subscribe when role actually changes (avoids constant churn)
+        // Subscribe to role-specific profile if role is known
+        // Only re-subscribe when role actually changes to avoid cancelling
+        // an active customerSub/companySub every time lastSeen fires.
         if (user?.role != _lastSubscribedRole) {
           _lastSubscribedRole = user?.role;
           _subscribeToRoleProfile(userId, user?.role);
@@ -97,7 +102,6 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
           _skilledProfile = profile;
           if (profile?.profilePicture != null &&
               profile!.profilePicture!.isNotEmpty) {
-            _roleSpecificPhotoUrl = profile.profilePicture;
             _profilePhotoUrl = profile.profilePicture;
           }
         });
@@ -109,7 +113,6 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
         setState(() {
           if (profile?.profilePicture != null &&
               profile!.profilePicture!.isNotEmpty) {
-            _roleSpecificPhotoUrl = profile.profilePicture;
             _profilePhotoUrl = profile.profilePicture;
           }
         });
@@ -120,7 +123,6 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
         if (!mounted) return;
         setState(() {
           if (profile?.logoUrl != null && profile!.logoUrl!.isNotEmpty) {
-            _roleSpecificPhotoUrl = profile.logoUrl;
             _profilePhotoUrl = profile.logoUrl;
           }
         });
@@ -162,9 +164,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Logout failed: $e')),
-        );
+        AppDialog.error(context, 'Logout failed', detail: e.toString());
       }
     }
   }
@@ -671,10 +671,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                       final subject = subjectController.text.trim();
                       final message = messageController.text.trim();
                       if (subject.isEmpty || message.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Please fill in both fields')),
-                        );
+                        AppDialog.info(context, 'Please fill in both fields');
                         return;
                       }
                       setDialogState(() => isSending = true);
@@ -690,19 +687,11 @@ class _ProfileTabScreenState extends State<ProfileTabScreen> {
                         if (!ctx.mounted) return;
                         Navigator.pop(ctx);
                         // ignore: use_build_context_synchronously
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                                'Support ticket submitted! We\'ll respond soon.'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
+                        AppDialog.success(context, 'Support ticket submitted! We\'ll respond soon.');
                       } catch (e) {
                         setDialogState(() => isSending = false);
                         // ignore: use_build_context_synchronously
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Error: $e')),
-                        );
+                        AppDialog.error(context, 'Error submitting ticket', detail: e.toString());
                       }
                     },
               style: ElevatedButton.styleFrom(

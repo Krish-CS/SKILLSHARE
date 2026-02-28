@@ -5,6 +5,7 @@ import '../../models/job_model.dart';
 import '../../services/firestore_service.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../utils/app_helpers.dart';
+import '../../utils/app_dialog.dart';
 
 class CreateJobScreen extends StatefulWidget {
   final JobModel? existingJob;
@@ -115,26 +116,17 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     if (!_formKey.currentState!.validate()) return;
     
     if (_selectedJobType == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a job type')),
-      );
+      AppDialog.info(context, 'Please select a job type');
       return;
     }
 
     if (_selectedDeadline == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a deadline')),
-      );
+      AppDialog.info(context, 'Please select a deadline');
       return;
     }
 
     if (_requiredSkills.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please add at least one required skill'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      AppDialog.info(context, 'Please add at least one required skill');
       return;
     }
 
@@ -168,13 +160,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         );
         await _firestoreService.updateJob(updatedJob);
         if (mounted) {
-          Navigator.pop(context, true);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Job updated successfully!'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          AppDialog.success(context, 'Job updated successfully!',
+              onDismiss: () => Navigator.of(context).pop(true));
         }
       } else {
         final job = JobModel(
@@ -198,23 +185,13 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         );
         await _firestoreService.createJob(job);
         if (mounted) {
-          Navigator.pop(context, true);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Job posted successfully!'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          AppDialog.success(context, 'Job posted successfully!',
+              onDismiss: () => Navigator.of(context).pop(true));
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error posting job: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppDialog.error(context, 'Error posting job', detail: e.toString());
       }
     } finally {
       if (mounted) {

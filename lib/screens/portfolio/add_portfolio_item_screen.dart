@@ -8,6 +8,7 @@ import '../../services/portfolio_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../utils/app_constants.dart';
+import '../../utils/app_dialog.dart';
 
 class AddPortfolioItemScreen extends StatefulWidget {
   final PortfolioItem? portfolioItem; // For editing existing item
@@ -63,9 +64,7 @@ class _AddPortfolioItemScreenState extends State<AddPortfolioItemScreen> {
   Future<void> _pickImages() async {
     try {
       if (_selectedImages.length + _imageUrls.length >= 10) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Maximum 10 images allowed')),
-        );
+        AppDialog.info(context, 'Maximum 10 images allowed', title: 'Limit Reached');
         return;
       }
 
@@ -85,9 +84,7 @@ class _AddPortfolioItemScreenState extends State<AddPortfolioItemScreen> {
       });
     } catch (e) {
       if (mounted && !e.toString().contains('cancel')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking images: $e')),
-        );
+        AppDialog.error(context, 'Error picking images', detail: e.toString());
       }
     }
   }
@@ -95,9 +92,7 @@ class _AddPortfolioItemScreenState extends State<AddPortfolioItemScreen> {
   Future<void> _pickVideo() async {
     try {
       if (_selectedVideos.length + _videoUrls.length >= 3) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Maximum 3 videos allowed')),
-        );
+        AppDialog.info(context, 'Maximum 3 videos allowed', title: 'Limit Reached');
         return;
       }
 
@@ -113,9 +108,7 @@ class _AddPortfolioItemScreenState extends State<AddPortfolioItemScreen> {
       });
     } catch (e) {
       if (mounted && !e.toString().contains('cancel')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking video: $e')),
-        );
+        AppDialog.error(context, 'Error picking video', detail: e.toString());
       }
     }
   }
@@ -188,19 +181,12 @@ class _AddPortfolioItemScreenState extends State<AddPortfolioItemScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     if (_selectedCategory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a category')),
-      );
+      AppDialog.info(context, 'Please select a category');
       return;
     }
 
     if (_selectedImages.isEmpty && _imageUrls.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please add at least one image'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      AppDialog.info(context, 'Please add at least one image');
       return;
     }
 
@@ -263,24 +249,17 @@ class _AddPortfolioItemScreenState extends State<AddPortfolioItemScreen> {
       }
 
       if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(widget.portfolioItem == null
-                ? 'Portfolio item added successfully!'
-                : 'Portfolio item updated successfully!'),
-            backgroundColor: Colors.green,
-          ),
+        AppDialog.success(
+          context,
+          widget.portfolioItem == null
+              ? 'Portfolio item added successfully!'
+              : 'Portfolio item updated successfully!',
+          onDismiss: () => Navigator.of(context).pop(),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error saving portfolio item: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppDialog.error(context, 'Error saving portfolio item', detail: e.toString());
       }
     } finally {
       if (mounted) {

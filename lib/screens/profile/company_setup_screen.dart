@@ -9,6 +9,7 @@ import '../../providers/auth_provider.dart';
 import '../../models/company_profile.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/firestore_service.dart';
+import '../../utils/app_dialog.dart';
 import '../main_navigation.dart';
 
 class CompanySetupScreen extends StatefulWidget {
@@ -130,12 +131,7 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error picking image: ${e.toString()}'),
-            backgroundColor: Colors.orange,
-          ),
-        );
+        AppDialog.error(context, 'Error picking image', detail: e.toString());
       }
     }
   }
@@ -205,25 +201,14 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Company profile saved successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const MainNavigation()),
-      );
+      AppDialog.success(context, 'Company profile saved successfully!',
+          onDismiss: () => Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const MainNavigation()),
+          ));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error saving profile: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppDialog.error(context, 'Error saving profile', detail: e.toString());
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }

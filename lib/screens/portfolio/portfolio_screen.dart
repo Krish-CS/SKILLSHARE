@@ -1,51 +1,76 @@
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import '../../models/portfolio_model.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../providers/user_provider.dart';
-import '../../models/portfolio_model.dart';
+import '../../services/firestore_service.dart';
 import '../../services/portfolio_service.dart';
 import '../../utils/web_image_loader.dart';
 import 'add_portfolio_item_screen.dart';
 
-/// Portfolio Screen - For Skilled Persons Only
-/// This is where skilled persons showcase their work through photos/videos
-/// Customers and companies can view portfolios but cannot manage them
+/// Portfolio Screen
+///
+/// - Skilled user opening their own portfolio: manage + edit + stats
+/// - Customer/company opening a skilled profile portfolio: view + like
 class PortfolioScreen extends StatefulWidget {
-  const PortfolioScreen({super.key});
+  final String? portfolioUserId;
+
+  const PortfolioScreen({super.key, this.portfolioUserId});
 
   @override
   State<PortfolioScreen> createState() => _PortfolioScreenState();
 }
 
-class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProviderStateMixin {
+class _PortfolioScreenState extends State<PortfolioScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final PortfolioService _portfolioService = PortfolioService();
+  final FirestoreService _firestoreService = FirestoreService();
+
   StreamSubscription<List<PortfolioItem>>? _portfolioSub;
+  StreamSubscription<int>? _profileViewsSub;
+
   List<PortfolioItem> _portfolioItems = [];
+  String? _currentUserId;
+  String? _portfolioOwnerId;
   bool _isLoading = true;
   String? _errorMessage;
+  int _profileViews = 0;
+
+  bool get _isViewingOwnPortfolio =>
+      _currentUserId != null && _portfolioOwnerId == _currentUserId;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    _portfolioOwnerId = widget.portfolioUserId ?? _currentUserId;
     _subscribeToPortfolio();
+    _subscribeToProfileViews();
   }
 
   @override
   void dispose() {
     _portfolioSub?.cancel();
+    _profileViewsSub?.cancel();
     _tabController.dispose();
     super.dispose();
   }
 
   void _subscribeToPortfolio() {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId == null) return;
+    final ownerId = _portfolioOwnerId;
+    if (ownerId == null) {
+      setState(() {
+        _errorMessage = 'Please sign in to view portfolio.';
+        _isLoading = false;
+      });
+      return;
+    }
 
-    _portfolioSub = _portfolioService.streamUserPortfolio(userId).listen(
+    _portfolioSub = _portfolioService.streamUserPortfolio(ownerId).listen(
       (items) {
         if (!mounted) return;
         setState(() {
@@ -64,18 +89,43 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
     );
   }
 
+  void _subscribeToProfileViews() {
+    final ownerId = _portfolioOwnerId;
+    if (ownerId == null) return;
+    _profileViewsSub = _firestoreService
+        .skilledProfileViewCountStream(ownerId)
+        .listen((count) {
+      if (!mounted) return;
+      setState(() {
+        _profileViews = count;
+      });
+    });
+  }
+
+  int _gridCountForWidth(double width) {
+    if (width >= 1400) return 6;
+    if (width >= 1100) return 5;
+    if (width >= 860) return 4;
+    if (width >= 620) return 3;
+    return 2;
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<app_auth.AuthProvider>(context);
-    
-    // Role-based access check
-    if (!authProvider.isSkilledPerson) {
+    final canManagePortfolio =
+        authProvider.isSkilledPerson && _isViewingOwnPortfolio;
+
+    // From bottom-nav tab (no target user provided), keep it skilled-only.
+    if (widget.portfolioUserId == null && !authProvider.isSkilledPerson) {
       return _buildAccessDenied();
     }
 
+    final title = canManagePortfolio ? 'My Portfolio' : 'Portfolio';
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Portfolio', style: TextStyle(color: Colors.white)),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
         flexibleSpace: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
@@ -100,32 +150,35 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildPortfolioTab(authProvider),
-          _buildStatisticsTab(authProvider),
+          _buildPortfolioTab(canManagePortfolio),
+          _buildStatisticsTab(),
         ],
       ),
-      floatingActionButton: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFC2185B), Color(0xFFFF6F61)],
-          ),
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFC2185B).withValues(alpha: 0.4),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: FloatingActionButton.extended(
-          onPressed: () => _addPortfolioItem(context),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          icon: const Icon(Icons.add_a_photo, color: Colors.white),
-          label: const Text('Add Work', style: TextStyle(color: Colors.white)),
-        ),
-      ),
+      floatingActionButton: canManagePortfolio
+          ? Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFC2185B), Color(0xFFFF6F61)],
+                ),
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFC2185B).withValues(alpha: 0.4),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: FloatingActionButton.extended(
+                onPressed: () => _addPortfolioItem(context),
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                icon: const Icon(Icons.add_a_photo, color: Colors.white),
+                label: const Text('Add Work',
+                    style: TextStyle(color: Colors.white)),
+              ),
+            )
+          : null,
     );
   }
 
@@ -149,7 +202,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 40),
               child: Text(
-                'Only skilled persons can manage their portfolio. Please switch to a skilled person account.',
+                'Only skilled persons can manage their portfolio. Customers and companies can view portfolio from a skilled profile.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
@@ -160,7 +213,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
     );
   }
 
-  Widget _buildPortfolioTab(app_auth.AuthProvider authProvider) {
+  Widget _buildPortfolioTab(bool canManagePortfolio) {
     if (_isLoading) {
       return const Center(
         child: CircularProgressIndicator(color: Color(0xFFC2185B)),
@@ -185,21 +238,23 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
       );
     }
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final crossAxisCount = _gridCountForWidth(screenWidth);
+
     return RefreshIndicator(
-      onRefresh: () async {}, // Stream auto-updates
+      onRefresh: () async {},
       color: const Color(0xFFC2185B),
       child: CustomScrollView(
         slivers: [
           const SliverPadding(padding: EdgeInsets.only(top: 12)),
-
-          // Portfolio grid
           if (_portfolioItems.isEmpty)
             SliverFillRemaining(
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.photo_library_outlined, size: 80, color: Colors.grey[400]),
+                    Icon(Icons.photo_library_outlined,
+                        size: 80, color: Colors.grey[400]),
                     const SizedBox(height: 16),
                     Text(
                       'No portfolio items yet',
@@ -207,7 +262,9 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Tap the + button to add your first work',
+                      canManagePortfolio
+                          ? 'Tap the + button to add your first work'
+                          : 'This skilled person has not added work yet',
                       style: TextStyle(fontSize: 14, color: Colors.grey[500]),
                     ),
                   ],
@@ -218,14 +275,17 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
-                  childAspectRatio: 0.82,
+                  mainAxisExtent: 230,
                 ),
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) => _buildPortfolioItemCard(_portfolioItems[index]),
+                  (context, index) => _buildPortfolioItemCard(
+                    _portfolioItems[index],
+                    canManagePortfolio: canManagePortfolio,
+                  ),
                   childCount: _portfolioItems.length,
                 ),
               ),
@@ -236,18 +296,26 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
     );
   }
 
-  Widget _buildPortfolioItemCard(PortfolioItem item) {
+  Widget _buildPortfolioItemCard(
+    PortfolioItem item, {
+    required bool canManagePortfolio,
+  }) {
+    final canLike = !canManagePortfolio &&
+        _currentUserId != null &&
+        _currentUserId != item.userId;
+
     return GestureDetector(
-      onTap: () => _viewPortfolioItem(item),
+      onTap: () =>
+          _viewPortfolioItem(item, canManagePortfolio: canManagePortfolio),
       child: Card(
         clipBehavior: Clip.antiAlias,
         elevation: 3,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image — always square so it never strips regardless of card width
-            AspectRatio(
-              aspectRatio: 1.0,
+            SizedBox(
+              height: 140,
+              width: double.infinity,
               child: item.images.isNotEmpty
                   ? WebImageLoader.loadImage(
                       imageUrl: item.images.first,
@@ -266,33 +334,73 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
                       ),
                     ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      item.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(Icons.favorite, size: 14, color: Colors.red),
-                      const SizedBox(width: 4),
-                      Text('${item.likes}', style: const TextStyle(fontSize: 12)),
-                      const SizedBox(width: 12),
-                      const Icon(Icons.visibility, size: 14, color: Colors.blue),
-                      const SizedBox(width: 4),
-                      Text('${item.views}', style: const TextStyle(fontSize: 12)),
-                    ],
-                  ),
-                ],
+                    Row(
+                      children: [
+                        if (canLike)
+                          StreamBuilder<bool>(
+                            stream:
+                                _portfolioService.streamIsPortfolioLikedByUser(
+                              item.id,
+                              _currentUserId!,
+                            ),
+                            builder: (context, snapshot) {
+                              final isLiked = snapshot.data ?? false;
+                              return InkWell(
+                                onTap: () =>
+                                    _toggleLike(item, shouldLike: !isLiked),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      isLiked
+                                          ? Icons.favorite
+                                          : Icons.favorite_border,
+                                      size: 16,
+                                      color: Colors.red,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text('${item.likes}',
+                                        style: const TextStyle(fontSize: 12)),
+                                  ],
+                                ),
+                              );
+                            },
+                          )
+                        else
+                          Row(
+                            children: [
+                              const Icon(Icons.favorite,
+                                  size: 16, color: Colors.red),
+                              const SizedBox(width: 4),
+                              Text('${item.likes}',
+                                  style: const TextStyle(fontSize: 12)),
+                            ],
+                          ),
+                        const Spacer(),
+                        const Icon(Icons.visibility,
+                            size: 16, color: Colors.blue),
+                        const SizedBox(width: 4),
+                        Text('${item.views}',
+                            style: const TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -301,10 +409,12 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
     );
   }
 
-  Widget _buildStatisticsTab(app_auth.AuthProvider authProvider) {
+  Widget _buildStatisticsTab() {
     final totalWorks = _portfolioItems.length;
-    final totalViews = _portfolioItems.fold<int>(0, (sum, item) => sum + item.views);
-    final totalLikes = _portfolioItems.fold<int>(0, (sum, item) => sum + item.likes);
+    final totalLikes =
+        _portfolioItems.fold<int>(0, (sum, item) => sum + item.likes);
+    final itemViews =
+        _portfolioItems.fold<int>(0, (sum, item) => sum + item.views);
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -318,9 +428,16 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
         const SizedBox(height: 12),
         _buildStatCard(
           'Total Views',
-          '$totalViews',
+          '$_profileViews',
           Icons.visibility,
           Colors.blue,
+        ),
+        const SizedBox(height: 12),
+        _buildStatCard(
+          'Work Item Opens',
+          '$itemViews',
+          Icons.remove_red_eye_outlined,
+          const Color(0xFF5C6BC0),
         ),
         const SizedBox(height: 12),
         _buildStatCard(
@@ -340,7 +457,8 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(
+      String title, String value, IconData icon, Color color) {
     return Card(
       child: ListTile(
         leading: CircleAvatar(
@@ -360,18 +478,38 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
     );
   }
 
+  Future<void> _toggleLike(
+    PortfolioItem item, {
+    required bool shouldLike,
+  }) async {
+    final userId = _currentUserId;
+    if (userId == null) return;
+
+    try {
+      await _portfolioService.setPortfolioLike(
+        itemId: item.id,
+        userId: userId,
+        shouldLike: shouldLike,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update like: $e')),
+      );
+    }
+  }
+
   void _addPortfolioItem(BuildContext context) async {
-    // SECURITY: Check if user is verified before allowing portfolio item creation
-    final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
+    final authProvider =
+        Provider.of<app_auth.AuthProvider>(context, listen: false);
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final nav = Navigator.of(context);
-    
-    // Load profile if not already loaded
-    if (userProvider.currentProfile == null && authProvider.currentUser != null) {
+
+    if (userProvider.currentProfile == null &&
+        authProvider.currentUser != null) {
       await userProvider.loadProfile(authProvider.currentUser!.uid);
     }
-    
-    // Check verification status
+
     if (userProvider.currentProfile?.isVerified != true) {
       if (!context.mounted) return;
       showDialog(
@@ -396,7 +534,6 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                // Navigate to verification screen
                 Navigator.pushNamed(context, '/skilled-setup');
               },
               child: const Text('Verify Now'),
@@ -406,27 +543,117 @@ class _PortfolioScreenState extends State<PortfolioScreen> with SingleTickerProv
       );
       return;
     }
-    
-    // Verified - proceed to add portfolio item
-    final result = await nav.push(
+
+    await nav.push(
       MaterialPageRoute(
         builder: (context) => const AddPortfolioItemScreen(),
       ),
     );
-
-    if (result == true && mounted) {
-      // Stream auto-updates
-    }
   }
 
-  void _viewPortfolioItem(PortfolioItem item) {
-    // Increment views when opening
-    _portfolioService.incrementPortfolioViews(item.id);
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AddPortfolioItemScreen(portfolioItem: item),
+  void _viewPortfolioItem(
+    PortfolioItem item, {
+    required bool canManagePortfolio,
+  }) {
+    final viewerId = _currentUserId;
+    if (viewerId != null) {
+      _portfolioService.trackUniquePortfolioView(
+        itemId: item.id,
+        viewerId: viewerId,
+        ownerId: item.userId,
+      );
+    }
+
+    if (canManagePortfolio) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => AddPortfolioItemScreen(portfolioItem: item),
+        ),
+      );
+      return;
+    }
+
+    _openPortfolioPreview(item);
+  }
+
+  void _openPortfolioPreview(PortfolioItem item) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (item.images.isNotEmpty)
+                ClipRRect(
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(4)),
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: WebImageLoader.loadImage(
+                      imageUrl: item.images.first,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                )
+              else
+                Container(
+                  height: 220,
+                  alignment: Alignment.center,
+                  color: Colors.grey.shade200,
+                  child:
+                      Icon(Icons.image, size: 56, color: Colors.grey.shade500),
+                ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.title,
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      item.description.isEmpty
+                          ? 'No description added.'
+                          : item.description,
+                      style:
+                          const TextStyle(fontSize: 14, color: Colors.black87),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Icon(Icons.favorite, color: Colors.red, size: 18),
+                        const SizedBox(width: 6),
+                        Text('${item.likes}'),
+                        const SizedBox(width: 20),
+                        const Icon(Icons.visibility,
+                            color: Colors.blue, size: 18),
+                        const SizedBox(width: 6),
+                        Text('${item.views}'),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Close'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
-    ).then((_) {}); // Stream auto-updates
+    );
   }
 }

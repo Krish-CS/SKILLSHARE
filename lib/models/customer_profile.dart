@@ -72,7 +72,7 @@ class CustomerProfile {
       'bio': bio,
       'interests': interests,
       'lookingFor': lookingFor,
-      'profilePicture': profilePicture,
+      if (profilePicture != null) 'profilePicture': profilePicture,
       'location': location,
       'city': city,
       'state': state,

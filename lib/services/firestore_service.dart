@@ -185,11 +185,9 @@ class FirestoreService {
   /// Stamps the user document with the current server timestamp so the badge
   /// count resets once all current notifications are considered "seen".
   Future<void> markNotificationsSeen(String userId) async {
-    await _firestore
-        .collection(AppConstants.usersCollection)
-        .doc(userId)
-        .set({'lastNotificationSeenAt': FieldValue.serverTimestamp()},
-            SetOptions(merge: true));
+    await _firestore.collection(AppConstants.usersCollection).doc(userId).set(
+        {'lastNotificationSeenAt': FieldValue.serverTimestamp()},
+        SetOptions(merge: true));
   }
 
   /// Returns a stream that emits the `lastNotificationSeenAt` timestamp for
@@ -456,6 +454,53 @@ class FirestoreService {
         .map((doc) {
       if (!doc.exists) return null;
       return SkilledUserProfile.fromMap(doc.data()!, userId);
+    });
+  }
+
+  /// Counts a skilled profile view only once per viewer.
+  Future<void> trackUniqueSkilledProfileView({
+    required String skilledUserId,
+    required String viewerUserId,
+  }) async {
+    if (skilledUserId.trim().isEmpty || viewerUserId.trim().isEmpty) return;
+    if (skilledUserId == viewerUserId) return;
+
+    final profileRef = _firestore
+        .collection(AppConstants.skilledUsersCollection)
+        .doc(skilledUserId);
+    final viewerRef =
+        profileRef.collection('profile_viewers').doc(viewerUserId);
+
+    try {
+      await _firestore.runTransaction((transaction) async {
+        final viewerSnap = await transaction.get(viewerRef);
+        if (viewerSnap.exists) return;
+
+        transaction.set(viewerRef, {
+          'viewerId': viewerUserId,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        transaction.update(profileRef, {
+          'profileViews': FieldValue.increment(1),
+        });
+      });
+    } catch (e) {
+      debugPrint('Failed to track unique profile view: $e');
+    }
+  }
+
+  /// Realtime stream of profile view count for a skilled user.
+  Stream<int> skilledProfileViewCountStream(String skilledUserId) {
+    return _firestore
+        .collection(AppConstants.skilledUsersCollection)
+        .doc(skilledUserId)
+        .snapshots()
+        .map((doc) {
+      if (!doc.exists) return 0;
+      final value = doc.data()?['profileViews'];
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return 0;
     });
   }
 
@@ -1511,8 +1556,7 @@ class FirestoreService {
       'updatedAt': FieldValue.serverTimestamp(),
     };
     if (estimatedDelivery != null) {
-      updateData['estimatedDelivery'] =
-          Timestamp.fromDate(estimatedDelivery);
+      updateData['estimatedDelivery'] = Timestamp.fromDate(estimatedDelivery);
     }
     await _firestore
         .collection(AppConstants.ordersCollection)
@@ -2175,9 +2219,8 @@ class FirestoreService {
           .collection(AppConstants.reportsCollection)
           .limit(limit)
           .get();
-      final reports = snapshot.docs
-          .map((doc) => {'id': doc.id, ...doc.data()})
-          .toList();
+      final reports =
+          snapshot.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList();
       reports.sort((a, b) {
         final aTime = a['createdAt'];
         final bTime = b['createdAt'];
@@ -2247,9 +2290,8 @@ class FirestoreService {
         _firestore.collection(AppConstants.usersCollection).doc(userId));
 
     // Delete profile doc (skilled/customer/company)
-    batch.delete(_firestore
-        .collection(AppConstants.skilledUsersCollection)
-        .doc(userId));
+    batch.delete(
+        _firestore.collection(AppConstants.skilledUsersCollection).doc(userId));
     batch.delete(_firestore
         .collection(AppConstants.customerProfilesCollection)
         .doc(userId));
@@ -2281,5 +2323,4 @@ class FirestoreService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
-
 }

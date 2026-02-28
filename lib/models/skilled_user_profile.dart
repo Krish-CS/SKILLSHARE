@@ -20,9 +20,11 @@ class SkilledUserProfile {
   final double rating;
   final int reviewCount;
   final int projectCount;
+  final int profileViews;
   final bool isVerified;
   final DateTime? verifiedAt;
   final String? rejectionReason;
+
   /// Banner customisation data (image or styled text).
   final Map<String, dynamic>? bannerData;
   final DateTime createdAt;
@@ -48,6 +50,7 @@ class SkilledUserProfile {
     this.rating = 0.0,
     this.reviewCount = 0,
     this.projectCount = 0,
+    this.profileViews = 0,
     this.isVerified = false,
     this.verifiedAt,
     this.rejectionReason,
@@ -95,6 +98,7 @@ class SkilledUserProfile {
       rating: (map['rating'] ?? 0.0).toDouble(),
       reviewCount: map['reviewCount'] ?? 0,
       projectCount: map['projectCount'] ?? 0,
+      profileViews: map['profileViews'] ?? 0,
       isVerified: map['isVerified'] ?? false,
       verifiedAt: (map['verifiedAt'] as Timestamp?)?.toDate(),
       rejectionReason: map['rejectionReason'],
@@ -127,6 +131,7 @@ class SkilledUserProfile {
       'rating': rating,
       'reviewCount': reviewCount,
       'projectCount': projectCount,
+      'profileViews': profileViews,
       'isVerified': isVerified,
       'verifiedAt': verifiedAt != null ? Timestamp.fromDate(verifiedAt!) : null,
       'rejectionReason': rejectionReason,
@@ -155,6 +160,7 @@ class SkilledUserProfile {
     double? rating,
     int? reviewCount,
     int? projectCount,
+    int? profileViews,
     bool? isVerified,
     DateTime? verifiedAt,
     String? rejectionReason,
@@ -181,6 +187,7 @@ class SkilledUserProfile {
       rating: rating ?? this.rating,
       reviewCount: reviewCount ?? this.reviewCount,
       projectCount: projectCount ?? this.projectCount,
+      profileViews: profileViews ?? this.profileViews,
       isVerified: isVerified ?? this.isVerified,
       verifiedAt: verifiedAt ?? this.verifiedAt,
       rejectionReason: rejectionReason ?? this.rejectionReason,

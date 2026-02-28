@@ -7,6 +7,7 @@ import '../../models/skilled_user_profile.dart';
 import '../../services/firestore_service.dart';
 import '../../services/chat_service.dart';
 import '../../utils/app_helpers.dart';
+import '../../utils/app_dialog.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/web_image_loader.dart';
 import '../profile/profile_screen.dart';
@@ -78,12 +79,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     if (_currentUser == null) return;
 
     if (_currentUser!.role != AppConstants.roleSkilledUser) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Only skilled users can apply for jobs'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      AppDialog.info(context, 'Only skilled users can apply for jobs');
       return;
     }
 
@@ -97,21 +93,11 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Application submitted successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppDialog.success(context, 'Application submitted successfully!');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error applying: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppDialog.error(context, 'Error applying for job', detail: e.toString());
       }
     } finally {
       if (mounted) {
@@ -157,16 +143,12 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       try {
         await _firestoreService.deleteJob(widget.job.id);
         if (mounted) {
-          Navigator.pop(context, true);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Job deleted successfully')),
-          );
+          AppDialog.success(context, 'Job deleted successfully',
+              onDismiss: () => Navigator.of(context).pop(true));
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error deleting job: $e')),
-          );
+          AppDialog.error(context, 'Error deleting job', detail: e.toString());
         }
       } finally {
         if (mounted) setState(() => _isLoading = false);
@@ -494,7 +476,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                 onPressed: () async {
                                   // Start chat with employer
                                   final nav = Navigator.of(context);
-                                  final messenger = ScaffoldMessenger.of(context);
                                   try {
                                     final currentUser = FirebaseAuth.instance.currentUser;
                                     if (currentUser == null || _employer == null) return;
@@ -536,11 +517,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                     );
                                   } catch (e) {
                                     // Close loading if still showing
-                                    if (!mounted) return;
+                                    if (!context.mounted) return;
                                     nav.pop();
-                                    messenger.showSnackBar(
-                                      SnackBar(content: Text('Failed to start chat: $e')),
-                                    );
+                                    AppDialog.error(context, 'Failed to start chat', detail: e.toString());
                                   }
                                 },
                                 icon: const Icon(Icons.chat_bubble_outline),
@@ -682,7 +661,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                   // Start chat with applicant
                                   if (applicantUser == null || _currentUser == null) return;
                                   final nav = Navigator.of(context);
-                                  final messenger = ScaffoldMessenger.of(context);
                                   
                                   try {
                                     final currentUser = FirebaseAuth.instance.currentUser;
@@ -725,11 +703,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                     );
                                   } catch (e) {
                                     // Close loading if still showing
-                                    if (!mounted) return;
+                                    if (!context.mounted) return;
                                     nav.pop();
-                                    messenger.showSnackBar(
-                                      SnackBar(content: Text('Failed to start chat: $e')),
-                                    );
+                                    AppDialog.error(context, 'Failed to start chat', detail: e.toString());
                                   }
                                 },
                                 icon: const Icon(Icons.chat_bubble_outline),

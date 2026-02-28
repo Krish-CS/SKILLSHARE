@@ -10,6 +10,7 @@ import '../../models/customer_profile.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/web_image_loader.dart';
+import '../../utils/app_dialog.dart';
 import '../main_navigation.dart';
 
 class CustomerSetupScreen extends StatefulWidget {
@@ -156,12 +157,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
     } catch (e) {
       // Handle web-specific errors gracefully
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Image selected! Click Save to upload.'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppDialog.success(context, 'Image selected! Click Save to upload.');
       }
     }
   }
@@ -197,12 +193,22 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
         }
       }
 
+      // Determine profile picture URL - never write empty string to Firestore
+      final String? effectiveProfileUrl;
+      if (finalProfileUrl != null && finalProfileUrl.isNotEmpty) {
+        effectiveProfileUrl = finalProfileUrl;
+      } else if (currentProfile?.profilePicture != null && currentProfile!.profilePicture!.isNotEmpty) {
+        effectiveProfileUrl = currentProfile.profilePicture;
+      } else {
+        effectiveProfileUrl = null;
+      }
+
       final profile = CustomerProfile(
         userId: widget.userId,
         bio: _bioController.text.trim(),
         interests: _interests,
         lookingFor: _lookingFor,
-        profilePicture: finalProfileUrl ?? '',
+        profilePicture: effectiveProfileUrl,
         location: _locationController.text.trim(),
         preferredCategories: _lookingFor,
         createdAt: currentProfile?.createdAt ?? DateTime.now(),
@@ -211,13 +217,13 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
 
       await userProvider.updateCustomerProfile(profile);
 
-      if (finalProfileUrl != null && finalProfileUrl.isNotEmpty) {
+      if (effectiveProfileUrl != null) {
         try {
-          await FirestoreService().updateUserProfilePhoto(widget.userId, finalProfileUrl);
+          await FirestoreService().updateUserProfilePhoto(widget.userId, effectiveProfileUrl);
 
           if (authProvider.currentUser != null) {
             final updatedUser = authProvider.currentUser!.copyWith(
-              profilePhoto: finalProfileUrl,
+              profilePhoto: effectiveProfileUrl,
             );
             await authProvider.updateProfile(updatedUser);
           }
@@ -228,29 +234,17 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile saved successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      // Navigate to main screen
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const MainNavigation(),
-        ),
-      );
+      AppDialog.success(context, 'Profile saved successfully!',
+          onDismiss: () => Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const MainNavigation(),
+            ),
+          ));
     } catch (e) {
       if (!mounted) return;
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error saving profile: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppDialog.error(context, 'Error saving profile', detail: e.toString());
     } finally {
       if (mounted) {
         setState(() {

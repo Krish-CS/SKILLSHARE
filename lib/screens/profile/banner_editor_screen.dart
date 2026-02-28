@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../utils/app_dialog.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/cloudinary_service.dart';
@@ -188,9 +189,7 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
       final url = await _uploadBannerImage();
       if (url == null) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Image upload failed — please try again'),
-        ));
+        AppDialog.error(context, 'Image upload failed — please try again');
         return;
       }
       _uploadedImageUrl = url;

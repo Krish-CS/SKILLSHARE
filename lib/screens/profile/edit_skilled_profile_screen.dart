@@ -6,6 +6,7 @@ import '../../models/skilled_user_profile.dart';
 import '../../models/service_model.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/web_image_loader.dart';
+import '../../utils/app_dialog.dart';
 import 'skilled_user_setup_screen.dart';
 
 class EditSkilledProfileScreen extends StatefulWidget {
@@ -98,16 +99,11 @@ class _EditSkilledProfileScreenState extends State<EditSkilledProfileScreen> {
     final success = await userProvider.updateProfile(updatedProfile);
     if (success && mounted) {
       setState(() => _profile = updatedProfile);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(children: [
-            Icon(newVisibility == 'public' ? Icons.visibility : Icons.visibility_off, color: Colors.white),
-            const SizedBox(width: 8),
-            Text('Profile is now ${newVisibility.toUpperCase()}'),
-          ]),
-          backgroundColor: newVisibility == 'public' ? Colors.green : Colors.orange,
-        ),
-      );
+      if (newVisibility == 'public') {
+        AppDialog.success(context, 'Profile is now PUBLIC');
+      } else {
+        AppDialog.info(context, 'Profile is now PRIVATE');
+      }
     }
   }
 
@@ -215,14 +211,11 @@ class _EditSkilledProfileScreenState extends State<EditSkilledProfileScreen> {
                   }
                   _loadProfile();
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(existing != null ? 'Service updated!' : 'Service added!'),
-                      backgroundColor: Colors.green,
-                    ));
+                    AppDialog.success(context, existing != null ? 'Service updated!' : 'Service added!');
                   }
                 } catch (e) {
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+                    AppDialog.error(context, 'Error saving service', detail: e.toString());
                   }
                 }
               },

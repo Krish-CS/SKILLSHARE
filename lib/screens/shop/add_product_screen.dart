@@ -10,6 +10,7 @@ import '../../services/cloudinary_service.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../providers/user_provider.dart';
 import '../../utils/app_constants.dart';
+import '../../utils/app_dialog.dart';
 
 class AddProductScreen extends StatefulWidget {
   const AddProductScreen({super.key});
@@ -49,9 +50,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   Future<void> _pickImages() async {
     try {
       if (_selectedImages.length + _imageUrls.length >= 5) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Maximum 5 images allowed')),
-        );
+        AppDialog.info(context, 'Maximum 5 images allowed', title: 'Limit Reached');
         return;
       }
 
@@ -78,9 +77,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     } on Exception catch (e) {
       // Only show error for actual errors, not cancellations
       if (mounted && e.toString().isNotEmpty && !e.toString().contains('cancel')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking images: $e')),
-        );
+        AppDialog.error(context, 'Error picking images', detail: e.toString());
       }
     }
   }
@@ -104,19 +101,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
     if (!_formKey.currentState!.validate()) return;
     
     if (_selectedCategory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a category')),
-      );
+      AppDialog.info(context, 'Please select a category');
       return;
     }
 
     if (_selectedImages.isEmpty && _imageUrls.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please add at least one product image'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      AppDialog.info(context, 'Please add at least one product image');
       return;
     }
 
@@ -171,22 +161,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
       await _firestoreService.createProduct(product);
 
       if (mounted) {
-        Navigator.pop(context, true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Product added successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppDialog.success(context, 'Product added successfully!',
+            onDismiss: () => Navigator.of(context).pop(true));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error adding product: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppDialog.error(context, 'Error adding product', detail: e.toString());
       }
     } finally {
       if (mounted) {

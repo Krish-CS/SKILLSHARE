@@ -74,7 +74,10 @@ class AuthProvider with ChangeNotifier {
     try {
       _currentUser = await _authService.getUserData(uid);
       if (_currentUser == null) {
-        // If user data doesn't exist in Firestore, create it
+        // getUserData returned null — could be "doc doesn't exist" OR
+        // a transient network/cache failure.  Use .set(merge:true) so we
+        // never accidentally overwrite existing fields (like profilePhoto)
+        // if the doc actually exists but the read failed.
         final firebaseUser = _authService.currentUser;
         if (firebaseUser != null) {
           _currentUser = UserModel(
@@ -88,8 +91,9 @@ class AuthProvider with ChangeNotifier {
             createdAt: DateTime.now(),
             updatedAt: DateTime.now(),
           );
-          // Save to Firestore
-          await _authService.updateUserProfile(_currentUser!);
+          // Use merge:true so existing fields (e.g. profilePhoto) are
+          // never wiped when the read failed but the doc exists.
+          await _authService.mergeUserProfile(_currentUser!);
         }
       }
       _error = null;

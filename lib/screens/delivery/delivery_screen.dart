@@ -4,6 +4,7 @@ import '../../providers/auth_provider.dart';
 import '../../models/order_model.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/app_helpers.dart';
+import '../../utils/app_dialog.dart';
 import '../shop/order_tracking_screen.dart';
 
 class DeliveryScreen extends StatefulWidget {
@@ -347,22 +348,15 @@ class _DeliveryCard extends StatelessWidget {
         status: status,
       );
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text(status == 'delivered' ? 'Marked as delivered!' : 'Marked as failed delivery.'),
-            backgroundColor:
-                status == 'delivered' ? Colors.green : Colors.red,
-          ),
-        );
+        if (status == 'delivered') {
+          AppDialog.success(context, 'Marked as delivered!');
+        } else {
+          AppDialog.error(context, 'Marked as failed delivery.');
+        }
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Error: $e'),
-              backgroundColor: Colors.red),
-        );
+        AppDialog.error(context, 'Error updating delivery status', detail: e.toString());
       }
     }
   }
@@ -422,17 +416,11 @@ class _AcceptButtonState extends State<_AcceptButton> {
             DateTime.now().add(const Duration(hours: 48)),
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Delivery accepted! You are now assigned.'),
-          backgroundColor: Colors.green,
-        ));
+        AppDialog.success(context, 'Delivery accepted! You are now assigned.');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ));
+        AppDialog.error(context, 'Error accepting delivery', detail: e.toString());
       }
     } finally {
       if (mounted) setState(() => _loading = false);

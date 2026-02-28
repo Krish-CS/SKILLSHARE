@@ -7,6 +7,7 @@ import '../../models/product_model.dart';
 import '../../models/order_model.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/web_image_loader.dart';
+import '../../utils/app_dialog.dart';
 import '../shop/add_product_screen.dart';
 import '../shop/product_detail_screen.dart';
 
@@ -401,17 +402,11 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
         status: status,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Order marked as $status'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppDialog.success(context, 'Order marked as $status');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        AppDialog.error(context, 'Error updating order', detail: e.toString());
       }
     }
   }
@@ -570,21 +565,11 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
         await _firestoreService.deleteProduct(product.id);
         _loadProducts();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Product deleted successfully'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          AppDialog.success(context, 'Product deleted successfully');
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error deleting product: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          AppDialog.error(context, 'Error deleting product', detail: e.toString());
         }
       }
     }
@@ -667,16 +652,11 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
                           });
                           if (!ctx.mounted) return;
                           Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Shop settings saved!'),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
+                          // ignore: use_build_context_synchronously
+                          AppDialog.success(context, 'Shop settings saved!');
                         } catch (e) {
                           setDialogState(() => isSaving = false);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Error: $e')));
+                          AppDialog.error(context, 'Could not save shop settings', detail: e.toString());
                         }
                       },
                 style: ElevatedButton.styleFrom(

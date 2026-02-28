@@ -9,6 +9,7 @@ import '../../providers/user_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/skilled_user_profile.dart';
 import '../../utils/app_constants.dart';
+import '../../utils/app_dialog.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/biometric_service.dart';
@@ -174,9 +175,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
     } on Exception catch (e) {
       // Only show error for actual errors, not cancellations
       if (mounted && e.toString().isNotEmpty && !e.toString().contains('cancel')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking image: $e')),
-        );
+        AppDialog.error(context, 'Error picking image', detail: e.toString());
       }
     }
   }
@@ -184,9 +183,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
   Future<void> _pickPortfolioImages() async {
     try {
       if ((kIsWeb ? _portfolioImageBytes.length : _portfolioImages.length) + _portfolioImageUrls.length >= 10) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Maximum 10 portfolio images allowed')),
-        );
+        AppDialog.info(context, 'Maximum 10 portfolio images allowed', title: 'Limit Reached');
         return;
       }
 
@@ -219,9 +216,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
     } on Exception catch (e) {
       // Only show error for actual errors, not cancellations
       if (mounted && e.toString().isNotEmpty && !e.toString().contains('cancel')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking images: $e')),
-        );
+        AppDialog.error(context, 'Error picking images', detail: e.toString());
       }
     }
   }
@@ -288,22 +283,12 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
     final aadhaar = _aadhaarController.text.trim().replaceAll(' ', '');
 
     if (aadhaar.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter your Aadhaar number'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppDialog.info(context, 'Please enter your Aadhaar number');
       return;
     }
 
     if (!_validateAadhaar(aadhaar)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid Aadhaar number. Must be 12 digits'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppDialog.info(context, 'Invalid Aadhaar number. Must be 12 digits');
       return;
     }
 
@@ -541,27 +526,9 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
         _isVerified = true;
         _verificationStatus = 'verified';
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.verified_user, color: Colors.white),
-              SizedBox(width: 8),
-              Text('✓ Aadhaar & fingerprint verified! Profile is now public.'),
-            ],
-          ),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 4),
-        ),
-      );
+      AppDialog.success(context, '✓ Aadhaar & fingerprint verified! Profile is now public.');
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(BiometricService.resultMessage(result)),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 4),
-        ),
-      );
+      AppDialog.error(context, BiometricService.resultMessage(result));
     }
   }
 
@@ -569,9 +536,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     if (_selectedCategory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a category')),
-      );
+      AppDialog.info(context, 'Please select a category');
       return;
     }
 
@@ -580,18 +545,14 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
     if (_selectedCategory == 'Other') {
       final custom = _customCategoryController.text.trim();
       if (custom.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter your custom category')),
-        );
+        AppDialog.info(context, 'Please enter your custom category');
         return;
       }
       finalCategory = custom;
     }
 
     if (_skills.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least one skill')),
-      );
+      AppDialog.info(context, 'Please add at least one skill');
       return;
     }
 
@@ -600,7 +561,6 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       _uploadStatusMessage = 'Saving profile...';
     });
 
-    final messenger = ScaffoldMessenger.of(context);
     final nav = Navigator.of(context);
 
     try {
@@ -668,13 +628,23 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       // Get user name to denormalize into skilled_users collection
       final userName = authProvider.currentUser?.name;
 
+      // Determine effective profile picture URL - never write empty string
+      final String? effectiveProfileUrl;
+      if (finalProfileUrl != null && finalProfileUrl.isNotEmpty) {
+        effectiveProfileUrl = finalProfileUrl;
+      } else if (currentProfile?.profilePicture != null && currentProfile!.profilePicture!.isNotEmpty) {
+        effectiveProfileUrl = currentProfile.profilePicture;
+      } else {
+        effectiveProfileUrl = null;
+      }
+
       final profile = SkilledUserProfile(
         userId: widget.userId,
         name: userName,
         bio: _bioController.text.trim(),
         skills: _skills,
         category: finalCategory,
-        profilePicture: finalProfileUrl ?? '',
+        profilePicture: effectiveProfileUrl,
         verificationStatus: _verificationStatus,
         visibility: _isVerified ? AppConstants.visibilityPublic : AppConstants.visibilityPrivate,
         portfolioImages: finalPortfolioUrls,
@@ -697,49 +667,36 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       if (success) {
         // Also update user basic profile with profile photo in Firestore directly
         try {
-          if (finalProfileUrl != null && finalProfileUrl.isNotEmpty) {
+          if (effectiveProfileUrl != null && effectiveProfileUrl.isNotEmpty) {
             // Update via Firestore service directly for reliability
-            await FirestoreService().updateUserProfilePhoto(widget.userId, finalProfileUrl);
+            await FirestoreService().updateUserProfilePhoto(widget.userId, effectiveProfileUrl);
             
             // Also update via auth provider to keep local state in sync
             if (authProvider.currentUser != null) {
               final updatedUser = authProvider.currentUser!.copyWith(
-                profilePhoto: finalProfileUrl,
+                profilePhoto: effectiveProfileUrl,
               );
               await authProvider.updateProfile(updatedUser);
             }
-            debugPrint('Profile photo saved to both collections: $finalProfileUrl');
+            debugPrint('Profile photo saved to both collections: $effectiveProfileUrl');
           }
         } catch (e) {
           debugPrint('Error updating user profile photo: $e');
         }
+
+        if (!mounted) return;
+        AppDialog.success(context, 'Profile saved successfully!',
+            onDismiss: () => nav.pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const MainNavigation()),
+              (route) => false,
+            ));
         
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Profile saved successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        
-        // Navigate to main navigation after successful save
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (mounted) {
-          nav.pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const MainNavigation()),
-            (route) => false,
-          );
-        }
       } else {
         throw Exception(userProvider.error ?? 'Failed to save profile');
       }
     } catch (e) {
       if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppDialog.error(context, 'Error saving profile', detail: e.toString());
       }
     } finally {
       if (mounted) {

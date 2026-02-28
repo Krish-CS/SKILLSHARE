@@ -11,6 +11,8 @@ class PortfolioService {
 
   // Collection references
   final String _portfolioCollection = 'portfolio';
+  final String _likesSubcollection = 'likes';
+  final String _viewersSubcollection = 'viewers';
   final String _companyProfilesCollection = 'company_profiles';
   final String _skilledUsersCollection = AppConstants.skilledUsersCollection;
 
@@ -265,13 +267,12 @@ class PortfolioService {
         .where('userId', isEqualTo: userId)
         .snapshots()
         .map((snap) {
-          final items = snap.docs
-              .map((doc) => PortfolioItem.fromMap(
-                  doc.data(), doc.id))
-              .toList();
-          items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          return items;
-        });
+      final items = snap.docs
+          .map((doc) => PortfolioItem.fromMap(doc.data(), doc.id))
+          .toList();
+      items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return items;
+    });
   }
 
   Future<List<PortfolioItem>> getPublicPortfolioItems({
@@ -337,6 +338,36 @@ class PortfolioService {
     }
   }
 
+  /// Increment view count only once per viewer for a given portfolio item.
+  Future<void> trackUniquePortfolioView({
+    required String itemId,
+    required String viewerId,
+    String? ownerId,
+  }) async {
+    if (itemId.trim().isEmpty || viewerId.trim().isEmpty) return;
+    if (ownerId != null && ownerId == viewerId) return;
+
+    try {
+      final itemRef = _firestore.collection(_portfolioCollection).doc(itemId);
+      final viewerRef = itemRef.collection(_viewersSubcollection).doc(viewerId);
+
+      await _firestore.runTransaction((transaction) async {
+        final viewerSnap = await transaction.get(viewerRef);
+        if (viewerSnap.exists) return;
+
+        transaction.set(viewerRef, {
+          'viewerId': viewerId,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        transaction.update(itemRef, {
+          'views': FieldValue.increment(1),
+        });
+      });
+    } catch (e) {
+      debugPrint('Failed to track unique portfolio view: $e');
+    }
+  }
+
   /// Toggle like on a portfolio item
   Future<void> togglePortfolioLike(String itemId, bool increment) async {
     try {
@@ -345,6 +376,56 @@ class PortfolioService {
       });
     } catch (e) {
       throw Exception('Failed to toggle like: $e');
+    }
+  }
+
+  /// Returns whether [userId] liked this portfolio item.
+  Stream<bool> streamIsPortfolioLikedByUser(String itemId, String userId) {
+    return _firestore
+        .collection(_portfolioCollection)
+        .doc(itemId)
+        .collection(_likesSubcollection)
+        .doc(userId)
+        .snapshots()
+        .map((doc) => doc.exists);
+  }
+
+  /// Like or unlike a portfolio item for a specific user.
+  Future<void> setPortfolioLike({
+    required String itemId,
+    required String userId,
+    required bool shouldLike,
+  }) async {
+    if (itemId.trim().isEmpty || userId.trim().isEmpty) return;
+
+    try {
+      final itemRef = _firestore.collection(_portfolioCollection).doc(itemId);
+      final likeRef = itemRef.collection(_likesSubcollection).doc(userId);
+
+      await _firestore.runTransaction((transaction) async {
+        final likeSnap = await transaction.get(likeRef);
+        final alreadyLiked = likeSnap.exists;
+
+        if (shouldLike && !alreadyLiked) {
+          transaction.set(likeRef, {
+            'userId': userId,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+          transaction.update(itemRef, {
+            'likes': FieldValue.increment(1),
+          });
+          return;
+        }
+
+        if (!shouldLike && alreadyLiked) {
+          transaction.delete(likeRef);
+          transaction.update(itemRef, {
+            'likes': FieldValue.increment(-1),
+          });
+        }
+      });
+    } catch (e) {
+      throw Exception('Failed to update portfolio like: $e');
     }
   }
 

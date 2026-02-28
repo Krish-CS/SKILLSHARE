@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
+import '../../utils/app_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -70,18 +71,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'showPhone': _showPhone,
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Settings saved!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppDialog.success(context, 'Settings saved!');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving settings: $e')),
-        );
+        AppDialog.error(context, 'Error saving settings', detail: e.toString());
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -242,18 +236,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final authService = AuthService();
       await authService.linkGoogleToCurrentAccount();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Google account linked successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppDialog.success(context, 'Google account linked successfully!');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not link Google account: $e')),
-        );
+        AppDialog.error(context, 'Could not link Google account', detail: e.toString());
       }
     }
   }
@@ -296,18 +283,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 if (!ctx.mounted) return;
                 Navigator.pop(ctx);
                 // ignore: use_build_context_synchronously
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Password reset email sent!'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
+                AppDialog.success(context, 'Password reset email sent! Check your inbox.');
               } catch (e) {
                 if (!ctx.mounted) return;
                 // ignore: use_build_context_synchronously
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error: $e')),
-                );
+                AppDialog.error(context, 'Error sending reset email', detail: e.toString());
               }
             },
             style: ElevatedButton.styleFrom(

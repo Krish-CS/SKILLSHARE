@@ -11,9 +11,11 @@ import '../../utils/add_dummy_profiles.dart';
 import '../../utils/web_image_loader.dart';
 import '../../widgets/expert_card.dart';
 import '../../services/firestore_service.dart';
+import '../../services/chat_service.dart';
 import '../profile/profile_screen.dart';
 import 'explore_screen.dart';
 import '../../widgets/notification_bell.dart';
+import '../../utils/app_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -108,12 +110,43 @@ class _HomeScreenState extends State<HomeScreen> {
               userProvider.companyProfile!.logoUrl!.isNotEmpty) {
             rolePhoto = userProvider.companyProfile!.logoUrl;
           }
+
+          // Last resort: try to recover photo from chat participantDetails
+          if (rolePhoto == null) {
+            try {
+              final chatService = ChatService();
+              final chatSnap = await chatService.getUserChats(currentUser.uid).first;
+              for (final chat in chatSnap) {
+                final details = chat.participantDetails[currentUser.uid];
+                if (details != null) {
+                  final p = (details['photo'] ?? '').toString().trim();
+                  if (p.isNotEmpty) {
+                    rolePhoto = p;
+                    break;
+                  }
+                }
+              }
+            } catch (_) {}
+          }
+
           if (rolePhoto != null) {
             try {
               await _firestoreService.updateUserProfilePhoto(
                   currentUser.uid, rolePhoto);
               final updatedUser = currentUser.copyWith(profilePhoto: rolePhoto);
               await authProvider.updateProfile(updatedUser);
+              // Also sync back to role profile if missing
+              if (currentUser.role == UserRoles.customer &&
+                  (userProvider.customerProfile?.profilePicture == null ||
+                      userProvider.customerProfile!.profilePicture!.isEmpty)) {
+                try {
+                  final cp = userProvider.customerProfile;
+                  if (cp != null) {
+                    await userProvider.updateCustomerProfile(
+                        cp.copyWith(profilePicture: rolePhoto));
+                  }
+                } catch (_) {}
+              }
             } catch (_) {}
           }
         }
@@ -1009,7 +1042,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ? FloatingActionButton.extended(
               onPressed: () async {
                 final nav = Navigator.of(context);
-                final messenger = ScaffoldMessenger.of(context);
                 showDialog(
                   context: context,
                   barrierDismissible: false,
@@ -1018,16 +1050,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 );
                 await DummyDataSeeder.seedDatabase();
-                if (mounted) {
-                  nav.pop();
-                  messenger.showSnackBar(
-                    const SnackBar(
-                      content: Text('Dummy profiles added successfully!'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                  _loadData(); // Reload data
-                }
+                if (!context.mounted) return;
+                nav.pop();
+                AppDialog.success(context, 'Dummy profiles added successfully!');
+                _loadData(); // Reload data
               },
               icon: const Icon(Icons.add_circle),
               label: const Text('Add Dummy Data'),

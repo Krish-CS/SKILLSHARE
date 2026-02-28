@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/google_g_logo.dart';
+import '../../utils/app_dialog.dart';
 import '../main_navigation.dart';
 import 'signup_screen.dart';
 
@@ -421,29 +422,18 @@ class _LoginScreenState extends State<LoginScreen>
                                         final email =
                                             _emailController.text.trim();
                                         if (email.isEmpty) {
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(const SnackBar(
-                                                  content: Text(
-                                                      'Please enter your email first')));
+                                          AppDialog.info(context, 'Please enter your email first');
                                           return;
                                         }
                                         try {
                                           await AuthService()
                                               .resetPassword(email);
                                           if (context.mounted) {
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(const SnackBar(
-                                              content: Text(
-                                                  'Password reset email sent! Check your inbox.'),
-                                              backgroundColor: Colors.green,
-                                            ));
+                                            AppDialog.success(context, 'Password reset email sent! Check your inbox.');
                                           }
                                         } catch (e) {
                                           if (context.mounted) {
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(SnackBar(
-                                                    content:
-                                                        Text(e.toString())));
+                                            AppDialog.error(context, 'Password reset failed', detail: e.toString());
                                           }
                                         }
                                       },

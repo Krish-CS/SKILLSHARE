@@ -358,6 +358,19 @@ class AuthService {
     }
   }
 
+  /// Safe merge: creates the doc if missing, otherwise only updates the
+  /// fields present in [user.toMap()] without wiping existing values.
+  Future<void> mergeUserProfile(UserModel user) async {
+    try {
+      await _firestore
+          .collection(AppConstants.usersCollection)
+          .doc(user.uid)
+          .set(user.toMap(), SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('mergeUserProfile error: $e');
+    }
+  }
+
   // Reset password
   Future<void> resetPassword(String email) async {
     try {
