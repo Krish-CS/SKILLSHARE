@@ -374,6 +374,54 @@ class _JobApplicantsScreenState extends State<JobApplicantsScreen> {
     }
   }
 
+  Future<void> _revoke(String applicantId, String displayName) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Revoke Acceptance'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to revoke the accepted offer for $displayName?\n\n'
+          'They will be notified and the job will be re-opened.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Revoke'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _processingId = applicantId);
+    try {
+      await _firestoreService.rejectJobApplicant(
+        jobId: _job.id,
+        applicantId: applicantId,
+        companyId: _job.companyId,
+      );
+      if (mounted) AppDialog.success(context, 'Acceptance revoked. Job is re-opened.');
+    } catch (e) {
+      if (mounted) AppDialog.error(context, 'Failed', detail: e.toString());
+    } finally {
+      if (mounted) setState(() => _processingId = null);
+      await _loadApplicants();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -605,7 +653,42 @@ class _JobApplicantsScreenState extends State<JobApplicantsScreen> {
                       ],
                     )
             else if (isAccepted)
-              const Icon(Icons.check_circle, color: Colors.green, size: 28)
+              isProcessing
+                  ? const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.check_circle,
+                            color: Colors.green, size: 24),
+                        const SizedBox(height: 4),
+                        SizedBox(
+                          height: 28,
+                          child: TextButton(
+                            onPressed: () =>
+                                _revoke(entry.userId, entry.displayName),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8),
+                              minimumSize: Size.zero,
+                              tapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text(
+                              'Revoke',
+                              style: TextStyle(
+                                  color: Colors.red, fontSize: 11),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
             else if (isRejected)
               const Icon(Icons.cancel, color: Colors.red, size: 28),
           ],

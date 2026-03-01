@@ -2222,6 +2222,7 @@ class FirestoreService {
 
   /// Reject an applicant for a job.
   /// Keeps applicant history but marks status as rejected.
+  /// Also works as a revocation when the applicant was previously accepted.
   Future<void> rejectJobApplicant({
     required String jobId,
     required String applicantId,
@@ -2229,6 +2230,10 @@ class FirestoreService {
   }) async {
     final jobRef =
         _firestore.collection(AppConstants.jobsCollection).doc(jobId);
+
+    String jobTitle = 'a job';
+    bool wasAccepted = false;
+
     await _firestore.runTransaction((transaction) async {
       final jobSnap = await transaction.get(jobRef);
       if (!jobSnap.exists) throw Exception('Job not found.');
@@ -2245,10 +2250,43 @@ class FirestoreService {
         throw Exception('Applicant not found in this job.');
       }
 
-      transaction.update(jobRef, {
+      jobTitle =
+          ((data['title'] as String?)?.trim().isNotEmpty == true)
+              ? data['title'] as String
+              : 'a job';
+
+      final currentStatus =
+          (data['applicationStatus'] as Map<String, dynamic>?
+                  ?? {})[applicantId] as String?;
+      wasAccepted = currentStatus == 'accepted';
+
+      // If revoking an accepted applicant, also reset job status & selectedApplicant
+      final Map<String, dynamic> updates = {
         'updatedAt': FieldValue.serverTimestamp(),
         'applicationStatus.$applicantId': 'rejected',
-      });
+      };
+      if (wasAccepted) {
+        updates['selectedApplicant'] = '';
+        updates['status'] = AppConstants.jobStatusOpen;
+      }
+
+      transaction.update(jobRef, updates);
+    });
+
+    // Notify the applicant
+    await _firestore.collection('notifications').add({
+      'toUserId': applicantId,
+      'fromUserId': companyId,
+      'type': wasAccepted ? 'jobRevoked' : 'jobRejected',
+      'title': wasAccepted ? 'Offer Revoked' : 'Application Update',
+      'body': wasAccepted
+          ? 'The company has revoked your accepted offer for "$jobTitle". '
+              'Please check the Jobs tab for other opportunities.'
+          : 'Your application for "$jobTitle" was not selected at this time.',
+      'jobId': jobId,
+      'jobTitle': jobTitle,
+      'createdAt': FieldValue.serverTimestamp(),
+      'seen': false,
     });
   }
 
