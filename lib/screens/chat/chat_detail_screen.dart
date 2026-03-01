@@ -56,9 +56,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   String? _currentUserRole;
   String? _otherUserRole;
   bool _isWorkChat = false;
+  String? _workRequestId;
+  String? _workProjectName;
   StreamSubscription<UserModel?>? _otherUserSub;
   bool _isLoading = false;
   bool _isSending = false;
+  bool _payingWorkChat = false;
 
   // Work request state
   bool _workLocked = false;
@@ -191,6 +194,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   bool get _canShareProfileInThisChat =>
       _isWorkChat && _isSkilledToCompanyConversation;
 
+  bool get _canPayInWorkChat =>
+      _isWorkChat &&
+      _currentUserRole == UserRoles.customer &&
+      _workRequestId != null &&
+      _workRequestId!.trim().isNotEmpty;
+
   String? _senderRoleForMessage(MessageModel message) {
     if (message.senderId == _currentUserId) return _currentUserRole;
     if (message.senderId == widget.otherUserId) return _otherUserRole;
@@ -206,12 +215,68 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       final data = doc.data() ?? <String, dynamic>{};
       final detectedWorkChat =
           _isWorkChat || data['isWorkChat'] == true || widget.chatId.startsWith('work_');
-      if (!mounted) return;
-      if (detectedWorkChat != _isWorkChat) {
-        setState(() => _isWorkChat = detectedWorkChat);
+      final requestId = (data['workRequestId'] as String?)?.trim();
+      var title = (data['workTitle'] as String?)?.trim();
+
+      if ((title == null || title.isEmpty) &&
+          requestId != null &&
+          requestId.isNotEmpty) {
+        final reqDoc = await FirebaseFirestore.instance
+            .collection(AppConstants.requestsCollection)
+            .doc(requestId)
+            .get();
+        title = (reqDoc.data()?['title'] as String?)?.trim();
       }
+
+      if (!mounted) return;
+      setState(() {
+        _isWorkChat = detectedWorkChat;
+        _workRequestId = requestId;
+        _workProjectName = (title != null && title.isNotEmpty) ? title : null;
+      });
     } catch (_) {
       // Keep fallback detection by chat id when metadata read fails.
+    }
+  }
+
+  Future<void> _payForCurrentWorkChat() async {
+    if (!_canPayInWorkChat || _payingWorkChat) return;
+
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (ctx) => _WorkPaymentAmountDialog(
+        projectTitle: _workProjectName ?? 'Project',
+        recipientName: widget.otherUserName,
+      ),
+    );
+    if (amount == null || !mounted) return;
+
+    setState(() => _payingWorkChat = true);
+    try {
+      final txnId = await GPaySimulationDialog.show(
+        context,
+        amount: amount,
+        recipientName: widget.otherUserName,
+        description: _workProjectName ?? 'Project Payment',
+      );
+      if (txnId == null || !mounted) return;
+
+      await _firestoreService.updateRequestStatus(
+        _workRequestId!,
+        AppConstants.requestStatusCompleted,
+      );
+      if (!mounted) return;
+      AppDialog.success(
+        context,
+        'Payment successful: Rs.${amount.toStringAsFixed(2)} (TXN: $txnId)',
+      );
+    } catch (e) {
+      if (mounted) {
+        AppPopup.show(context,
+            message: 'Payment failed: $e', type: PopupType.error);
+      }
+    } finally {
+      if (mounted) setState(() => _payingWorkChat = false);
     }
   }
 
@@ -1981,6 +2046,42 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   ],
                 ),
               ),
+            if (_isWorkChat &&
+                _workProjectName != null &&
+                _workProjectName!.trim().isNotEmpty)
+              Container(
+                constraints: const BoxConstraints(maxWidth: 180),
+                margin: const EdgeInsets.only(right: 6, top: 10, bottom: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.work_history_rounded,
+                        size: 13, color: Colors.white),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        _workProjectName!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (_canSendOfferLetterInThisChat)
               IconButton(
                 tooltip: 'Send Offer Letter',
@@ -2099,10 +2200,47 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         body: _workLocked
             ? TabBarView(
                 controller: _tabController,
-                children: [_buildChatBody(), _buildWorkProjectTab()],
+                children: [
+                  _buildTabBackground(
+                    isWorkProjectTab: false,
+                    child: _buildChatBody(),
+                  ),
+                  _buildTabBackground(
+                    isWorkProjectTab: true,
+                    child: _buildWorkProjectTab(),
+                  ),
+                ],
               )
             : _buildChatBody(),
       ),
+    );
+  }
+
+  Widget _buildTabBackground({
+    required bool isWorkProjectTab,
+    required Widget child,
+  }) {
+    final colors = isWorkProjectTab
+        ? [
+            const Color(0xFF5E35B1).withValues(alpha: 0.07),
+            const Color(0xFF8E24AA).withValues(alpha: 0.05),
+            const Color(0xFFAB47BC).withValues(alpha: 0.04),
+          ]
+        : [
+            const Color(0xFF006064).withValues(alpha: 0.06),
+            const Color(0xFF0277BD).withValues(alpha: 0.05),
+            const Color(0xFF1565C0).withValues(alpha: 0.04),
+          ];
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: child,
     );
   }
 
@@ -2249,6 +2387,23 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   onPressed:
                       _isLoading || _isSending ? null : _showImageOptions,
                 ),
+                if (_canPayInWorkChat)
+                  IconButton(
+                    tooltip: 'Pay for Project',
+                    icon: _payingWorkChat
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(
+                            Icons.payment_rounded,
+                            color: Color(0xFF2E7D32),
+                          ),
+                    onPressed: _isLoading || _isSending || _payingWorkChat
+                        ? null
+                        : _payForCurrentWorkChat,
+                  ),
                 Expanded(
                   child: TextField(
                     controller: _messageController,

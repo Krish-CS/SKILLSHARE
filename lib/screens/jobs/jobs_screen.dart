@@ -14,6 +14,7 @@ import 'create_job_screen.dart';
 import 'job_detail_screen.dart';
 import '../../utils/app_constants.dart';
 import '../profile/company_setup_screen.dart';
+import 'company_applicants_tab.dart';
 
 class JobsScreen extends StatefulWidget {
   const JobsScreen({super.key});
@@ -244,19 +245,66 @@ class _JobsScreenState extends State<JobsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_canPostJobs) return _buildCompanyView();
+    return _buildDefaultScaffold();
+  }
+
+  // ─── Company view: two tabs ────────────────────────────────────────────────
+
+  Widget _buildCompanyView() {
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Jobs', style: TextStyle(color: Colors.white)),
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF2196F3), Color(0xFF00BCD4)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
+          elevation: 0,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.add, color: Colors.white),
+              tooltip: 'Post Job',
+              onPressed: _navigateToPostJob,
+            ),
+          ],
+          bottom: const TabBar(
+            indicatorColor: Colors.white,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white60,
+            tabs: [
+              Tab(icon: Icon(Icons.work_outline), text: 'Posted Jobs'),
+              Tab(icon: Icon(Icons.people_outline), text: 'Applicants'),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            _buildJobsBody(),
+            CompanyApplicantsTab(
+              companyId: FirebaseAuth.instance.currentUser?.uid ?? '',
+              jobs: _allJobs,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Default (non-company) scaffold ───────────────────────────────────────
+
+  Widget _buildDefaultScaffold() {
     final authProvider = Provider.of<app_auth.AuthProvider>(context);
     final userRole = authProvider.userRole ?? UserRoles.customer;
-
-    // Role-based title
-    String screenTitle = 'Jobs';
-    if (userRole == UserRoles.skilledPerson) {
-      screenTitle = 'Find Jobs';
-    } else if (userRole == UserRoles.company) {
-      screenTitle = 'Post Jobs';
-    } else {
-      screenTitle = 'Hire & Jobs';
-    }
-
+    final screenTitle = userRole == UserRoles.skilledPerson
+        ? 'Find Jobs'
+        : 'Hire & Jobs';
     return Scaffold(
       appBar: AppBar(
         title: Text(screenTitle, style: const TextStyle(color: Colors.white)),
@@ -270,174 +318,158 @@ class _JobsScreenState extends State<JobsScreen> {
           ),
         ),
         elevation: 0,
-        actions: [
-          if (_canPostJobs)
-            IconButton(
-              icon: const Icon(Icons.add),
-              onPressed: _navigateToPostJob,
-            ),
-        ],
       ),
-      body: Column(
-        children: [
-          // Search and Filter Bar
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF2196F3), Color(0xFF00BCD4)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+      body: _buildJobsBody(),
+    );
+  }
+
+  // ─── Shared jobs list body ────────────────────────────────────────────────
+
+  Widget _buildJobsBody() {
+    return Column(
+      children: [
+        // Search and Filter Bar
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF2196F3), Color(0xFF00BCD4)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            child: Column(
-              children: [
-                // Search TextField
-                TextField(
-                  controller: _searchController,
-                  onChanged: _onSearchChanged,
-                  decoration: InputDecoration(
-                    hintText: 'Search jobs, skills...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              _onSearchChanged('');
-                            },
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              TextField(
+                controller: _searchController,
+                onChanged: _onSearchChanged,
+                decoration: InputDecoration(
+                  hintText: 'Search jobs, skills...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
+                            _onSearchChanged('');
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedJobType ?? 'All',
+                          isExpanded: true,
+                          icon: const Icon(Icons.arrow_drop_down),
+                          items: _jobTypes.map((type) {
+                            return DropdownMenuItem(
+                                value: type, child: Text(type));
+                          }).toList(),
+                          onChanged: _onJobTypeSelected,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 12),
-
-                // Filters Row
-                Row(
-                  children: [
-                    // Job Type Filter
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _selectedJobType ?? 'All',
-                            isExpanded: true,
-                            icon: const Icon(Icons.arrow_drop_down),
-                            items: _jobTypes.map((type) {
-                              return DropdownMenuItem(
-                                value: type,
-                                child: Text(type),
-                              );
-                            }).toList(),
-                            onChanged: _onJobTypeSelected,
-                          ),
-                        ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-
-                    // Sort Filter
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _sortBy,
-                            isExpanded: true,
-                            icon: const Icon(Icons.arrow_drop_down),
-                            items: const [
-                              DropdownMenuItem(
-                                value: 'newest',
-                                child: Text('Newest'),
-                              ),
-                              DropdownMenuItem(
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _sortBy,
+                          isExpanded: true,
+                          icon: const Icon(Icons.arrow_drop_down),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'newest', child: Text('Newest')),
+                            DropdownMenuItem(
                                 value: 'deadline',
-                                child: Text('Deadline'),
-                              ),
-                              DropdownMenuItem(
+                                child: Text('Deadline')),
+                            DropdownMenuItem(
                                 value: 'budget',
-                                child: Text('Highest Budget'),
-                              ),
-                            ],
-                            onChanged: _onSortChanged,
-                          ),
+                                child: Text('Highest Budget')),
+                          ],
+                          onChanged: _onSortChanged,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // Results Count
-          if (!_isLoading)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Text(
-                    '${_filteredJobs.length} ${_filteredJobs.length == 1 ? 'job' : 'jobs'} found',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
-            ),
+            ],
+          ),
+        ),
 
-          // Jobs List
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async {}, // Stream auto-updates
-              color: const Color(0xFF2196F3),
-              child: _isLoading
-                  ? _buildShimmerLoading()
-                  : _filteredJobs.isEmpty
-                      ? _buildEmptyState()
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _filteredJobs.length,
-                          itemBuilder: (context, index) {
-                            return JobCard(
-                              job: _filteredJobs[index],
-                              onTap: () =>
-                                  _navigateToJobDetail(_filteredJobs[index]),
-                            );
-                          },
-                        ),
+        if (!_isLoading)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Text(
+                  '${_filteredJobs.length} ${_filteredJobs.length == 1 ? 'job' : 'jobs'} found',
+                  style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500),
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () async {},
+            color: const Color(0xFF2196F3),
+            child: _isLoading
+                ? _buildShimmerLoading()
+                : _filteredJobs.isEmpty
+                    ? _buildEmptyState()
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _filteredJobs.length,
+                        itemBuilder: (context, index) {
+                          return JobCard(
+                            job: _filteredJobs[index],
+                            onTap: () =>
+                                _navigateToJobDetail(_filteredJobs[index]),
+                          );
+                        },
+                      ),
+          ),
+        ),
+      ],
     );
   }
 

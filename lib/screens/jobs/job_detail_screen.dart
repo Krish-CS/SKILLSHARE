@@ -123,14 +123,29 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     final users = <String, UserModel>{};
 
     for (var applicantId in _job.applicants) {
-      final profile =
-          await _firestoreService.getSkilledUserProfile(applicantId);
-      final user = await _firestoreService.getUserById(applicantId);
+      // Load user and profile in parallel
+      final results = await Future.wait([
+        _firestoreService.getUserById(applicantId),
+        _firestoreService.getSkilledUserProfile(applicantId),
+      ]);
+      final user = results[0] as UserModel?;
+      var profile = results[1] as SkilledUserProfile?;
+
+      // Fallback: always show applicant even if they have no skilled profile doc
+      if (profile == null && user != null) {
+        profile = SkilledUserProfile(
+          userId: applicantId,
+          name: user.name,
+          bio: '',
+          skills: const [],
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+      }
+
       if (profile != null) {
         profiles.add(profile);
-        if (user != null) {
-          users[applicantId] = user;
-        }
+        if (user != null) users[applicantId] = user;
       }
     }
 
