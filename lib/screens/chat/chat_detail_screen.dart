@@ -20,6 +20,7 @@ import '../../utils/user_roles.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../widgets/app_popup.dart';
 import '../../widgets/gpay_simulation_dialog.dart';
+import '../profile/profile_screen.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   final String chatId;
@@ -50,6 +51,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   String? _currentUserId;
   String? _currentUserRole;
+  String? _otherUserRole;
   bool _isLoading = false;
   bool _isSending = false;
 
@@ -159,12 +161,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       }
     });
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        final auth = Provider.of<app_auth.AuthProvider>(context, listen: false);
-        setState(() => _currentUserRole = auth.userRole);
-      }
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadConversationRoles());
   }
 
   @override
@@ -178,6 +175,599 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  bool get _isCompanyToSkilledConversation =>
+      _currentUserRole == UserRoles.company &&
+      _otherUserRole == UserRoles.skilledPerson;
+
+  bool get _isSkilledToCompanyConversation =>
+      _currentUserRole == UserRoles.skilledPerson &&
+      _otherUserRole == UserRoles.company;
+
+  bool get _hasDirectHireContext => _allWorkRequests.any(
+        (r) =>
+            r.serviceId.toLowerCase().trim() == 'direct_hire' ||
+            (r.hireType != null && r.hireType!.trim().isNotEmpty),
+      );
+
+  Future<void> _loadConversationRoles() async {
+    final auth = Provider.of<app_auth.AuthProvider>(context, listen: false);
+    final currentRole = UserRoles.normalizeRole(auth.userRole ?? '');
+
+    String? otherRole;
+    try {
+      final otherUser = await _firestoreService.getUserById(widget.otherUserId);
+      otherRole = UserRoles.normalizeRole(otherUser?.role ?? '');
+    } catch (_) {}
+
+    if (!mounted) return;
+    setState(() {
+      _currentUserRole = currentRole;
+      _otherUserRole = otherRole;
+    });
+  }
+
+  Future<void> _showOfferLetterDialog() async {
+    if (_currentUserId == null) return;
+
+    final roleAllowed =
+        _isCompanyToSkilledConversation || (_currentUserRole == UserRoles.company && _hasDirectHireContext);
+    if (!roleAllowed) {
+      AppDialog.info(context, 'Offer letter can be sent only in company-to-skilled hiring chats.');
+      return;
+    }
+
+    final positionController = TextEditingController();
+    final compensationController = TextEditingController();
+    final locationController = TextEditingController();
+    final joiningDateController = TextEditingController();
+    final notesController = TextEditingController();
+
+    InputDecoration fieldDeco(String label, String hint, IconData icon) =>
+        InputDecoration(
+          labelText: label,
+          hintText: hint,
+          prefixIcon: Icon(icon, size: 18, color: const Color(0xFF3949AB)),
+          filled: true,
+          fillColor: const Color(0xFFF5F3FF),
+          border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          labelStyle: const TextStyle(fontSize: 13),
+        );
+
+    final shouldSend = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── Gradient header ──
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF1A237E), Color(0xFF3949AB), Color(0xFF5C6BC0)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.description_rounded,
+                          color: Colors.white, size: 22),
+                    ),
+                    const SizedBox(width: 14),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Send Offer Letter',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold)),
+                          SizedBox(height: 2),
+                          Text('Fill in the hiring details below',
+                              style: TextStyle(
+                                  color: Colors.white70, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                    ),
+                  ],
+                ),
+              ),
+              // ── Form fields ──
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: positionController,
+                        decoration: fieldDeco(
+                            'Position / Role *', 'e.g., Senior Tailor',
+                            Icons.work_outline_rounded),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: compensationController,
+                        decoration: fieldDeco(
+                            'Compensation *', 'e.g., ₹35,000/month',
+                            Icons.currency_rupee_rounded),
+                        keyboardType: TextInputType.text,
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: locationController,
+                        decoration: fieldDeco(
+                            'Work Location', 'e.g., Chennai, Tamil Nadu',
+                            Icons.location_on_outlined),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: joiningDateController,
+                        decoration: fieldDeco(
+                            'Joining Date', 'e.g., 20 March 2026',
+                            Icons.calendar_today_outlined),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: notesController,
+                        minLines: 2,
+                        maxLines: 4,
+                        decoration: fieldDeco(
+                            'Additional Terms',
+                            'e.g., probation period, benefits, reporting manager',
+                            Icons.notes_rounded),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '* Required fields',
+                        style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // ── Action buttons ──
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          side: const BorderSide(color: Color(0xFF3949AB)),
+                        ),
+                        child: const Text('Cancel',
+                            style: TextStyle(color: Color(0xFF3949AB))),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF1A237E), Color(0xFF3949AB)],
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: ElevatedButton.icon(
+                          onPressed: () => Navigator.of(ctx).pop(true),
+                          icon: const Icon(Icons.send_rounded,
+                              color: Colors.white, size: 18),
+                          label: const Text('Send Offer Letter',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (shouldSend != true) {
+      positionController.dispose();
+      compensationController.dispose();
+      locationController.dispose();
+      joiningDateController.dispose();
+      notesController.dispose();
+      return;
+    }
+
+    final position = positionController.text.trim();
+    final compensation = compensationController.text.trim();
+    if (position.isEmpty || compensation.isEmpty) {
+      if (mounted) AppDialog.error(context, 'Position and compensation are required.');
+      positionController.dispose();
+      compensationController.dispose();
+      locationController.dispose();
+      joiningDateController.dispose();
+      notesController.dispose();
+      return;
+    }
+
+    final offerText = StringBuffer()
+      ..writeln('Offer Letter')
+      ..writeln('Position: $position')
+      ..writeln('Compensation: $compensation');
+    if (locationController.text.trim().isNotEmpty) {
+      offerText.writeln('Location: ${locationController.text.trim()}');
+    }
+    if (joiningDateController.text.trim().isNotEmpty) {
+      offerText.writeln('Joining Date: ${joiningDateController.text.trim()}');
+    }
+    if (notesController.text.trim().isNotEmpty) {
+      offerText.writeln('Terms: ${notesController.text.trim()}');
+    }
+
+    try {
+      await _chatService.sendMessage(
+        chatId: widget.chatId,
+        senderId: _currentUserId!,
+        receiverId: widget.otherUserId,
+        text: offerText.toString().trim(),
+        type: 'offer_letter',
+      );
+      if (!mounted) return;
+      AppDialog.success(context, 'Offer letter sent successfully!');
+    } catch (e) {
+      if (!mounted) return;
+      AppDialog.error(context, 'Failed to send offer letter', detail: e.toString());
+    } finally {
+      positionController.dispose();
+      compensationController.dispose();
+      locationController.dispose();
+      joiningDateController.dispose();
+      notesController.dispose();
+    }
+  }
+
+  String _extractAadhaarNumber(Map<String, dynamic>? verificationData) {
+    if (verificationData == null) return '';
+    final aadhaar =
+        (verificationData['aadhaarNumber'] ??
+                verificationData['aadharNumber'] ??
+                verificationData['adharNumber'] ??
+                '')
+            .toString()
+            .trim();
+    return aadhaar;
+  }
+
+  Future<void> _shareFullProfileInChat() async {
+    if (_currentUserId == null) return;
+
+    final roleAllowed =
+        _isSkilledToCompanyConversation || (_currentUserRole == UserRoles.skilledPerson && _hasDirectHireContext);
+    if (!roleAllowed) {
+      AppDialog.info(context, 'This option is available only for skilled-person hiring chats.');
+      return;
+    }
+
+    try {
+      final user = await _firestoreService.getUserById(_currentUserId!);
+      final profile = await _firestoreService.getSkilledUserProfile(_currentUserId!);
+      if (profile == null) throw Exception('Skilled profile not found.');
+
+      final aadhaar = _extractAadhaarNumber(profile.verificationData);
+      final location = [
+        profile.city?.trim(),
+        profile.state?.trim(),
+        profile.address?.trim(),
+      ].where((e) => e != null && e.isNotEmpty).map((e) => e!).toList();
+
+      if (!mounted) return;
+
+      // ── Confirmation sheet ──────────────────────────────────────────────
+      bool includeAadhaar = aadhaar.isNotEmpty;
+      final confirmed = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setS) => Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ── Gradient header ──
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF004D40), Color(0xFF00796B), Color(0xFF26A69A)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.badge_rounded,
+                            color: Colors.white, size: 22),
+                      ),
+                      const SizedBox(width: 14),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Share Your Full Profile',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold)),
+                            SizedBox(height: 2),
+                            Text('Review what will be shared with the company',
+                                style: TextStyle(
+                                    color: Colors.white70, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // ── Preview list ──
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _shareRow(Icons.person_rounded, 'Name',
+                          (user?.name ?? profile.name ?? 'N/A').trim()),
+                      _shareRow(Icons.category_rounded, 'Category',
+                          profile.category ?? 'Not specified'),
+                      _shareRow(Icons.build_rounded, 'Skills',
+                          profile.skills.isEmpty ? 'Not specified' : profile.skills.take(5).join(', ')),
+                      _shareRow(Icons.location_on_rounded, 'Location',
+                          location.isEmpty ? 'Not provided' : location.join(', ')),
+                      _shareRow(Icons.star_rounded, 'Rating',
+                          '${profile.rating.toStringAsFixed(1)} (${profile.reviewCount} reviews)'),
+                      _shareRow(Icons.assignment_turned_in_rounded, 'Projects',
+                          '${profile.projectCount} completed'),
+                      _shareRow(Icons.collections_rounded, 'Portfolio',
+                          '${profile.portfolioImages.length} items'),
+                      const Divider(height: 20),
+                      // ── Aadhaar toggle ──
+                      Material(
+                        color: aadhaar.isNotEmpty
+                            ? const Color(0xFFFFF8E1)
+                            : Colors.grey[50],
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.credit_card_rounded,
+                                color: aadhaar.isNotEmpty
+                                    ? const Color(0xFFF57C00)
+                                    : Colors.grey,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Aadhaar Number',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13)),
+                                    Text(
+                                      aadhaar.isNotEmpty
+                                          ? 'XXXX XXXX ${aadhaar.length >= 4 ? aadhaar.substring(aadhaar.length - 4) : aadhaar}'
+                                          : 'Not available',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[600]),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (aadhaar.isNotEmpty)
+                                Switch(
+                                  value: includeAadhaar,
+                                  onChanged: (v) => setS(() => includeAadhaar = v),
+                                  activeColor: const Color(0xFFF57C00),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (aadhaar.isNotEmpty && includeAadhaar)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.warning_amber_rounded,
+                                  size: 14, color: Color(0xFFE65100)),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Your Aadhaar number will be shared. Only share with trusted employers.',
+                                  style: TextStyle(
+                                      fontSize: 11, color: Colors.orange[800]),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                // ── Action buttons ──
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(ctx).pop(false),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            side: const BorderSide(color: Color(0xFF00796B)),
+                          ),
+                          child: const Text('Cancel',
+                              style: TextStyle(color: Color(0xFF00796B))),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF004D40), Color(0xFF00897B)],
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: ElevatedButton.icon(
+                            onPressed: () => Navigator.of(ctx).pop(true),
+                            icon: const Icon(Icons.share_rounded,
+                                color: Colors.white, size: 18),
+                            label: const Text('Share Profile',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              shadowColor: Colors.transparent,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      if (confirmed != true || !mounted) return;
+
+      final profileText = StringBuffer()
+        ..writeln('Shared Skilled Profile')
+        ..writeln('Name: ${(user?.name ?? profile.name ?? 'Skilled Person').trim()}')
+        ..writeln('Category: ${(profile.category ?? 'Not specified').trim()}')
+        ..writeln('Skills: ${profile.skills.isEmpty ? 'Not specified' : profile.skills.join(', ')}')
+        ..writeln('Bio: ${profile.bio.isEmpty ? 'Not provided' : profile.bio}')
+        ..writeln('Location: ${location.isEmpty ? 'Not provided' : location.join(', ')}')
+        ..writeln('Rating: ${profile.rating.toStringAsFixed(1)} (${profile.reviewCount} reviews)')
+        ..writeln('Completed Projects: ${profile.projectCount}')
+        ..writeln('Portfolio Items: ${profile.portfolioImages.length}');
+
+      if (includeAadhaar && aadhaar.isNotEmpty) {
+        profileText.writeln('Aadhaar Number: $aadhaar');
+      }
+      if (profile.profilePicture != null &&
+          profile.profilePicture!.trim().isNotEmpty) {
+        profileText.writeln('Profile Photo: ${profile.profilePicture!.trim()}');
+      }
+
+      await _chatService.sendMessage(
+        chatId: widget.chatId,
+        senderId: _currentUserId!,
+        receiverId: widget.otherUserId,
+        text: profileText.toString().trim(),
+        type: 'profile_share',
+      );
+
+      if (!mounted) return;
+      AppDialog.success(context, 'Your full profile has been shared with the company!');
+    } catch (e) {
+      if (!mounted) return;
+      AppDialog.error(context, 'Failed to share profile', detail: e.toString());
+    }
+  }
+
+  /// Row widget used in the share profile confirmation sheet.
+  Widget _shareRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: const Color(0xFF00796B)),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 110,
+            child: Text(label,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                    color: Color(0xFF37474F))),
+          ),
+          Expanded(
+            child: Text(value,
+                style: const TextStyle(fontSize: 12, color: Color(0xFF616161))),
+          ),
+        ],
+      ),
+    );
   }
 
   // ── Send / Edit ─────────────────────────────────────────────────────────────
@@ -1345,25 +1935,68 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               onSelected: (value) {
                 if (value == 'report') _showReportChatDialog();
                 if (value == 'block') _blockUser();
+                if (value == 'offer_letter') _showOfferLetterDialog();
+                if (value == 'share_profile') _shareFullProfileInChat();
               },
-              itemBuilder: (ctx) => [
-                const PopupMenuItem(
-                  value: 'report',
-                  child: Row(children: [
-                    Icon(Icons.flag, color: Colors.orange),
-                    SizedBox(width: 8),
-                    Text('Report Chat'),
-                  ]),
-                ),
-                const PopupMenuItem(
-                  value: 'block',
-                  child: Row(children: [
-                    Icon(Icons.block, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text('Block User'),
-                  ]),
-                ),
-              ],
+              itemBuilder: (ctx) {
+                final items = <PopupMenuEntry<String>>[];
+
+                if (_isCompanyToSkilledConversation ||
+                    (_currentUserRole == UserRoles.company &&
+                        _hasDirectHireContext)) {
+                  items.add(
+                    const PopupMenuItem(
+                      value: 'offer_letter',
+                      child: Row(
+                        children: [
+                          Icon(Icons.description_rounded,
+                              color: Colors.indigo),
+                          SizedBox(width: 8),
+                          Text('Send Offer Letter'),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                if (_isSkilledToCompanyConversation ||
+                    (_currentUserRole == UserRoles.skilledPerson &&
+                        _hasDirectHireContext)) {
+                  items.add(
+                    const PopupMenuItem(
+                      value: 'share_profile',
+                      child: Row(
+                        children: [
+                          Icon(Icons.badge_rounded, color: Colors.teal),
+                          SizedBox(width: 8),
+                          Text('Share Full Profile'),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                items.addAll(const [
+                  PopupMenuItem(
+                    value: 'report',
+                    child: Row(children: [
+                      Icon(Icons.flag, color: Colors.orange),
+                      SizedBox(width: 8),
+                      Text('Report Chat'),
+                    ]),
+                  ),
+                  PopupMenuItem(
+                    value: 'block',
+                    child: Row(children: [
+                      Icon(Icons.block, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Block User'),
+                    ]),
+                  ),
+                ]);
+
+                return items;
+              },
             ),
           ],
           // Only show tab bar when work is accepted
@@ -1517,6 +2150,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             ),
           ),
 
+        // ── Hiring quick-action bar (visible when in a hiring chat) ──
+        if ((_isCompanyToSkilledConversation || _isSkilledToCompanyConversation || _hasDirectHireContext) &&
+            _currentUserRole != null)
+          _buildHiringActionsBar(),
+
         // Input bar
         Container(
           padding: const EdgeInsets.all(8),
@@ -1652,6 +2290,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     final isDeleted = message.isDeleted;
     final isEdited = message.editedAt != null && !isDeleted;
     final isHighlighted = _editingMessage?.id == message.id;
+    final isStructuredType =
+        message.type == 'offer_letter' || message.type == 'profile_share';
 
     return GestureDetector(
       onLongPress: () => _showMessageOptions(message, isMe),
@@ -1680,13 +2320,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  gradient: isMe && !isDeleted
+                  gradient: isMe && !isDeleted && !isStructuredType
                       ? const LinearGradient(
                           colors: [Color(0xFF9C27B0), Color(0xFFE91E63)])
                       : null,
                   color: isDeleted
                       ? Colors.grey[200]
-                      : isMe
+                      : isStructuredType
+                          ? (isMe
+                              ? const Color(0xFFF3ECFF)
+                              : const Color(0xFFEAF5FF))
+                          : isMe
                           ? null
                           : Colors.grey[300],
                   borderRadius: BorderRadius.only(
@@ -1724,6 +2368,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                               ),
                             ),
                           )
+                        : isStructuredType
+                            ? _buildStructuredMessageCard(message)
                         : Text(
                             message.text,
                             style: TextStyle(
@@ -1761,6 +2407,258 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStructuredMessageCard(MessageModel message) {
+    final lines = message.text
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    final title = lines.isNotEmpty ? lines.first : 'Message';
+    final content = lines.length > 1 ? lines.skip(1).join('\n') : '';
+
+    if (message.type == 'offer_letter') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.description_rounded,
+                  size: 16, color: Color(0xFF3949AB)),
+              SizedBox(width: 6),
+              Text(
+                'Offer Letter',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1A237E),
+                ),
+              ),
+            ],
+          ),
+          if (title.toLowerCase() != 'offer letter') ...[
+            const SizedBox(height: 6),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF263238),
+              ),
+            ),
+          ],
+          if (content.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              content,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.35,
+                color: Color(0xFF37474F),
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.badge_rounded, size: 16, color: Color(0xFF00796B)),
+            SizedBox(width: 6),
+            Text(
+              'Shared Full Profile',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF004D40),
+              ),
+            ),
+          ],
+        ),
+        if (title.toLowerCase() != 'shared skilled profile') ...[
+          const SizedBox(height: 6),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF263238),
+            ),
+          ),
+        ],
+        if (content.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            content,
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.35,
+              color: Color(0xFF37474F),
+            ),
+          ),
+        ],
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ProfileScreen(userId: message.senderId),
+                ),
+              );
+            },
+            icon: const Icon(Icons.open_in_new_rounded, size: 15),
+            label: const Text('Open Shared Profile'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              textStyle:
+                  const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Hiring quick-action bar ────────────────────────────────────────────────
+
+  Widget _buildHiringActionsBar() {
+    final isCompany = _currentUserRole == UserRoles.company;
+    final isSkilled = _currentUserRole == UserRoles.skilledPerson;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isCompany
+              ? [
+                  const Color(0xFF1A237E).withValues(alpha: 0.08),
+                  const Color(0xFF3949AB).withValues(alpha: 0.05),
+                ]
+              : [
+                  const Color(0xFF004D40).withValues(alpha: 0.08),
+                  const Color(0xFF00796B).withValues(alpha: 0.05),
+                ],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        border: Border(
+          top: BorderSide(
+            color: isCompany
+                ? const Color(0xFF3949AB).withValues(alpha: 0.2)
+                : const Color(0xFF00796B).withValues(alpha: 0.2),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isCompany ? Icons.business_center_rounded : Icons.badge_rounded,
+            size: 15,
+            color: isCompany
+                ? const Color(0xFF3949AB)
+                : const Color(0xFF00796B),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'Hiring Chat',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: isCompany
+                  ? const Color(0xFF3949AB)
+                  : const Color(0xFF00796B),
+            ),
+          ),
+          const Spacer(),
+          if (isCompany) ...[
+            // Company: Send Offer Letter button
+            _hiringActionButton(
+              icon: Icons.description_rounded,
+              label: 'Send Offer Letter',
+              color: const Color(0xFF3949AB),
+              onTap: _showOfferLetterDialog,
+            ),
+            const SizedBox(width: 8),
+            // Company: View skilled person's profile
+            _hiringActionButton(
+              icon: Icons.person_search_rounded,
+              label: 'View Profile',
+              color: const Color(0xFF5C6BC0),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ProfileScreen(userId: widget.otherUserId),
+                ),
+              ),
+            ),
+          ] else if (isSkilled) ...[
+            // Skilled: Share full profile
+            _hiringActionButton(
+              icon: Icons.share_rounded,
+              label: 'Share My Profile',
+              color: const Color(0xFF00796B),
+              onTap: _shareFullProfileInChat,
+            ),
+            const SizedBox(width: 8),
+            // Skilled: View company profile
+            _hiringActionButton(
+              icon: Icons.apartment_rounded,
+              label: 'View Company',
+              color: const Color(0xFF26A69A),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ProfileScreen(userId: widget.otherUserId),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _hiringActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w600, color: color),
+            ),
+          ],
         ),
       ),
     );
