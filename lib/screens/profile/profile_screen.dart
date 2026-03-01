@@ -1849,26 +1849,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 builder: (context, requestSnapshot) {
                   final requests =
                       requestSnapshot.data ?? const <ServiceRequestModel>[];
-                  final completedProjects = requests
-                      .where((r) =>
-                          r.status.toLowerCase().trim() ==
-                          AppConstants.requestStatusCompleted)
-                      .toList()
-                    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+                  // Projects = accepted + completed (projectCount increments on acceptance)
+                  final doneProjects = requests
+                      .where((r) {
+                        final s = r.status.toLowerCase().trim();
+                        return s == AppConstants.requestStatusCompleted;
+                      })
+                      .toList();
                   final activeProjects = requests
                       .where((r) =>
                           r.status.toLowerCase().trim() ==
                           AppConstants.requestStatusAccepted)
                       .toList();
+                  // All projects ever worked on = accepted + completed
+                  final allProjects = [...doneProjects, ...activeProjects]
+                    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
                   final hireProjects = requests
                       .where((r) =>
                           r.serviceId.toLowerCase().trim() == 'direct_hire')
                       .toList();
-                  // Split completed projects by client type
-                  final companyProjects = completedProjects
+                  // Split all projects by client type (for project history)
+                  final companyProjects = allProjects
                       .where((r) => r.isCompanyProject)
                       .toList();
-                  final customerProjects = completedProjects
+                  final customerProjects = allProjects
                       .where((r) => !r.isCompanyProject)
                       .toList();
                   final portfolioCount = _profile?.portfolioImages.length ?? 0;
@@ -1938,7 +1942,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               color: const Color(0xFFEF6C00),
                             ),
                             _insightChip(
-                              value: '${completedProjects.length}',
+                              value: '${allProjects.length}',
                               label: 'Completed Projects',
                               icon: Icons.assignment_turned_in_rounded,
                               color: const Color(0xFF00897B),
@@ -2005,7 +2009,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 size: 16, color: Color(0xFF2196F3)),
                             const SizedBox(width: 6),
                             Text(
-                              'Project History (${completedProjects.length})',
+                              'Project History (${allProjects.length})',
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
@@ -2015,7 +2019,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        if (completedProjects.isEmpty)
+                        if (allProjects.isEmpty)
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 vertical: 14, horizontal: 12),
@@ -2045,6 +2049,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 : const Color(0xFF00695C);
                             final badgeLabel =
                                 isCompany ? '🏢 Company' : '👤 Customer';
+                            final isActive = r.status.toLowerCase().trim() ==
+                                AppConstants.requestStatusAccepted;
                             final dateStr = '${r.updatedAt.day}/${r.updatedAt.month}/${r.updatedAt.year}';
                             return Container(
                               margin: const EdgeInsets.only(bottom: 8),
@@ -2092,8 +2098,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           ),
                                         ),
                                       ),
-                                      if (r.hireType != null &&
-                                          r.hireType!.isNotEmpty) ...[
+                                      if (isActive || (r.hireType != null &&
+                                          r.hireType!.isNotEmpty)) ...[
                                         const SizedBox(width: 6),
                                         Container(
                                           padding:
@@ -2101,13 +2107,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                   horizontal: 7,
                                                   vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: const Color(0xFF37474F),
+                                            color: isActive
+                                                ? const Color(0xFFFF8F00)
+                                                : const Color(0xFF37474F),
                                             borderRadius:
                                                 BorderRadius.circular(20),
                                           ),
                                           child: Text(
-                                            r.hireType!
-                                                .replaceAll('_', ' '),
+                                            isActive
+                                                ? '⏳ In Progress'
+                                                : r.hireType!
+                                                    .replaceAll('_', ' '),
                                             style: const TextStyle(
                                               fontSize: 9,
                                               color: Colors.white,
