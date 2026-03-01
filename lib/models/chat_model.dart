@@ -10,6 +10,9 @@ class ChatModel {
   final Map<String, int> unreadCount; // userId -> count
   final bool isWorkChat;
   final String? workRequestId;
+  final bool isJobChat;
+  final String? jobId;
+  final String? jobTitle;
   final DateTime createdAt;
 
   ChatModel({
@@ -22,6 +25,9 @@ class ChatModel {
     required this.unreadCount,
     this.isWorkChat = false,
     this.workRequestId,
+    this.isJobChat = false,
+    this.jobId,
+    this.jobTitle,
     required this.createdAt,
   });
 
@@ -36,6 +42,9 @@ class ChatModel {
       unreadCount: Map<String, int>.from(map['unreadCount'] ?? {}),
       isWorkChat: map['isWorkChat'] == true,
       workRequestId: (map['workRequestId'] as String?)?.trim(),
+      isJobChat: map['isJobChat'] == true,
+      jobId: (map['jobId'] as String?)?.trim(),
+      jobTitle: (map['jobTitle'] as String?)?.trim(),
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
@@ -51,6 +60,9 @@ class ChatModel {
       'isWorkChat': isWorkChat,
       if (workRequestId != null && workRequestId!.isNotEmpty)
         'workRequestId': workRequestId,
+      'isJobChat': isJobChat,
+      if (jobId != null && jobId!.isNotEmpty) 'jobId': jobId,
+      if (jobTitle != null && jobTitle!.isNotEmpty) 'jobTitle': jobTitle,
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }

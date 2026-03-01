@@ -12,7 +12,9 @@ import '../../utils/user_roles.dart';
 import '../../widgets/job_card.dart';
 import 'create_job_screen.dart';
 import 'job_detail_screen.dart';
+import '../chat/chat_detail_screen.dart';
 import '../../utils/app_constants.dart';
+import '../../utils/app_dialog.dart';
 import '../profile/company_setup_screen.dart';
 import 'company_applicants_tab.dart';
 
@@ -39,6 +41,7 @@ class _JobsScreenState extends State<JobsScreen> {
   CompanyProfile? _companyProfile;
   bool _isLoading = true;
   String? _jobsScopeKey;
+  String? _openingJobChatForJobId;
 
   String _searchQuery = '';
   String? _selectedJobType;
@@ -197,6 +200,53 @@ class _JobsScreenState extends State<JobsScreen> {
     }
   }
 
+  Future<void> _openAcceptedJobChat(JobModel job) async {
+    final skilledUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (skilledUserId == null) return;
+    if (job.applicationStatus[skilledUserId] != 'accepted') {
+      AppDialog.info(context, 'Job chat is enabled only after acceptance.');
+      return;
+    }
+    if (_openingJobChatForJobId == job.id) return;
+
+    setState(() => _openingJobChatForJobId = job.id);
+    try {
+      final companyUser = await _firestoreService.getUserById(job.companyId);
+      final chatId = await _firestoreService.ensureJobApplicationChat(
+        jobId: job.id,
+        companyId: job.companyId,
+        skilledUserId: skilledUserId,
+        jobTitle: job.title,
+        // Skilled person cannot write applicationChatIds on the job doc
+        skipStatusCheck: false,
+        updateJobRecord: false,
+      );
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatDetailScreen(
+            chatId: chatId,
+            otherUserId: job.companyId,
+            otherUserName:
+                (companyUser?.name.trim().isNotEmpty == true)
+                    ? companyUser!.name.trim()
+                    : 'Company',
+            otherUserPhoto: companyUser?.profilePhoto,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        AppDialog.error(context, 'Unable to open job chat', detail: e.toString());
+      }
+    } finally {
+      if (mounted && _openingJobChatForJobId == job.id) {
+        setState(() => _openingJobChatForJobId = null);
+      }
+    }
+  }
+
   bool get _canPostJobs {
     // Only companies can post jobs
     return _currentUser?.role == AppConstants.roleCompany;
@@ -272,7 +322,12 @@ class _JobsScreenState extends State<JobsScreen> {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Jobs', style: TextStyle(color: Colors.white)),
+          title: const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text('Jobs', style: TextStyle(color: Colors.white)),
+          ),
+          titleSpacing: 18,
+          toolbarHeight: 68,
           flexibleSpace: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -322,8 +377,12 @@ class _JobsScreenState extends State<JobsScreen> {
       // Non-company, non-skilled (customer): plain view
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Hire & Jobs',
-              style: TextStyle(color: Colors.white)),
+          title: const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text('Hire & Jobs', style: TextStyle(color: Colors.white)),
+          ),
+          titleSpacing: 18,
+          toolbarHeight: 68,
           flexibleSpace: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -347,7 +406,12 @@ class _JobsScreenState extends State<JobsScreen> {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Jobs', style: TextStyle(color: Colors.white)),
+          title: const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text('Jobs', style: TextStyle(color: Colors.white)),
+          ),
+          titleSpacing: 18,
+          toolbarHeight: 68,
           flexibleSpace: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -606,13 +670,41 @@ class _JobsScreenState extends State<JobsScreen> {
                           SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'An offer letter has been sent to your chat. '
-                              'Please check your messages.',
+                              'Application accepted. Use Manage Chat to discuss this job and view offer letters.',
                               style: TextStyle(
                                   fontSize: 12, color: Colors.green),
                             ),
                           ),
                         ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _openingJobChatForJobId == job.id
+                            ? null
+                            : () => _openAcceptedJobChat(job),
+                        icon: _openingJobChatForJobId == job.id
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.chat_bubble_outline_rounded,
+                                size: 16),
+                        label: Text(
+                          _openingJobChatForJobId == job.id
+                              ? 'Opening...'
+                              : 'Manage Chat',
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF1565C0),
+                          side: BorderSide(
+                            color: const Color(0xFF1565C0).withValues(alpha: 0.35),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
                       ),
                     ),
                   ],

@@ -31,6 +31,7 @@ class NotificationItem {
   final String? requestId; // For work-request notifications
   final OrderModel? orderData; // For order notifications
   final String? jobId; // For job application notifications
+  final String? rawType; // Original notification type from Firestore
 
   const NotificationItem({
     required this.title,
@@ -46,6 +47,7 @@ class NotificationItem {
     this.requestId,
     this.orderData,
     this.jobId,
+    this.rawType,
   });
 }
 
@@ -211,13 +213,27 @@ Future<List<NotificationItem>> loadNotificationsForUser(
     final data = doc.data();
     final type = (data['type'] as String?)?.trim() ?? '';
     // ── Job application notifications ────────────────────────────────────
-    if (type == 'jobApplication') {
+    const jobDecisionTypes = <String>{
+      'jobApplication',
+      'jobAccepted',
+      'jobRejected',
+      'jobRevoked',
+    };
+    if (jobDecisionTypes.contains(type)) {
       final fromUserId = (data['fromUserId'] as String?)?.trim() ?? '';
       final jobTitle = (data['jobTitle'] as String?)?.trim() ?? '';
       final body = (data['body'] as String?)?.trim();
       final notifTitle =
-          (data['title'] as String?)?.trim() ?? 'New job application';
+          (data['title'] as String?)?.trim() ??
+              (type == 'jobAccepted'
+                  ? 'Application accepted'
+                  : type == 'jobRejected'
+                      ? 'Application update'
+                      : type == 'jobRevoked'
+                          ? 'Offer revoked'
+                          : 'New job application');
       final notifJobId = (data['jobId'] as String?)?.trim();
+      final notifChatId = (data['chatId'] as String?)?.trim();
       final createdAtTs = data['createdAt'] as Timestamp?;
       final createdAt = createdAtTs?.toDate() ?? DateTime.now();
 
@@ -238,13 +254,19 @@ Future<List<NotificationItem>> loadNotificationsForUser(
                   ' applied${jobTitle.isNotEmpty ? ' for "$jobTitle"' : ''}',
           createdAt: createdAt,
           icon: Icons.work_history_rounded,
-          color: const Color(0xFF4CAF50),
+          color: type == 'jobAccepted'
+              ? const Color(0xFF2E7D32)
+              : type == 'jobRejected' || type == 'jobRevoked'
+                  ? const Color(0xFFC62828)
+                  : const Color(0xFF4CAF50),
           type: NotificationType.jobApplication,
+          chatId: _isMeaningful(notifChatId) ? notifChatId : null,
           otherUserId: fromUserId.isNotEmpty ? fromUserId : null,
           otherUserName: _isMeaningful(fromUserName) ? fromUserName : null,
           otherUserPhoto:
               _isMeaningful(fromUserPhoto) ? fromUserPhoto : null,
           jobId: notifJobId,
+          rawType: type,
         ),
       );
       continue;
@@ -504,6 +526,31 @@ Future<void> openNotificationItem(
       );
       return;
     case NotificationType.jobApplication:
+      final rawType = (item.rawType ?? '').trim();
+      final shouldOpenChat = _isMeaningful(item.chatId) ||
+          rawType == 'jobAccepted' ||
+          rawType == 'jobRevoked';
+      if (shouldOpenChat) {
+        final target = await _resolveChatTarget(
+          item: item,
+          currentUserId: currentUserId,
+        );
+        if (target != null) {
+          if (!context.mounted) return;
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ChatDetailScreen(
+                chatId: target.chatId,
+                otherUserId: target.otherUserId,
+                otherUserName: target.otherUserName,
+                otherUserPhoto: target.otherUserPhoto,
+              ),
+            ),
+          );
+          return;
+        }
+      }
       final jobId = item.jobId?.trim();
       if (jobId == null || jobId.isEmpty) {
         if (!context.mounted) return;

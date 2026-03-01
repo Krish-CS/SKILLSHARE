@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../models/chat_model.dart';
@@ -56,6 +57,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   String? _currentUserRole;
   String? _otherUserRole;
   bool _isWorkChat = false;
+  bool _isJobChat = false;
   String? _workRequestId;
   String? _workProjectName;
   StreamSubscription<UserModel?>? _otherUserSub;
@@ -72,9 +74,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   // Tab controller (used when work is accepted)
   late final TabController _tabController;
+  int _activeTabIndex = 0;
 
   // Message stream + reactive read receipt
   late final Stream<List<MessageModel>> _messageStream;
+  StreamSubscription<List<MessageModel>>? _messageSub;
+  List<MessageModel> _cachedMessages = const [];
+  bool _messageStreamStarted = false;
   bool _markingRead = false;
 
   // Edit mode
@@ -108,8 +114,21 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     super.initState();
     _currentUserId = FirebaseAuth.instance.currentUser?.uid;
     _isWorkChat = widget.chatId.startsWith('work_');
-    _messageStream = _chatService.getMessages(widget.chatId);
+    _isJobChat = widget.chatId.startsWith('jobchat_');
+    _messageStream = _chatService.getMessages(widget.chatId, limit: 150);
+    // Eagerly subscribe so messages are already cached when the widget
+    // tree is rebuilt (e.g. when work is accepted and TabBarView replaces
+    // the plain body) – this eliminates the re-mount loading spinner.
+    _messageSub = _messageStream.listen((msgs) {
+      if (!mounted) return;
+      setState(() {
+        _cachedMessages = msgs;
+        _messageStreamStarted = true;
+      });
+    });
     _tabController = TabController(length: 2, vsync: this);
+    _activeTabIndex = _tabController.index;
+    _tabController.addListener(_onTabChanged);
     _bubbleCtrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
@@ -165,11 +184,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   @override
   void dispose() {
+    _messageSub?.cancel();
     _workReqSubscription?.cancel();
     _presenceSubscription?.cancel();
     _otherUserSub?.cancel();
     _bubbleCtrl.dispose();
     _gradientCtrl.dispose();
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _messageController.dispose();
     _scrollController.dispose();
@@ -189,7 +210,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       (_isCompanyToSkilledConversation || _isSkilledToCompanyConversation);
 
   bool get _canSendOfferLetterInThisChat =>
-      _isWorkChat && _isCompanyToSkilledConversation;
+      (_isWorkChat || _isJobChat) && _isCompanyToSkilledConversation;
 
   bool get _canShareProfileInThisChat =>
       _isWorkChat && _isSkilledToCompanyConversation;
@@ -215,8 +236,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       final data = doc.data() ?? <String, dynamic>{};
       final detectedWorkChat =
           _isWorkChat || data['isWorkChat'] == true || widget.chatId.startsWith('work_');
+      final detectedJobChat =
+          _isJobChat || data['isJobChat'] == true || widget.chatId.startsWith('jobchat_');
       final requestId = (data['workRequestId'] as String?)?.trim();
-      var title = (data['workTitle'] as String?)?.trim();
+      var title = (detectedJobChat
+              ? (data['jobTitle'] as String?)
+              : (data['workTitle'] as String?))
+          ?.trim();
 
       if ((title == null || title.isEmpty) &&
           requestId != null &&
@@ -231,6 +257,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       if (!mounted) return;
       setState(() {
         _isWorkChat = detectedWorkChat;
+        _isJobChat = detectedJobChat;
         _workRequestId = requestId;
         _workProjectName = (title != null && title.isNotEmpty) ? title : null;
       });
@@ -305,7 +332,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
     if (!_canSendOfferLetterInThisChat) {
       AppDialog.info(context,
-          'Offer letter can be sent only in an accepted company-to-skilled hiring chat.');
+          'Offer letter can be sent only in a company-to-skilled hiring or accepted job chat.');
       return;
     }
 
@@ -1877,16 +1904,23 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     final isCustomer = _currentUserRole == UserRoles.customer;
     final isCompany = _currentUserRole == UserRoles.company;
     final canAskForWork =
-        !_isWorkChat && (isCustomer || isCompany) && _currentUserId != null;
+        !_isWorkChat &&
+            !_isJobChat &&
+            (isCustomer || isCompany) &&
+            _currentUserId != null;
     final hasPending = _pendingRequests.isNotEmpty;
 
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
+    return Scaffold(
+      appBar: AppBar(
           backgroundColor: Colors.transparent,
           foregroundColor: Colors.white,
-          title: StreamBuilder<UserPresence>(
+          scrolledUnderElevation: 0,
+          toolbarHeight: 90,
+          titleSpacing: 6,
+          leadingWidth: 48,
+          title: Padding(
+            padding: const EdgeInsets.only(top: 10, bottom: 4),
+            child: StreamBuilder<UserPresence>(
             stream: PresenceService.instance.watchUser(widget.otherUserId),
             builder: (context, presSnap) {
               final presence = presSnap.data;
@@ -1907,12 +1941,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   Stack(
                     children: [
                       CircleAvatar(
-                        radius: 18,
+                        radius: 17,
                         backgroundColor: Colors.transparent,
                         child: UniversalAvatar(
                           photoUrl: widget.otherUserPhoto,
                           fallbackName: widget.otherUserName,
-                          radius: 18,
+                          radius: 17,
                           animate: false,
                         ),
                       ),
@@ -1921,8 +1955,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         bottom: 0,
                         right: 0,
                         child: Container(
-                          width: 10,
-                          height: 10,
+                          width: 9,
+                          height: 9,
                           decoration: BoxDecoration(
                             color: isOnline ? Colors.green : Colors.grey,
                             shape: BoxShape.circle,
@@ -1932,7 +1966,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                       ),
                     ],
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1940,15 +1974,20 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                       children: [
                         Text(
                           AppHelpers.capitalize(widget.otherUserName),
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 17),
+                          style: GoogleFonts.lora(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            height: 1.1,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
                           subtitle,
-                          style: TextStyle(
-                            fontSize: 11,
+                          style: GoogleFonts.lora(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                             color: isOnline
                                 ? Colors.cyanAccent[100]
                                 : Colors.white70,
@@ -1960,10 +1999,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 ],
               );
             },
-          ),
+          )),
           actions: [
             // Work Requests List icon — visible to all participants
-            if (_currentUserId != null && !_isWorkChat)
+            if (_currentUserId != null && !_isWorkChat && !_isJobChat)
               GestureDetector(
                 onTap: () => _showTaskMonitoringSheet(context),
                 child: Stack(
@@ -2044,12 +2083,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   ],
                 ),
               ),
-            if (_isWorkChat &&
+            if ((_isWorkChat || _isJobChat) &&
                 _workProjectName != null &&
                 _workProjectName!.trim().isNotEmpty)
               Container(
                 constraints: const BoxConstraints(maxWidth: 180),
-                margin: const EdgeInsets.only(right: 6, top: 10, bottom: 10),
+                margin: const EdgeInsets.only(right: 6, top: 8, bottom: 8),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
@@ -2070,7 +2109,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         _workProjectName!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: GoogleFonts.lora(
                           color: Colors.white,
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
@@ -2176,71 +2215,152 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             ),
           ],
           // Only show tab bar when work is accepted
-          bottom: _workLocked
+          bottom: (_workLocked && !_isJobChat)
               ? PreferredSize(
-                  preferredSize: const Size.fromHeight(56),
+                  preferredSize: const Size.fromHeight(66),
                   child: _buildGradientTabStrip(),
                 )
               : null,
           flexibleSpace: _buildChatAppBarBackground(),
         ),
-        body: _workLocked
-            ? TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildTabBackground(
-                    isWorkProjectTab: false,
-                    child: _buildChatBody(),
-                  ),
-                  _buildTabBackground(
-                    isWorkProjectTab: true,
-                    child: _buildWorkProjectTab(),
-                  ),
-                ],
-              )
-            : _buildChatBody(),
-      ),
+      body: (_workLocked && !_isJobChat)
+          ? TabBarView(
+              controller: _tabController,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                _buildTabBackground(
+                  isWorkProjectTab: false,
+                  child: _buildChatBody(),
+                ),
+                _buildTabBackground(
+                  isWorkProjectTab: true,
+                  child: _buildWorkProjectTab(),
+                ),
+              ],
+            )
+          : _buildChatBody(),
     );
   }
 
-  Widget _buildGradientTabStrip() {
-    return AnimatedBuilder(
-      animation: _tabController,
-      builder: (context, _) {
-        final activeIndex = _tabController.index;
-        final stripColors = activeIndex == 0
-            ? const [Color(0xFF005C97), Color(0xFF1E88E5)]
-            : const [Color(0xFF6A1B9A), Color(0xFF8E24AA)];
+  void _onTabChanged() {
+    final idx = _tabController.index;
+    if (idx == _activeTabIndex || !mounted) return;
+    setState(() => _activeTabIndex = idx);
+  }
 
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: stripColors,
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
-            border: Border(
-              top: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
-              bottom: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
+  Widget _buildGradientTabStrip() {
+    final isChatActive = _activeTabIndex == 0;
+    final isWorkActive = _activeTabIndex == 1;
+
+    Widget buildToggle({
+      required bool active,
+      required VoidCallback onTap,
+      required List<Color> activeGradientColors,
+      required IconData icon,
+      required String label,
+      required BorderRadius borderRadius,
+    }) {
+      const activeText = Colors.white;
+      const inactiveText = Color(0xFF6D758D);
+      return Expanded(
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: borderRadius,
+          child: InkWell(
+            borderRadius: borderRadius,
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              decoration: BoxDecoration(
+                color: active ? null : Colors.white,
+                gradient: active
+                    ? LinearGradient(
+                        colors: activeGradientColors,
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      )
+                    : null,
+                borderRadius: borderRadius,
+                border: Border.all(
+                  color:
+                      active ? Colors.transparent : const Color(0xFFD7DEEF),
+                ),
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      icon,
+                      size: 19,
+                      color: active ? activeText : inactiveText,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      label,
+                      style: GoogleFonts.lora(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: active ? activeText : inactiveText,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-          child: TabBar(
-            controller: _tabController,
-            indicatorColor: Colors.white,
-            indicatorWeight: 3,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white70,
-            tabs: const [
-              Tab(icon: Icon(Icons.chat_bubble_outline, size: 18), text: 'Chat'),
-              Tab(
-                  icon: Icon(Icons.assignment_turned_in_outlined, size: 18),
-                  text: 'Work Project'),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      height: 66,
+      margin: const EdgeInsets.only(top: 2),
+      decoration: const BoxDecoration(
+        color: Color(0xFFEFF3FB),
+        border: Border(
+          top: BorderSide(color: Color(0xFFD5DEEE)),
+          bottom: BorderSide(color: Color(0xFFD5DEEE)),
+        ),
+      ),
+      child: Row(
+        children: [
+          buildToggle(
+            active: isChatActive,
+            onTap: () {
+              if (_activeTabIndex == 0) return;
+              setState(() => _activeTabIndex = 0);
+              _tabController.animateTo(0);
+            },
+            activeGradientColors: const [
+              Color(0xFF1B5EFA),
+              Color(0xFF1E88E5),
+              Color(0xFF42A5F5),
             ],
+            icon: Icons.chat_bubble_outline,
+            label: 'Chat',
+            borderRadius: BorderRadius.zero,
           ),
-        );
-      },
+          buildToggle(
+            active: isWorkActive,
+            onTap: () {
+              if (_activeTabIndex == 1) return;
+              setState(() => _activeTabIndex = 1);
+              _tabController.animateTo(1);
+            },
+            activeGradientColors: const [
+              Color(0xFFFFC107),
+              Color(0xFFFF9800),
+              Color(0xFFFFB300),
+            ],
+            icon: Icons.assignment_turned_in_outlined,
+            label: 'Work Project',
+            borderRadius: BorderRadius.zero,
+          ),
+        ],
+      ),
     );
   }
 
@@ -2281,14 +2401,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         Expanded(
           child: StreamBuilder<List<MessageModel>>(
             stream: _messageStream,
+            initialData: _cachedMessages.isEmpty ? null : _cachedMessages,
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
+              // Only show spinner on the very first load (no cached data yet)
+              if (!_messageStreamStarted && snapshot.data == null) {
                 return const Center(child: CircularProgressIndicator());
               }
               if (snapshot.hasError) {
                 return Center(child: Text('Error: ${snapshot.error}'));
               }
-              if (!snapshot.hasData || snapshot.data!.isEmpty) {
+              final messages = snapshot.data ?? _cachedMessages;
+              if (messages.isEmpty) {
                 return Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -2308,7 +2431,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 );
               }
 
-              final messages = snapshot.data!;
               unawaited(_markIncomingAsReadIfNeeded(messages));
               return ListView.builder(
                 controller: _scrollController,

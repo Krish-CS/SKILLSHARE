@@ -1942,7 +1942,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               color: const Color(0xFFEF6C00),
                             ),
                             _insightChip(
-                              value: '${allProjects.length}',
+                              value: '${_profile?.projectCount ?? 0}',
                               label: 'Completed Projects',
                               icon: Icons.assignment_turned_in_rounded,
                               color: const Color(0xFF00897B),
@@ -2008,12 +2008,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             const Icon(Icons.work_history_rounded,
                                 size: 16, color: Color(0xFF2196F3)),
                             const SizedBox(width: 6),
-                            Text(
-                              'Project History (${allProjects.length})',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF2E2E2E),
+                            Expanded(
+                              child: Text(
+                                allProjects.isEmpty
+                                    ? 'Project History (${_profile?.projectCount ?? 0} total)'
+                                    : 'Project History (${allProjects.length} with you · ${_profile?.projectCount ?? 0} total)',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF2E2E2E),
+                                ),
                               ),
                             ),
                           ],
@@ -2027,15 +2031,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               color: const Color(0xFFF5F5F5),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Row(
+                            child: Row(
                               children: [
-                                Icon(Icons.info_outline,
+                                const Icon(Icons.info_outline,
                                     size: 15, color: Color(0xFF9E9E9E)),
-                                SizedBox(width: 8),
-                                Text('No projects completed yet',
-                                    style: TextStyle(
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    (_profile?.projectCount ?? 0) > 0
+                                        ? 'No joint projects with your company yet. This person has completed ${_profile!.projectCount} project${_profile!.projectCount == 1 ? '' : 's'} overall.'
+                                        : 'No projects completed yet.',
+                                    style: const TextStyle(
                                         fontSize: 12,
-                                        color: Color(0xFF9E9E9E))),
+                                        color: Color(0xFF9E9E9E)),
+                                  ),
+                                ),
                               ],
                             ),
                           )

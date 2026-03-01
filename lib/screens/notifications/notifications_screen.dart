@@ -12,13 +12,20 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  late final Future<List<NotificationItem>> _future;
+  Future<List<NotificationItem>>? _future;
 
   @override
   void initState() {
     super.initState();
-    _future = loadNotificationsForUser(widget.userId, limit: 50);
-    // Mark all as seen when this page opens
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    if (!mounted) return;
+    setState(() {
+      _future = loadNotificationsForUser(widget.userId, limit: 50);
+    });
+    // Mark all as seen when this page opens / refreshes
     FirestoreService().markNotificationsSeen(widget.userId);
   }
 
@@ -63,6 +70,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       'Failed to load notifications.\n${snapshot.error}',
                       textAlign: TextAlign.center,
                     ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: _reload,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
                   ],
                 ),
               ),
@@ -72,19 +85,27 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           final notifications = snapshot.data ?? const <NotificationItem>[];
 
           if (notifications.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+            return RefreshIndicator(
+              onRefresh: _reload,
+              child: ListView(
                 children: [
-                  Icon(Icons.notifications_none,
-                      size: 72, color: Colors.grey[300]),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No notifications yet',
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.grey[500],
-                      fontWeight: FontWeight.w500,
+                  SizedBox(height: MediaQuery.of(context).size.height * 0.3),
+                  Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.notifications_none,
+                            size: 72, color: Colors.grey[300]),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No notifications yet',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.grey[500],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -92,17 +113,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             );
           }
 
-          return ListView.separated(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            itemCount: notifications.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (context, index) {
-              final item = notifications[index];
-              return _NotificationCard(
-                item: item,
-                currentUserId: widget.userId,
-              );
-            },
+          return RefreshIndicator(
+            onRefresh: _reload,
+            child: ListView.separated(
+              padding:
+                  const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              itemCount: notifications.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final item = notifications[index];
+                return _NotificationCard(
+                  item: item,
+                  currentUserId: widget.userId,
+                );
+              },
+            ),
           );
         },
       ),
@@ -126,7 +151,9 @@ class _NotificationCard extends StatelessWidget {
       case NotificationType.order:
         return item.orderData != null;
       case NotificationType.jobApplication:
-        return item.jobId != null;
+        return item.jobId != null ||
+            item.chatId != null ||
+            item.otherUserId != null;
     }
   }
 

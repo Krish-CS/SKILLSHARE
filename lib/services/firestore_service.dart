@@ -213,6 +213,89 @@ class FirestoreService {
     return workChatId;
   }
 
+  Future<String> ensureJobApplicationChat({
+    required String jobId,
+    required String companyId,
+    required String skilledUserId,
+    String? jobTitle,
+    // Skip the Firestore status check when the caller already verified
+    // acceptance (e.g. inside acceptJobApplicant after a transaction).
+    bool skipStatusCheck = false,
+    // Only the company owner should write applicationChatIds back to the job.
+    // Skilled-person callers must pass false to avoid a permission error.
+    bool updateJobRecord = true,
+  }) async {
+    final jobRef = _firestore.collection(AppConstants.jobsCollection).doc(jobId);
+    final jobDoc = await jobRef.get();
+    if (!jobDoc.exists || jobDoc.data() == null) {
+      throw Exception('Job not found.');
+    }
+
+    final data = jobDoc.data()!;
+
+    // Only enforce owner + status checks when the caller requests it
+    if (!skipStatusCheck) {
+      final ownerId =
+          ((data['companyId'] as String?) ?? (data['postedBy'] as String?) ?? '')
+              .trim();
+      if (ownerId.isEmpty) throw Exception('Job owner information missing.');
+      if (ownerId != companyId) throw Exception('Invalid company for this job.');
+
+      final statusMap =
+          Map<String, dynamic>.from(data['applicationStatus'] ?? const {});
+      final applicantStatus = (statusMap[skilledUserId] as String?)?.trim();
+      if (applicantStatus != 'accepted') {
+        throw Exception('Job chat is available only for accepted applications.');
+      }
+    }
+
+    final safeJobTitle = (jobTitle?.trim().isNotEmpty == true
+            ? jobTitle!.trim()
+            : (data['title'] as String?)?.trim()) ??
+        'Job Discussion';
+
+    final company = await getUserById(companyId);
+    final skilled = await getUserById(skilledUserId);
+    final participants = [companyId, skilledUserId]..sort();
+    final chatId = 'jobchat_${jobId}_${participants[0]}__${participants[1]}';
+    final chatRef = _firestore.collection(AppConstants.chatsCollection).doc(chatId);
+
+    await chatRef.set({
+      'participants': participants,
+      'participantDetails': {
+        companyId: _participantDetailsFromUser(company),
+        skilledUserId: _participantDetailsFromUser(skilled),
+      },
+      'isJobChat': true,
+      'jobId': jobId,
+      'jobTitle': safeJobTitle,
+      'lastMessage': '',
+      'lastMessageType': 'text',
+      'lastMessageTime': FieldValue.serverTimestamp(),
+      'unreadCount': {
+        for (final id in participants) id: 0,
+      },
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    // Only the company owner updates the job record (skilled person lacks
+    // the Firestore permission to write applicationChatIds).
+    if (updateJobRecord) {
+      try {
+        await jobRef.update({
+          'applicationChatIds.$skilledUserId': chatId,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } catch (_) {
+        // Best-effort; the chatId is already deterministic so this is safe
+        // to skip if the caller lacks write permission on the job document.
+      }
+    }
+
+    return chatId;
+  }
+
   Future<List<UserModel>> getCompanyUsers({
     String? excludeUserId,
     int limit = 20,
@@ -2034,7 +2117,9 @@ class FirestoreService {
 
   /// Accept one applicant for a job.
   /// Sets selectedApplicant and moves job to in_progress.
-  Future<void> acceptJobApplicant({
+  /// Accepts [applicantId] for [jobId], creates the job-offer chat, sends an
+  /// offer-letter message and a notification.  Returns the job-chat ID.
+  Future<String> acceptJobApplicant({
     required String jobId,
     required String applicantId,
     required String companyId,
@@ -2071,27 +2156,34 @@ class FirestoreService {
     final jobDoc = await jobRef.get();
     final jobTitle =
         (jobDoc.data()?['title'] as String?)?.trim() ?? 'a job';
+    // skipStatusCheck: the transaction already verified acceptance;
+    // a fresh Firestore read might return a cached pre-acceptance snapshot.
+    final chatId = await ensureJobApplicationChat(
+      jobId: jobId,
+      companyId: companyId,
+      skilledUserId: applicantId,
+      jobTitle: jobTitle,
+      skipStatusCheck: true,
+    );
+    final chatRef =
+        _firestore.collection(AppConstants.chatsCollection).doc(chatId);
 
     // ── 3. Notify the skilled person ────────────────────────────────────────
     await _firestore.collection('notifications').add({
       'toUserId': applicantId,
       'fromUserId': companyId,
       'type': 'jobAccepted',
-      'title': 'Job Offer Received!',
+      'title': 'Application Accepted',
       'body':
           'Your application for "$jobTitle" has been accepted. '
           'Open the Jobs → My Jobs tab and check your chat for the offer letter.',
       'jobId': jobId,
       'jobTitle': jobTitle,
+      'chatId': chatId,
       'createdAt': FieldValue.serverTimestamp(),
       'seen': false,
     });
 
-    // ── 4. Ensure a chat exists between company and applicant ───────────────
-    final sorted = [companyId, applicantId]..sort();
-    final chatId = '${sorted[0]}__${sorted[1]}';
-    final chatRef =
-        _firestore.collection(AppConstants.chatsCollection).doc(chatId);
 
     final companyDoc = await _firestore
         .collection(AppConstants.usersCollection)
@@ -2102,19 +2194,6 @@ class FirestoreService {
         (companyDoc.data()?['companyName'] as String?)?.trim() ??
         'The company';
 
-    await chatRef.set({
-      'participants': sorted,
-      'participantDetails': {
-        companyId: {'name': companyName},
-        applicantId: {},
-      },
-      'lastMessage': '📄 Offer Letter – $jobTitle',
-      'lastMessageType': 'offer_letter',
-      'lastMessageTime': FieldValue.serverTimestamp(),
-      'unreadCount': {companyId: 0, applicantId: 1},
-      'updatedAt': FieldValue.serverTimestamp(),
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
 
     // ── 5. Send offer-letter message ────────────────────────────────────────
     final offerText =
@@ -2143,10 +2222,15 @@ class FirestoreService {
       'lastMessage': '📄 Offer Letter – $jobTitle',
       'lastMessageType': 'offer_letter',
       'lastMessageTime': FieldValue.serverTimestamp(),
+      'isJobChat': true,
+      'jobId': jobId,
+      'jobTitle': jobTitle,
       'unreadCount.$applicantId': FieldValue.increment(1),
       'updatedAt': FieldValue.serverTimestamp(),
     });
     await batch.commit();
+
+    return chatId;
   }
 
   /// Returns a human-readable conflict description if the applicant's
@@ -2273,6 +2357,20 @@ class FirestoreService {
       transaction.update(jobRef, updates);
     });
 
+    String? jobChatId;
+    try {
+      final latest = await jobRef.get();
+      final map = latest.data()?['applicationChatIds'];
+      if (map is Map) {
+        final raw = map[applicantId];
+        if (raw is String && raw.trim().isNotEmpty) {
+          jobChatId = raw.trim();
+        }
+      }
+    } catch (_) {
+      // Ignore chat lookup errors for notifications.
+    }
+
     // Notify the applicant
     await _firestore.collection('notifications').add({
       'toUserId': applicantId,
@@ -2285,6 +2383,7 @@ class FirestoreService {
           : 'Your application for "$jobTitle" was not selected at this time.',
       'jobId': jobId,
       'jobTitle': jobTitle,
+      if (jobChatId != null) 'chatId': jobChatId,
       'createdAt': FieldValue.serverTimestamp(),
       'seen': false,
     });

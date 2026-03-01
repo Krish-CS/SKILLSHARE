@@ -147,7 +147,6 @@ class _NotificationBellState extends State<NotificationBell> {
     _jobNotifSub = _firestore
         .collection('notifications')
         .where('toUserId', isEqualTo: widget.userId)
-        .where('type', isEqualTo: 'jobApplication')
         .snapshots()
         .listen((snap) {
       _lastJobNotifSnap = snap;
@@ -196,8 +195,16 @@ class _NotificationBellState extends State<NotificationBell> {
     // Count unseen job application notifications
     final jobNotifSnap = _lastJobNotifSnap;
     if (jobNotifSnap != null) {
+      const jobTypes = <String>{
+        'jobApplication',
+        'jobAccepted',
+        'jobRejected',
+        'jobRevoked',
+      };
       for (final doc in jobNotifSnap.docs) {
         final data = doc.data() as Map<String, dynamic>;
+        final type = (data['type'] as String?)?.trim();
+        if (type == null || !jobTypes.contains(type)) continue;
         final ts = data['createdAt'];
         if (ts is! Timestamp) continue;
         if (_lastSeen == null || ts.toDate().isAfter(_lastSeen!)) count++;
@@ -540,7 +547,11 @@ class _NotificationDropdownState extends State<_NotificationDropdown>
               final item = items[index];
               final isTappable = item.type == NotificationType.order
                   ? item.orderData != null
-                  : (item.chatId != null || item.otherUserId != null);
+                  : item.type == NotificationType.jobApplication
+                      ? (item.jobId != null ||
+                          item.chatId != null ||
+                          item.otherUserId != null)
+                      : (item.chatId != null || item.otherUserId != null);
               return InkWell(
                 onTap: !isTappable
                     ? null

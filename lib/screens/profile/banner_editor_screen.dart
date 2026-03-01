@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:matrix_gesture_detector/matrix_gesture_detector.dart';
 import '../../utils/app_dialog.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -37,6 +38,7 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
   double _fontSize = 28;
   int _gradientIndex = 0;
   String _animation = 'none';
+  Matrix4 _textMatrix = Matrix4.identity();
 
   // ─── Image options ─────────────────────────────────────────────────────────
   File? _imageFile;
@@ -121,6 +123,7 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
       _gradientIndex = (d['gradientIndex'] as int?) ?? 0;
       _animation = (d['animation'] as String?) ?? 'none';
       _uploadedImageUrl = d['imageUrl'] as String?;
+      _textMatrix = _matrixFromDynamic(d['textMatrix']);
     }
   }
 
@@ -148,6 +151,7 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
       'fontSize': _fontSize,
       'gradientIndex': _gradientIndex,
       'animation': _animation,
+      'textMatrix': _textMatrix.storage.toList(),
     };
   }
 
@@ -246,6 +250,36 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
     }
   }
 
+  Matrix4 _matrixFromDynamic(dynamic raw) {
+    if (raw is List && raw.length == 16) {
+      final values = <double>[];
+      for (final v in raw) {
+        if (v is num) {
+          values.add(v.toDouble());
+        } else {
+          return Matrix4.identity();
+        }
+      }
+      return Matrix4.fromList(values);
+    }
+    return Matrix4.identity();
+  }
+
+  void _applyTextTransform(
+    Matrix4 translationDelta,
+    Matrix4 scaleDelta,
+    Matrix4 rotationDelta,
+  ) {
+    setState(() {
+      _textMatrix = MatrixGestureDetector.compose(
+        _textMatrix,
+        translationDelta,
+        scaleDelta,
+        rotationDelta,
+      );
+    });
+  }
+
   // ─── Build ────────────────────────────────────────────────────────────────
 
   @override
@@ -317,9 +351,9 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
           // ── Editor options ──
           Expanded(
             child: SingleChildScrollView(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: _mode == 'text' ? _buildTextOptions() : _buildImageOptions(),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child:
+                  _mode == 'text' ? _buildTextOptions() : _buildImageOptions(),
             ),
           ),
         ],
@@ -336,6 +370,14 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
     if (_mode == 'image' && imgAvailable && _uploadedImageUrl == null) {
       // Show local image as gradient (can't use byte URL in BannerDisplay)
       previewData = {'type': 'none', 'gradientIndex': _gradientIndex};
+    } else if (_mode == 'text') {
+      // Interactive text is rendered by BannerDisplay using textMatrix;
+      // preview always remains in text mode.
+      previewData = {
+        ...previewData,
+        'type': 'text',
+        'textMatrix': _textMatrix.storage.toList(),
+      };
     }
 
     return Stack(
@@ -351,11 +393,21 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
         if (_mode == 'image' && imgAvailable)
           Positioned.fill(
             child: kIsWeb && _imageBytes != null
-                ? Image.memory(_imageBytes!,
-                    fit: BoxFit.cover, height: 180)
+                ? Image.memory(_imageBytes!, fit: BoxFit.cover, height: 180)
                 : _imageFile != null
                     ? Image.file(_imageFile!, fit: BoxFit.cover, height: 180)
                     : const SizedBox(),
+          ),
+
+        // Gesture layer: move / scale / rotate text while keeping JSON editable.
+        if (_mode == 'text')
+          Positioned.fill(
+            child: MatrixGestureDetector(
+              clipChild: false,
+              onMatrixUpdate: (_, td, sd, rd) =>
+                  _applyTextTransform(td, sd, rd),
+              child: Container(color: Colors.transparent),
+            ),
           ),
 
         // Preview label
@@ -372,8 +424,7 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
               child: Text(
                 'Preview',
                 textAlign: TextAlign.center,
-                style:
-                    TextStyle(color: Colors.white70, fontSize: 11),
+                style: TextStyle(color: Colors.white70, fontSize: 11),
               ),
             ),
           ),
@@ -426,9 +477,7 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
-                      color: selected
-                          ? const Color(0xFF6A11CB)
-                          : Colors.white,
+                      color: selected ? const Color(0xFF6A11CB) : Colors.white,
                       borderRadius: BorderRadius.circular(24),
                       border: Border.all(
                         color: selected
@@ -483,6 +532,34 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
         // Animation
         _sectionLabel('Text Animation'),
         _buildAnimationPicker(),
+        const SizedBox(height: 14),
+
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () =>
+                    setState(() => _textMatrix = Matrix4.identity()),
+                icon: const Icon(Icons.replay_rounded, size: 18),
+                label: const Text('Reset Text Position'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF6A11CB),
+                  side: const BorderSide(color: Color(0xFF6A11CB)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Tip: Drag to move, pinch to zoom, and rotate with two fingers on the preview.',
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[700],
+            fontStyle: FontStyle.italic,
+          ),
+        ),
         const SizedBox(height: 24),
       ],
     );
@@ -518,8 +595,7 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
 
         if (hasLocal || _uploadedImageUrl != null)
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.green[50],
               borderRadius: BorderRadius.circular(12),
@@ -527,8 +603,7 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.check_circle,
-                    color: Colors.green, size: 20),
+                const Icon(Icons.check_circle, color: Colors.green, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -536,8 +611,7 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
                         ? 'Image selected — tap Save to apply'
                         : 'Current banner image loaded',
                     style: const TextStyle(
-                        color: Colors.green,
-                        fontWeight: FontWeight.w500),
+                        color: Colors.green, fontWeight: FontWeight.w500),
                   ),
                 ),
                 GestureDetector(
@@ -604,16 +678,13 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
                 color: c,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: selected
-                      ? const Color(0xFF6A11CB)
-                      : Colors.grey[300]!,
+                  color: selected ? const Color(0xFF6A11CB) : Colors.grey[300]!,
                   width: selected ? 3 : 1.5,
                 ),
                 boxShadow: selected
                     ? [
                         BoxShadow(
-                            color: c.withValues(alpha: 0.5),
-                            blurRadius: 6)
+                            color: c.withValues(alpha: 0.5), blurRadius: 6)
                       ]
                     : [],
               ),
@@ -685,15 +756,13 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () => Navigator.pop(
-                ctx, HSVColor.fromAHSV(1, hue, 1, 1).toColor()),
+            onPressed: () =>
+                Navigator.pop(ctx, HSVColor.fromAHSV(1, hue, 1, 1).toColor()),
             style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF6A11CB)),
-            child: const Text('Select',
-                style: TextStyle(color: Colors.white)),
+            child: const Text('Select', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -724,16 +793,13 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
                       end: Alignment.bottomRight),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: selected
-                        ? Colors.white
-                        : Colors.transparent,
+                    color: selected ? Colors.white : Colors.transparent,
                     width: 2.5,
                   ),
                   boxShadow: selected
                       ? [
                           BoxShadow(
-                              color: _gradients[i][0]
-                                  .withValues(alpha: 0.5),
+                              color: _gradients[i][0].withValues(alpha: 0.5),
                               blurRadius: 8)
                         ]
                       : [],
@@ -764,21 +830,17 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
           onTap: () => setState(() => _animation = key),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
               color: selected ? const Color(0xFF6A11CB) : Colors.white,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: selected
-                    ? const Color(0xFF6A11CB)
-                    : Colors.grey[300]!,
+                color: selected ? const Color(0xFF6A11CB) : Colors.grey[300]!,
               ),
               boxShadow: selected
                   ? [
                       BoxShadow(
-                          color: const Color(0xFF6A11CB)
-                              .withValues(alpha: 0.3),
+                          color: const Color(0xFF6A11CB).withValues(alpha: 0.3),
                           blurRadius: 6)
                     ]
                   : [],

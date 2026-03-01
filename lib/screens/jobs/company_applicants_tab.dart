@@ -87,7 +87,10 @@ class _JobSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final count = job.applicants.length;
+    final count = job.applicants
+        .where((id) =>
+            (job.applicationStatus[id] ?? 'pending') != 'rejected')
+        .length;
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -347,7 +350,7 @@ class _JobApplicantsScreenState extends State<JobApplicantsScreen> {
       );
       if (mounted) {
         AppDialog.success(context,
-            'Applicant accepted! Offer letter sent via chat.');
+            'Applicant accepted! Offer letter sent in dedicated job chat.');
       }
     } catch (e) {
       if (mounted) AppDialog.error(context, 'Failed', detail: e.toString());

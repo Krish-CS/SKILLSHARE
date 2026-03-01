@@ -68,8 +68,10 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       if (!mounted || job == null) return;
       setState(() {
         _job = job;
-        _hasApplied =
-            _currentUser != null && _job.applicants.contains(_currentUser!.uid);
+        final myStatus = _currentUser != null
+            ? _job.applicationStatus[_currentUser!.uid]
+            : null;
+        _hasApplied = myStatus == 'pending' || myStatus == 'accepted';
       });
       if (_isEmployer) {
         _loadApplicantProfiles();
@@ -95,7 +97,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
         if (!mounted) return;
         setState(() {
           _currentUser = user;
-          _hasApplied = _job.applicants.contains(userId);
+          final myStatus = _job.applicationStatus[userId];
+          _hasApplied = myStatus == 'pending' || myStatus == 'accepted';
         });
         // First time we know who the user is — reload profiles if employer
         if (!profilesLoadedOnce && _isEmployer) {
@@ -256,6 +259,12 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
         _currentUser?.role == AppConstants.roleSkilledUser;
   }
 
+  bool get _wasRejected {
+    final uid = _currentUser?.uid;
+    if (uid == null) return false;
+    return _job.applicationStatus[uid] == 'rejected';
+  }
+
   Color get _statusColor {
     switch (_job.status) {
       case 'open':
@@ -275,21 +284,22 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     return _job.applicationStatus[applicantId] ?? 'pending';
   }
 
-  Future<void> _acceptApplicant(String applicantId) async {
-    if (!_isEmployer || _currentUser == null) return;
+  Future<String?> _acceptApplicant(String applicantId) async {
+    if (!_isEmployer || _currentUser == null) return null;
     setState(() => _processingApplicantId = applicantId);
     try {
-      await _firestoreService.acceptJobApplicant(
+      final chatId = await _firestoreService.acceptJobApplicant(
         jobId: _job.id,
         applicantId: applicantId,
         companyId: _currentUser!.uid,
       );
-      if (!mounted) return;
-      AppDialog.success(context, 'Applicant accepted.');
+      if (!mounted) return null;
+      return chatId;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return null;
       AppDialog.error(context, 'Failed to accept applicant',
           detail: e.toString());
+      return null;
     } finally {
       if (mounted) {
         setState(() => _processingApplicantId = null);
@@ -762,143 +772,155 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                           _job.selectedApplicant != null &&
                               _job.selectedApplicant!.isNotEmpty &&
                               _job.selectedApplicant != profile.userId;
+                      final isProcessing =
+                          _processingApplicantId == profile.userId;
+
                       return Card(
                         margin: const EdgeInsets.only(bottom: 12),
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: isAccepted
+                                ? Colors.green.shade200
+                                : isRejected
+                                    ? Colors.red.shade200
+                                    : Colors.grey.shade200,
+                            width: 1,
+                          ),
+                        ),
                         child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              InkWell(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          ProfileScreen(userId: profile.userId),
-                                    ),
-                                  );
-                                },
-                                child: UniversalAvatar(
-                                  avatarConfig: applicantUser?.avatarConfig,
-                                  photoUrl: profile.profilePicture,
-                                  fallbackName:
-                                      applicantUser?.name ?? profile.name,
-                                  radius: 25,
-                                  animate: false,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: InkWell(
-                                  onTap: () {
-                                    Navigator.push(
+                              // ── Top row: avatar + info + chat icon ──
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  InkWell(
+                                    onTap: () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (context) => ProfileScreen(
+                                        builder: (_) => ProfileScreen(
                                             userId: profile.userId),
                                       ),
-                                    );
-                                  },
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Text(
-                                            applicantUser?.name ?? 'Unknown',
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          if (profile.isVerified) ...[
-                                            const SizedBox(width: 4),
-                                            const Icon(
-                                              Icons.verified,
-                                              color: Colors.blue,
-                                              size: 18,
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                      Text(
-                                        profile.category ?? 'No category',
-                                        style: TextStyle(
-                                          color: Colors.grey[600],
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.star,
-                                            color: Colors.amber,
-                                            size: 14,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '${profile.rating.toStringAsFixed(1)} (${profile.reviewCount})',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.grey[600],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: isAccepted
-                                              ? Colors.green
-                                                  .withValues(alpha: 0.12)
-                                              : isRejected
-                                                  ? Colors.red
-                                                      .withValues(alpha: 0.12)
-                                                  : Colors.orange
-                                                      .withValues(alpha: 0.12),
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                        ),
-                                        child: Text(
-                                          isAccepted
-                                              ? 'Accepted'
-                                              : isRejected
-                                                  ? 'Rejected'
-                                                  : 'Pending',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: isAccepted
-                                                ? Colors.green[700]
-                                                : isRejected
-                                                    ? Colors.red[700]
-                                                    : Colors.orange[800],
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                                    ),
+                                    child: UniversalAvatar(
+                                      avatarConfig: applicantUser?.avatarConfig,
+                                      photoUrl: profile.profilePicture,
+                                      fallbackName:
+                                          applicantUser?.name ?? profile.name,
+                                      radius: 26,
+                                      animate: false,
+                                    ),
                                   ),
-                                ),
-                              ),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: InkWell(
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => ProfileScreen(
+                                              userId: profile.userId),
+                                        ),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  applicantUser?.name ??
+                                                      'Unknown',
+                                                  style: const TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                              if (profile.isVerified)
+                                                const Icon(Icons.verified,
+                                                    color: Colors.blue,
+                                                    size: 18),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            profile.category ?? 'No category',
+                                            style: TextStyle(
+                                                color: Colors.grey[600],
+                                                fontSize: 13),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              const Icon(Icons.star,
+                                                  color: Colors.amber,
+                                                  size: 14),
+                                              const SizedBox(width: 3),
+                                              Text(
+                                                '${profile.rating.toStringAsFixed(1)} (${profile.reviewCount})',
+                                                style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.grey[600]),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: isAccepted
+                                                      ? Colors.green.withValues(
+                                                          alpha: 0.12)
+                                                      : isRejected
+                                                          ? Colors.red
+                                                              .withValues(
+                                                                  alpha: 0.12)
+                                                          : Colors.orange
+                                                              .withValues(
+                                                                  alpha: 0.12),
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                                child: Text(
+                                                  isAccepted
+                                                      ? 'Accepted'
+                                                      : isRejected
+                                                          ? 'Rejected'
+                                                          : 'Pending',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: isAccepted
+                                                        ? Colors.green[700]
+                                                        : isRejected
+                                                            ? Colors.red[700]
+                                                            : Colors
+                                                                .orange[800],
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  // Chat / message icon
                                   IconButton(
                                     onPressed: () async {
                                       if (applicantUser == null ||
-                                          _currentUser == null) {
-                                        return;
-                                      }
+                                          _currentUser == null) return;
                                       final nav = Navigator.of(context);
-
                                       try {
                                         final currentUser =
                                             FirebaseAuth.instance.currentUser;
                                         if (currentUser == null) return;
-
                                         if (!mounted) return;
                                         showDialog(
                                           context: context,
@@ -907,99 +929,254 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                               child:
                                                   CircularProgressIndicator()),
                                         );
-
-                                        final chatId =
-                                            await _chatService.getOrCreateChat(
-                                          currentUser.uid,
-                                          profile.userId,
-                                          {
-                                            'name': _currentUser!.name,
-                                            'profilePhoto':
-                                                _currentUser!.profilePhoto,
-                                          },
-                                          {
-                                            'name': applicantUser.name,
-                                            'profilePhoto':
-                                                applicantUser.profilePhoto,
-                                          },
-                                        );
-
+                                        final String chatId;
+                                        if (isAccepted) {
+                                          chatId = await _firestoreService
+                                              .ensureJobApplicationChat(
+                                            jobId: _job.id,
+                                            companyId: _currentUser!.uid,
+                                            skilledUserId: profile.userId,
+                                            jobTitle: _job.title,
+                                            skipStatusCheck: true,
+                                          );
+                                        } else {
+                                          chatId = await _chatService
+                                              .getOrCreateChat(
+                                            currentUser.uid,
+                                            profile.userId,
+                                            {
+                                              'name': _currentUser!.name,
+                                              'profilePhoto':
+                                                  _currentUser!.profilePhoto,
+                                            },
+                                            {
+                                              'name': applicantUser.name,
+                                              'profilePhoto':
+                                                  applicantUser.profilePhoto,
+                                            },
+                                          );
+                                        }
                                         if (!mounted) return;
                                         nav.pop();
-                                        nav.push(
-                                          MaterialPageRoute(
-                                            builder: (_) => ChatDetailScreen(
-                                              chatId: chatId,
-                                              otherUserId: profile.userId,
-                                              otherUserName: applicantUser.name,
-                                              otherUserPhoto:
-                                                  applicantUser.profilePhoto,
-                                            ),
+                                        nav.push(MaterialPageRoute(
+                                          builder: (_) => ChatDetailScreen(
+                                            chatId: chatId,
+                                            otherUserId: profile.userId,
+                                            otherUserName: applicantUser.name,
+                                            otherUserPhoto:
+                                                applicantUser.profilePhoto,
                                           ),
-                                        );
+                                        ));
                                       } catch (e) {
                                         if (!context.mounted) return;
                                         nav.pop();
                                         AppDialog.error(
-                                            context, 'Failed to start chat',
+                                            context, 'Failed to open chat',
                                             detail: e.toString());
                                       }
                                     },
-                                    icon: const Icon(Icons.chat_bubble_outline),
-                                    color: const Color(0xFF2196F3),
-                                    tooltip: 'Contact',
-                                  ),
-                                  if (isPending && !anotherApplicantSelected)
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        TextButton(
-                                          onPressed: _processingApplicantId ==
-                                                  profile.userId
-                                              ? null
-                                              : () => _rejectApplicant(
-                                                  profile.userId),
-                                          child: const Text(
-                                            'Reject',
-                                            style: TextStyle(color: Colors.red),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        ElevatedButton(
-                                          onPressed: _processingApplicantId ==
-                                                  profile.userId
-                                              ? null
-                                              : () => _acceptApplicant(
-                                                  profile.userId),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                const Color(0xFF4CAF50),
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 10, vertical: 6),
-                                            minimumSize: Size.zero,
-                                          ),
-                                          child: _processingApplicantId ==
-                                                  profile.userId
-                                              ? const SizedBox(
-                                                  width: 12,
-                                                  height: 12,
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                    strokeWidth: 2,
-                                                    color: Colors.white,
-                                                  ),
-                                                )
-                                              : const Text(
-                                                  'Accept',
-                                                  style: TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 12),
-                                                ),
-                                        ),
-                                      ],
+                                    icon: Icon(
+                                      isAccepted
+                                          ? Icons.mark_chat_read_rounded
+                                          : Icons.chat_bubble_outline,
+                                      color: isAccepted
+                                          ? const Color(0xFF2E7D32)
+                                          : const Color(0xFF2196F3),
                                     ),
+                                    tooltip: isAccepted
+                                        ? 'Open Offer Chat'
+                                        : 'Send Message',
+                                  ),
                                 ],
                               ),
+
+                              // ── Pending: full-width Accept / Reject ──
+                              if (isPending && !anotherApplicantSelected) ...[
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        onPressed: isProcessing
+                                            ? null
+                                            : () => _rejectApplicant(
+                                                profile.userId),
+                                        icon: isProcessing
+                                            ? const SizedBox(
+                                                width: 14,
+                                                height: 14,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 2))
+                                            : const Icon(Icons.close_rounded,
+                                                size: 18),
+                                        label: const Text('Reject'),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: Colors.red[700],
+                                          side: BorderSide(
+                                              color: Colors.red.shade300),
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 12),
+                                          shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10)),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        onPressed: isProcessing
+                                            ? null
+                                            : () async {
+                                                final chatId =
+                                                    await _acceptApplicant(
+                                                        profile.userId);
+                                                if (!mounted || chatId == null) {
+                                                  return;
+                                                }
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) =>
+                                                        ChatDetailScreen(
+                                                      chatId: chatId,
+                                                      otherUserId: profile.userId,
+                                                      otherUserName:
+                                                          _applicantUsers[profile
+                                                                  .userId]
+                                                              ?.name ??
+                                                              'Applicant',
+                                                      otherUserPhoto:
+                                                          _applicantUsers[profile
+                                                                  .userId]
+                                                              ?.profilePhoto,
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                        icon: isProcessing
+                                            ? const SizedBox(
+                                                width: 14,
+                                                height: 14,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                        color: Colors.white))
+                                            : const Icon(Icons.check_rounded,
+                                                size: 18,
+                                                color: Colors.white),
+                                        label: const Text('Accept & Chat',
+                                            style: TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold)),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              const Color(0xFF43A047),
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 12),
+                                          shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10)),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+
+                              // ── Accepted: open offer chat + revoke ──
+                              if (isAccepted) ...[
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        onPressed: () async {
+                                          if (_currentUser == null) return;
+                                          final nav = Navigator.of(context);
+                                          try {
+                                            showDialog(
+                                              context: context,
+                                              barrierDismissible: false,
+                                              builder: (_) => const Center(
+                                                  child:
+                                                      CircularProgressIndicator()),
+                                            );
+                                            final chatId =
+                                                await _firestoreService
+                                                    .ensureJobApplicationChat(
+                                              jobId: _job.id,
+                                              companyId: _currentUser!.uid,
+                                              skilledUserId: profile.userId,
+                                              jobTitle: _job.title,
+                                              skipStatusCheck: true,
+                                            );
+                                            if (!mounted) return;
+                                            nav.pop();
+                                            nav.push(MaterialPageRoute(
+                                              builder: (_) => ChatDetailScreen(
+                                                chatId: chatId,
+                                                otherUserId: profile.userId,
+                                                otherUserName:
+                                                    _applicantUsers[profile
+                                                            .userId]
+                                                        ?.name ??
+                                                        'Applicant',
+                                                otherUserPhoto:
+                                                    _applicantUsers[profile
+                                                            .userId]
+                                                        ?.profilePhoto,
+                                              ),
+                                            ));
+                                          } catch (e) {
+                                            if (!context.mounted) return;
+                                            nav.pop();
+                                            AppDialog.error(context,
+                                                'Unable to open chat',
+                                                detail: e.toString());
+                                          }
+                                        },
+                                        icon: const Icon(
+                                            Icons.mark_chat_read_rounded,
+                                            size: 18,
+                                            color: Colors.white),
+                                        label: const Text('Open Offer Chat',
+                                            style: TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold)),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              const Color(0xFF1976D2),
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 12),
+                                          shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10)),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    OutlinedButton(
+                                      onPressed: isProcessing
+                                          ? null
+                                          : () =>
+                                              _rejectApplicant(profile.userId),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.red[700],
+                                        side: BorderSide(
+                                            color: Colors.red.shade300),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 12, horizontal: 16),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(10)),
+                                      ),
+                                      child: const Text('Revoke'),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -1070,11 +1247,21 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                             );
                           }
                         },
-                        icon: const Icon(Icons.people),
-                        label: Text('${_job.applicants.length} Applicant${_job.applicants.length == 1 ? '' : 's'}'),
+                        icon: const Icon(
+                          Icons.people,
+                          color: Colors.white,
+                        ),
+                        label: Text(
+                          '${_job.applicants.length} Applicant${_job.applicants.length == 1 ? '' : 's'}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2196F3),
                           foregroundColor: Colors.white,
+                          iconColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
@@ -1122,7 +1309,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                           : Text(
                               _job.status != 'open'
                                   ? 'Job Closed'
-                                  : 'Apply Now',
+                                  : _wasRejected
+                                      ? 'Reapply'
+                                      : 'Apply Now',
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,

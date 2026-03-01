@@ -14,7 +14,8 @@ import '../utils/web_image_loader.dart';
 ///   "textColor": 4294967295,      // ARGB int (Colors.white.value)
 ///   "gradientIndex": 0,           // 0-4 preset gradients
 ///   "animation": "none" | "pulse" | "fade" | "shimmer" | "slide" | "wave",
-///   "fontSize": 28.0
+///   "fontSize": 28.0,
+///   "textMatrix": [16 doubles]    // draggable/scale/rotate transform
 /// }
 /// ```
 class BannerDisplay extends StatefulWidget {
@@ -82,6 +83,22 @@ class _BannerDisplayState extends State<BannerDisplay>
     final idx = (d['gradientIndex'] as int?) ?? -1;
     if (idx >= 0 && idx < _gradients.length) return _gradients[idx];
     return widget.defaultColors;
+  }
+
+  Matrix4 _textMatrixFromData(Map<String, dynamic> d) {
+    final raw = d['textMatrix'];
+    if (raw is List && raw.length == 16) {
+      final values = <double>[];
+      for (final v in raw) {
+        if (v is num) {
+          values.add(v.toDouble());
+        } else {
+          return Matrix4.identity();
+        }
+      }
+      return Matrix4.fromList(values);
+    }
+    return Matrix4.identity();
   }
 
   // ─── Font helper ─────────────────────────────────────────────────────────
@@ -285,16 +302,20 @@ class _BannerDisplayState extends State<BannerDisplay>
           if (type == 'text' && d != null)
             Positioned.fill(
               child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: _animatedText(
-                    (d['text'] as String?) ?? '',
-                    d['fontKey'] as String?,
-                    Color((d['textColor'] as int?) ?? 0xFFFFFFFF),
-                    (d['fontSize'] as num?)?.toDouble() ?? 28.0,
-                    widget.enableAnimations
-                        ? (d['animation'] as String?) ?? 'none'
-                        : 'none',
+                child: Transform(
+                  alignment: Alignment.center,
+                  transform: _textMatrixFromData(d),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: _animatedText(
+                      (d['text'] as String?) ?? '',
+                      d['fontKey'] as String?,
+                      Color((d['textColor'] as int?) ?? 0xFFFFFFFF),
+                      (d['fontSize'] as num?)?.toDouble() ?? 28.0,
+                      widget.enableAnimations
+                          ? (d['animation'] as String?) ?? 'none'
+                          : 'none',
+                    ),
                   ),
                 ),
               ),

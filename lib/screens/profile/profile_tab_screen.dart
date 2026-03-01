@@ -12,6 +12,7 @@ import '../../providers/auth_provider.dart' as app_auth;
 import '../../services/firestore_service.dart';
 import '../../widgets/universal_avatar.dart';
 import '../../screens/avatar/avatar_builder_screen.dart';
+import '../../utils/app_helpers.dart';
 import '../../utils/user_roles.dart';
 import 'profile_screen.dart';
 import 'skilled_user_setup_screen.dart';
@@ -341,7 +342,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                           const SizedBox(height: 14),
                           // Name
                           Text(
-                            _currentUser?.name ?? 'User',
+                            AppHelpers.capitalize(_currentUser?.name ?? 'User'),
                             style: const TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,

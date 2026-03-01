@@ -113,8 +113,12 @@ class _MyShopScreenState extends State<MyShopScreen>
           ? FloatingActionButton.extended(
               onPressed: () => _addProduct(context),
               backgroundColor: const Color(0xFFE91E63),
-              icon: const Icon(Icons.add),
-              label: const Text('Add Product'),
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text(
+                'Add Product',
+                style: TextStyle(color: Colors.white),
+              ),
             )
           : null,
     );

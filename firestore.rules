@@ -25,11 +25,13 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isOwner(userId);
       // Owner can update anything; other authenticated users can only update
-      // rating/reviewCount (review flow) and profileViews (analytics flow)
+      // rating/reviewCount (review flow), profileViews (analytics flow), or
+      // projectCount (updated by the company when accepting a job application).
       allow update: if isAuthenticated() && (
         isOwner(userId) ||
         request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['rating', 'reviewCount', 'updatedAt', 'profileViews'])
+          .hasOnly(['rating', 'reviewCount', 'updatedAt', 'profileViews',
+                    'projectCount'])
       );
       allow delete: if isOwner(userId);
 
@@ -170,12 +172,14 @@ service cloud.firestore {
         (request.resource.data.companyId == request.auth.uid ||
          request.resource.data.postedBy == request.auth.uid);
       // Owner can update anything; skilled users can apply (modify applicants,
-      // applicationStatus & updatedAt only)
+      // applicationStatus & updatedAt only); company or applicant can record
+      // the applicationChatIds link created when the chat is opened.
       allow update: if isAuthenticated() && (
         resource.data.companyId == request.auth.uid ||
         resource.data.postedBy == request.auth.uid ||
         request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['applicants', 'applicationStatus', 'updatedAt'])
+          .hasOnly(['applicants', 'applicationStatus', 'updatedAt',
+                    'applicationChatIds'])
       );
       allow delete: if isAuthenticated() &&
         (resource.data.companyId == request.auth.uid ||

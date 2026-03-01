@@ -286,14 +286,18 @@ class ChatService {
   }
 
   // Get messages stream
-  Stream<List<MessageModel>> getMessages(String chatId) {
-    return _firestore
+  Stream<List<MessageModel>> getMessages(String chatId, {int limit = 200}) {
+    Query<Map<String, dynamic>> query = _firestore
         .collection(AppConstants.chatsCollection)
         .doc(chatId)
         .collection(AppConstants.messagesCollection)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
+        .orderBy('createdAt', descending: true);
+
+    if (limit > 0) {
+      query = query.limit(limit);
+    }
+
+    return query.snapshots().map((snapshot) {
       return snapshot.docs
           .map((doc) => MessageModel.fromMap(doc.data(), doc.id))
           .toList();

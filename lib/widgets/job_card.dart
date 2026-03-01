@@ -230,7 +230,14 @@ class JobCard extends StatelessWidget {
                       Icon(Icons.people, size: 16, color: Colors.grey[600]),
                       const SizedBox(width: 4),
                       Text(
-                        '${job.applicants.length} ${job.applicants.length == 1 ? 'applicant' : 'applicants'}',
+                        () {
+                          final active = job.applicants
+                              .where((id) =>
+                                  (job.applicationStatus[id] ?? 'pending') !=
+                                  'rejected')
+                              .length;
+                          return '$active ${active == 1 ? 'applicant' : 'applicants'}';
+                        }(),
                         style: TextStyle(
                           color: Colors.grey[700],
                           fontSize: 12,

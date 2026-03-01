@@ -10,6 +10,82 @@ import '../../utils/app_constants.dart';
 import '../../utils/user_roles.dart';
 import '../../widgets/universal_avatar.dart';
 import 'chat_detail_screen.dart';
+import 'company_chat_hub_screen.dart';
+
+// ─── Helper: groups multiple chat types for the same person ─────────────────
+class _PersonChatGroup {
+  final String otherUserId;
+  final String otherUserName;
+  final String? otherUserPhoto;
+  ChatModel? normalChat;
+  ChatModel? hiringChat;
+  final List<ChatModel> jobChats = [];
+
+  _PersonChatGroup({
+    required this.otherUserId,
+    required this.otherUserName,
+    this.otherUserPhoto,
+  });
+
+  void addChat(ChatModel chat) {
+    if (chat.isJobChat || chat.id.startsWith('jobchat_')) {
+      jobChats.add(chat);
+    } else if (chat.isWorkChat || chat.id.startsWith('work_')) {
+      if (hiringChat == null ||
+          chat.lastMessageTime.isAfter(hiringChat!.lastMessageTime)) {
+        hiringChat = chat;
+      }
+    } else {
+      if (normalChat == null ||
+          chat.lastMessageTime.isAfter(normalChat!.lastMessageTime)) {
+        normalChat = chat;
+      }
+    }
+  }
+
+  /// Total unread across all chats for a given userId.
+  int totalUnread(String currentUserId) {
+    int count = 0;
+    if (normalChat != null) count += normalChat!.unreadCount[currentUserId] ?? 0;
+    if (hiringChat != null) count += hiringChat!.unreadCount[currentUserId] ?? 0;
+    for (final j in jobChats) {
+      count += j.unreadCount[currentUserId] ?? 0;
+    }
+    return count;
+  }
+
+  /// Latest message time across all chats.
+  DateTime get latestTime {
+    final times = <DateTime>[
+      if (normalChat != null) normalChat!.lastMessageTime,
+      if (hiringChat != null) hiringChat!.lastMessageTime,
+      ...jobChats.map((j) => j.lastMessageTime),
+    ];
+    if (times.isEmpty) return DateTime.fromMillisecondsSinceEpoch(0);
+    return times.reduce((a, b) => a.isAfter(b) ? a : b);
+  }
+
+  /// The most recent last-message text (for subtitle in list item).
+  String get latestMessage {
+    final all = <ChatModel>[
+      if (normalChat != null) normalChat!,
+      if (hiringChat != null) hiringChat!,
+      ...jobChats,
+    ];
+    if (all.isEmpty) return '';
+    all.sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
+    return all.first.lastMessage;
+  }
+
+  /// How many distinct chat types exist beyond just a single normal chat.
+  bool get hasMultipleTypes {
+    int count = 0;
+    if (normalChat != null) count++;
+    if (hiringChat != null) count++;
+    count += jobChats.length;
+    return count > 1;
+  }
+}
 
 class ChatsScreen extends StatefulWidget {
   const ChatsScreen({super.key});
@@ -32,6 +108,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
   /// Updated via a real subscription so amber badges are always in sync.
   Map<String, int> _pendingWorkCounts = {};
   StreamSubscription<QuerySnapshot>? _workReqSub;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userRoleSub;
+  String? _currentUserRole;
 
   @override
   void initState() {
@@ -39,6 +117,15 @@ class _ChatsScreenState extends State<ChatsScreen> {
     _currentUserId = FirebaseAuth.instance.currentUser?.uid;
     if (_currentUserId != null) {
       _chatsStream = _chatService.getUserChats(_currentUserId!);
+      _userRoleSub = FirebaseFirestore.instance
+          .collection(AppConstants.usersCollection)
+          .doc(_currentUserId)
+          .snapshots()
+          .listen((doc) {
+        final role = (doc.data()?['role'] as String?)?.trim();
+        if (!mounted) return;
+        setState(() => _currentUserRole = role);
+      });
 
       // Listen to pending work requests for this user and keep the count map
       // updated via setState so every rebuild of the chat list uses fresh data.
@@ -68,6 +155,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
   @override
   void dispose() {
     _workReqSub?.cancel();
+    _userRoleSub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -244,11 +332,16 @@ class _ChatsScreenState extends State<ChatsScreen> {
     final visibleChats = _collapseChatsByParticipant(chats);
     _warmRoleCacheForChats(visibleChats);
 
+    final jobChats = <ChatModel>[];
     final companyChats = <ChatModel>[];
     final customerChats = <ChatModel>[];
     final deliveryChats = <ChatModel>[];
 
     for (final chat in visibleChats) {
+      if (_isJobChat(chat)) {
+        jobChats.add(chat);
+        continue;
+      }
       final otherRole = _resolvedOtherRoleForChat(chat);
       if (otherRole == UserRoles.company) {
         companyChats.add(chat);
@@ -259,13 +352,44 @@ class _ChatsScreenState extends State<ChatsScreen> {
       }
     }
 
+    final isSkilledPerson =
+        UserRoles.normalizeRole(_currentUserRole) == UserRoles.skilledPerson;
+    if (isSkilledPerson) {
+      return _buildSkilledRoleTabs(
+        customerChats: customerChats,
+        companyChats: [...jobChats, ...companyChats],
+      );
+    }
+
     final sectionWidgets = <Widget>[];
+
+    // ── Merge job chats with matching same-person chats for company hub ──────
+    // Any person who has BOTH a job chat AND a regular/hiring chat will be
+    // grouped into a single hub entry.  We collect all "company-related" chats
+    // (job + company bucket) together and group them by person.
+    final allCompanyRelated = <ChatModel>[...jobChats, ...companyChats];
+    final companyGroups = _groupCompanyChats(allCompanyRelated);
+
+    // Rebuild per-bucket lists excluding already-grouped persons
+    final groupedPersonIds =
+        companyGroups.map((g) => g.otherUserId).toSet();
+    final soloCustomerChats = customerChats
+        .where((c) => !groupedPersonIds.contains(_otherUserId(c)))
+        .toList();
+
+    // Company hub section (grouped single entries per company/person)
+    if (companyGroups.isNotEmpty) {
+      sectionWidgets.add(_buildSectionHeader(
+        title: 'Company Chats',
+        icon: Icons.apartment_rounded,
+        color: const Color(0xFF3949AB),
+      ));
+      sectionWidgets.addAll(companyGroups.map(_buildPersonGroupItem));
+    }
 
     final orderedRegularSections = [
       ('Customer Chats', Icons.person_outline_rounded, const Color(0xFF2E7D32),
-          customerChats),
-      ('Company Chats', Icons.apartment_rounded, const Color(0xFF3949AB),
-          companyChats),
+          soloCustomerChats),
       ('Delivery Chats', Icons.local_shipping_outlined,
           const Color(0xFFEF6C00), deliveryChats),
     ];
@@ -288,6 +412,121 @@ class _ChatsScreenState extends State<ChatsScreen> {
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: sectionWidgets,
+    );
+  }
+
+  // ── Group a mixed list of company-related chats by person ─────────────────
+  List<_PersonChatGroup> _groupCompanyChats(List<ChatModel> chats) {
+    final map = <String, _PersonChatGroup>{};
+    for (final chat in chats) {
+      final uid = _otherUserId(chat);
+      if (uid.isEmpty) continue;
+      final details = chat.participantDetails[uid];
+      final name = (details?['name'] as String? ?? '').trim();
+      final photo = details?['photo'] as String?;
+      map.putIfAbsent(
+        uid,
+        () => _PersonChatGroup(
+          otherUserId: uid,
+          otherUserName: name.isEmpty ? 'Unknown' : name,
+          otherUserPhoto: photo?.isEmpty == true ? null : photo,
+        ),
+      );
+      map[uid]!.addChat(chat);
+    }
+    final groups = map.values.toList()
+      ..sort((a, b) => b.latestTime.compareTo(a.latestTime));
+    return groups;
+  }
+
+  Widget _buildSkilledRoleTabs({
+    required List<ChatModel> customerChats,
+    required List<ChatModel> companyChats,
+  }) {
+    Widget buildTabList(List<ChatModel> chatsInTab, String emptyLabel) {
+      if (chatsInTab.isEmpty) {
+        return Center(
+          child: Text(
+            emptyLabel,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        );
+      }
+      return ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: chatsInTab.map(_buildChatItem).toList(),
+      );
+    }
+
+    // Company tab uses grouped view (one entry per company, tabs inside hub)
+    Widget buildCompanyGroupedList(List<ChatModel> allCompanyChats) {
+      if (allCompanyChats.isEmpty) {
+        return Center(
+          child: Text(
+            'No company chats',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        );
+      }
+      final groups = _groupCompanyChats(allCompanyChats);
+      return ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: groups.map(_buildPersonGroupItem).toList(),
+      );
+    }
+
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAF1FF),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const TabBar(
+              indicatorSize: TabBarIndicatorSize.tab,
+              indicator: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF9C27B0), Color(0xFFE91E63)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.all(Radius.circular(12)),
+              ),
+              labelColor: Colors.white,
+              unselectedLabelColor: Color(0xFF8E24AA),
+              tabs: [
+                Tab(
+                  icon: Icon(Icons.person_outline_rounded),
+                  text: 'Customer Chats',
+                ),
+                Tab(
+                  icon: Icon(Icons.apartment_rounded),
+                  text: 'Company Chats',
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                buildTabList(customerChats, 'No customer chats'),
+                buildCompanyGroupedList(companyChats),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -340,15 +579,16 @@ class _ChatsScreenState extends State<ChatsScreen> {
   }
 
   List<ChatModel> _collapseChatsByParticipant(List<ChatModel> chats) {
-    final byOtherUser = <String, ChatModel>{};
+    final byBucket = <String, ChatModel>{};
 
     for (final chat in chats) {
       final otherUserId = _otherUserId(chat);
       if (otherUserId.isEmpty) continue;
+      final bucketKey = _collapseBucketKey(chat, otherUserId);
 
-      final existing = byOtherUser[otherUserId];
+      final existing = byBucket[bucketKey];
       if (existing == null) {
-        byOtherUser[otherUserId] = chat;
+        byBucket[bucketKey] = chat;
         continue;
       }
 
@@ -357,7 +597,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
 
       // Prefer the regular chat over work-chat clones for the same person.
       if (existingIsWork && !nextIsWork) {
-        byOtherUser[otherUserId] = chat;
+        byBucket[bucketKey] = chat;
         continue;
       }
       if (!existingIsWork && nextIsWork) {
@@ -365,17 +605,28 @@ class _ChatsScreenState extends State<ChatsScreen> {
       }
 
       if (chat.lastMessageTime.isAfter(existing.lastMessageTime)) {
-        byOtherUser[otherUserId] = chat;
+        byBucket[bucketKey] = chat;
       }
     }
 
-    final collapsed = byOtherUser.values.toList()
+    final collapsed = byBucket.values.toList()
       ..sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
     return collapsed;
   }
 
+  String _collapseBucketKey(ChatModel chat, String otherUserId) {
+    if (_isJobChat(chat)) {
+      final jobId = (chat.jobId ?? '').trim();
+      if (jobId.isNotEmpty) return 'job:$otherUserId:$jobId';
+      return 'job:$otherUserId:${chat.id}';
+    }
+    return 'user:$otherUserId';
+  }
+
   bool _isHiringChat(ChatModel chat) =>
       chat.isWorkChat || chat.id.startsWith('work_');
+
+  bool _isJobChat(ChatModel chat) => chat.isJobChat || chat.id.startsWith('jobchat_');
 
   String _otherUserId(ChatModel chat) {
     return chat.participants.firstWhere(
@@ -415,6 +666,196 @@ class _ChatsScreenState extends State<ChatsScreen> {
     }
   }
 
+  // ── Grouped company-hub list tile ─────────────────────────────────────────
+  Widget _buildPersonGroupItem(_PersonChatGroup group) {
+    final name = group.otherUserName;
+    final photo = group.otherUserPhoto;
+    final unreadCount = group.totalUnread(_currentUserId ?? '');
+    final latestMsg = group.latestMessage;
+    final latestTime = group.latestTime;
+
+    // Build type-labels for the small chips row
+    final chips = <Widget>[];
+    if (group.normalChat != null) {
+      chips.add(_chatTypeChip('Chat', const Color(0xFF7B1FA2)));
+    }
+    if (group.hiringChat != null) {
+      chips.add(_chatTypeChip('Hiring', const Color(0xFF2E7D32)));
+    }
+    for (final jc in group.jobChats) {
+      final title = (jc.jobTitle ?? '').trim();
+      chips.add(_chatTypeChip(
+        title.isNotEmpty ? title : 'Job Chat',
+        const Color(0xFF1565C0),
+        icon: Icons.work_history_outlined,
+      ));
+    }
+
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CompanyChatHubScreen(
+              otherUserId: group.otherUserId,
+              otherUserName: name,
+              otherUserPhoto: photo,
+            ),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Avatar with presence dot
+            StreamBuilder<UserPresence>(
+              stream: PresenceService.instance.watchUser(group.otherUserId),
+              builder: (context, snap) {
+                final isOnline = snap.data?.isOnline ?? false;
+                return Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 28,
+                      backgroundColor: Colors.transparent,
+                      child: UniversalAvatar(
+                        photoUrl: photo,
+                        fallbackName: name,
+                        radius: 28,
+                        animate: false,
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: isOnline ? Colors.green : Colors.grey,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                      ),
+                    ),
+                    if (unreadCount > 0)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFE91E63),
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                          child: Center(
+                            child: Text(
+                              unreadCount > 99 ? '99+' : unreadCount.toString(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(width: 12),
+
+            // Name + latest message + chip row
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          AppHelpers.capitalize(name),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        AppHelpers.getRelativeTime(latestTime),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: unreadCount > 0
+                              ? const Color(0xFFE91E63)
+                              : Colors.grey[600],
+                          fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    latestMsg.isEmpty ? 'No messages yet' : latestMsg,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: unreadCount > 0 ? Colors.black87 : Colors.grey[600],
+                      fontWeight: unreadCount > 0 ? FontWeight.w500 : FontWeight.normal,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (chips.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Wrap(spacing: 4, runSpacing: 2, children: chips),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chatTypeChip(String label, Color color, {IconData? icon}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 11, color: color),
+            const SizedBox(width: 3),
+          ],
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildChatItem(ChatModel chat) {
     final otherUserId = chat.participants.firstWhere(
       (id) => id != _currentUserId,
@@ -425,6 +866,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
     final photo = otherUserDetails?['photo'];
     final unreadCount = chat.unreadCount[_currentUserId] ?? 0;
     final pendingWork = _pendingWorkCounts[chat.id] ?? 0;
+    final isJobChat = _isJobChat(chat);
+    final jobTitle = (chat.jobTitle ?? '').trim();
 
     return InkWell(
       onTap: () {
@@ -613,6 +1056,30 @@ class _ChatsScreenState extends State<ChatsScreen> {
                       ),
                     ],
                   ),
+                  if (isJobChat) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.work_history_outlined,
+                            size: 13, color: Color(0xFF1565C0)),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            jobTitle.isNotEmpty
+                                ? 'Job Chat: $jobTitle'
+                                : 'Job Chat',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF1565C0),
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   // Amber work-request indicator row
                   if (pendingWork > 0) ...[
                     const SizedBox(height: 4),
