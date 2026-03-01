@@ -23,12 +23,14 @@ class BannerDisplay extends StatefulWidget {
     required this.bannerData,
     required this.defaultColors,
     this.height = 200.0,
+    this.enableAnimations = true,
     this.child, // extra overlay widget (e.g. pencil edit button)
   });
 
   final Map<String, dynamic>? bannerData;
   final List<Color> defaultColors;
   final double height;
+  final bool enableAnimations;
   final Widget? child;
 
   @override
@@ -37,8 +39,8 @@ class BannerDisplay extends StatefulWidget {
 
 class _BannerDisplayState extends State<BannerDisplay>
     with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _anim;
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
 
   @override
   void initState() {
@@ -46,7 +48,10 @@ class _BannerDisplayState extends State<BannerDisplay>
     _ctrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
-    )..repeat(reverse: true);
+    );
+    if (widget.enableAnimations) {
+      _ctrl.repeat(reverse: true);
+    }
     _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
   }
 
@@ -124,6 +129,9 @@ class _BannerDisplayState extends State<BannerDisplay>
   Widget _animatedText(String text, String? fontKey, Color color,
       double fontSize, String animation) {
     final style = fontStyle(fontKey, fontSize, color, true);
+    if (!widget.enableAnimations) {
+      return Text(text, style: style, textAlign: TextAlign.center);
+    }
 
     switch (animation) {
       case 'pulse':
@@ -190,9 +198,15 @@ class _BannerDisplayState extends State<BannerDisplay>
               textAlign: TextAlign.center,
               style: style.copyWith(
                 shadows: [
-                  Shadow(color: color.withValues(alpha: 0.8), blurRadius: glowRadius),
-                  Shadow(color: color.withValues(alpha: 0.4), blurRadius: glowRadius * 2),
-                  Shadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 8),
+                  Shadow(
+                      color: color.withValues(alpha: 0.8),
+                      blurRadius: glowRadius),
+                  Shadow(
+                      color: color.withValues(alpha: 0.4),
+                      blurRadius: glowRadius * 2),
+                  Shadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 8),
                 ],
               ),
             );
@@ -202,7 +216,8 @@ class _BannerDisplayState extends State<BannerDisplay>
         return AnimatedBuilder(
           animation: _ctrl,
           builder: (_, __) {
-            final charCount = (text.length * _ctrl.value).ceil().clamp(0, text.length);
+            final charCount =
+                (text.length * _ctrl.value).ceil().clamp(0, text.length);
             final visible = text.substring(0, charCount);
             return Text(visible, style: style, textAlign: TextAlign.center);
           },
@@ -231,7 +246,8 @@ class _BannerDisplayState extends State<BannerDisplay>
         clipBehavior: Clip.none,
         children: [
           // ── background ──
-          if (type == 'image' && (d?['imageUrl'] as String?)?.isNotEmpty == true)
+          if (type == 'image' &&
+              (d?['imageUrl'] as String?)?.isNotEmpty == true)
             Positioned.fill(
               child: WebImageLoader.loadImage(
                 imageUrl: d!['imageUrl'] as String,
@@ -276,7 +292,9 @@ class _BannerDisplayState extends State<BannerDisplay>
                     d['fontKey'] as String?,
                     Color((d['textColor'] as int?) ?? 0xFFFFFFFF),
                     (d['fontSize'] as num?)?.toDouble() ?? 28.0,
-                    (d['animation'] as String?) ?? 'none',
+                    widget.enableAnimations
+                        ? (d['animation'] as String?) ?? 'none'
+                        : 'none',
                   ),
                 ),
               ),

@@ -10,7 +10,8 @@ class OrderModel {
   final int quantity;
   final double unitPrice;
   final double totalPrice;
-  final String status; // pending, confirmed, shipped, delivered, cancelled
+  final String
+      status; // pending, confirmed, shipped, out_for_delivery, delivered, cancelled, failed_delivery
   final String? buyerName;
   final String? buyerEmail;
   final String paymentMethod; // gpay_simulation, cod, etc.
@@ -26,6 +27,8 @@ class OrderModel {
   final String? deliveryPartnerId;
   final String? deliveryPartnerName;
   final DateTime? estimatedDelivery;
+  final bool deliveryByPartner;
+  final int? deliveryQuantityLimit;
 
   const OrderModel({
     required this.id,
@@ -53,6 +56,8 @@ class OrderModel {
     this.deliveryPartnerId,
     this.deliveryPartnerName,
     this.estimatedDelivery,
+    this.deliveryByPartner = false,
+    this.deliveryQuantityLimit,
   });
 
   static Map<String, DateTime> _parseTimeline(dynamic rawTimeline) {
@@ -106,6 +111,8 @@ class OrderModel {
       deliveryPartnerId: map['deliveryPartnerId'],
       deliveryPartnerName: map['deliveryPartnerName'],
       estimatedDelivery: (map['estimatedDelivery'] as Timestamp?)?.toDate(),
+      deliveryByPartner: map['deliveryByPartner'] == true,
+      deliveryQuantityLimit: (map['deliveryQuantityLimit'] as num?)?.toInt(),
     );
   }
 
@@ -141,6 +148,9 @@ class OrderModel {
         'deliveryPartnerName': deliveryPartnerName,
       if (estimatedDelivery != null)
         'estimatedDelivery': Timestamp.fromDate(estimatedDelivery!),
+      'deliveryByPartner': deliveryByPartner,
+      if (deliveryQuantityLimit != null)
+        'deliveryQuantityLimit': deliveryQuantityLimit,
     };
   }
 }

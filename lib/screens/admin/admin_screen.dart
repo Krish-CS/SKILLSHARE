@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/user_model.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/user_roles.dart';
-import '../../utils/web_image_loader.dart';
+import '../../widgets/universal_avatar.dart';
 import '../../widgets/app_popup.dart';
 
 class AdminScreen extends StatefulWidget {
@@ -557,18 +557,12 @@ class _UserCard extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            CircleAvatar(
+            UniversalAvatar(
+              avatarConfig: user.avatarConfig,
+              photoUrl: user.profilePhoto,
+              fallbackName: user.name,
               radius: 24,
-              backgroundImage:
-                  WebImageLoader.getImageProvider(user.profilePhoto),
-              backgroundColor: _roleColor.withValues(alpha: 0.2),
-              child: (user.profilePhoto == null || user.profilePhoto!.isEmpty)
-                  ? Text(
-                      user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
-                      style: TextStyle(
-                          color: _roleColor, fontWeight: FontWeight.bold),
-                    )
-                  : null,
+              animate: false,
             ),
             const SizedBox(width: 12),
             Expanded(

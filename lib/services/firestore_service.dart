@@ -21,6 +21,7 @@ class FirestoreService {
       AppConstants.aadhaarRegistryCollection;
   static const String _aadhaarChangeRequestType = 'aadhaar_change_request';
   static const String _chatWorkRequestType = 'chat_work_request';
+  static const String _legacyDirectHireServiceId = 'direct_hire';
 
   String _normalizeAadhaar(String aadhaar) =>
       aadhaar.replaceAll(' ', '').trim();
@@ -98,6 +99,101 @@ class FirestoreService {
 
     if (!doc.exists) return null;
     return UserModel.fromMap(doc.data()!, userId);
+  }
+
+  bool _isWorkRequestLike(ServiceRequestModel request) {
+    final normalizedType = request.type.toLowerCase().trim();
+    final normalizedServiceId = request.serviceId.toLowerCase().trim();
+    return normalizedType == _chatWorkRequestType ||
+        normalizedServiceId == _legacyDirectHireServiceId;
+  }
+
+  Map<String, dynamic> _participantDetailsFromUser(UserModel? user) {
+    final safeName = (user?.name ?? '').trim();
+    final safePhoto = (user?.profilePhoto ?? '').trim();
+    final safeRole = (user?.role ?? '').trim();
+    return {
+      'name': safeName.isEmpty ? 'User' : safeName,
+      'photo': safePhoto,
+      if (safeRole.isNotEmpty) 'role': safeRole,
+    };
+  }
+
+  Future<String> _ensureDirectChatBetweenUsers({
+    required UserModel? userA,
+    required UserModel? userB,
+    required String userAId,
+    required String userBId,
+  }) async {
+    final participants = [userAId, userBId]..sort();
+    final chatId = '${participants[0]}__${participants[1]}';
+    final chatRef =
+        _firestore.collection(AppConstants.chatsCollection).doc(chatId);
+    final chatData = {
+      'participants': participants,
+      'participantDetails': {
+        userAId: _participantDetailsFromUser(userA),
+        userBId: _participantDetailsFromUser(userB),
+      },
+      'lastMessage': '',
+      'lastMessageType': 'text',
+      'lastMessageTime': FieldValue.serverTimestamp(),
+      'unreadCount': {
+        for (final id in participants) id: 0,
+      },
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    try {
+      await chatRef.set(chatData, SetOptions(merge: true));
+      return chatId;
+    } on FirebaseException catch (e) {
+      if (e.code != 'permission-denied') rethrow;
+      final fallbackRef = await _firestore
+          .collection(AppConstants.chatsCollection)
+          .add(chatData);
+      return fallbackRef.id;
+    }
+  }
+
+  Future<String> _ensureWorkProjectChat({
+    required String requestId,
+    required String customerId,
+    required String skilledUserId,
+    String? originChatId,
+    String? requestTitle,
+  }) async {
+    final customer = await getUserById(customerId);
+    final skilled = await getUserById(skilledUserId);
+    final participants = [customerId, skilledUserId]..sort();
+    final workChatId = 'work_$requestId';
+    final workChatRef =
+        _firestore.collection(AppConstants.chatsCollection).doc(workChatId);
+
+    await workChatRef.set({
+      'participants': participants,
+      'participantDetails': {
+        customerId: _participantDetailsFromUser(customer),
+        skilledUserId: _participantDetailsFromUser(skilled),
+      },
+      'lastMessage': '',
+      'lastMessageType': 'text',
+      'lastMessageTime': FieldValue.serverTimestamp(),
+      'unreadCount': {
+        for (final id in participants) id: 0,
+      },
+      'isWorkChat': true,
+      'workRequestId': requestId,
+      if (originChatId != null && originChatId.trim().isNotEmpty)
+        'originChatId': originChatId.trim(),
+      if (requestTitle != null && requestTitle.trim().isNotEmpty)
+        'workTitle': requestTitle.trim(),
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    return workChatId;
   }
 
   Future<List<UserModel>> getCompanyUsers({
@@ -1378,9 +1474,31 @@ class FirestoreService {
     final batch = _firestore.batch();
     final createdOrders = <OrderModel>[];
     final now = DateTime.now();
+    final sellerShopSettingsById = <String, Map<String, dynamic>>{};
+    final sellerUserSettingsById = <String, Map<String, dynamic>>{};
     final normalizedPaymentMethod =
         paymentMethod.trim().isEmpty ? 'gpay_simulation' : paymentMethod.trim();
     final normalizedReference = paymentReference?.trim();
+
+    int parseMaxDeliveryQuantity(dynamic value) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      if (value is String) {
+        final parsed = int.tryParse(value.trim());
+        if (parsed != null) return parsed;
+      }
+      return 0;
+    }
+
+    bool parseAllowDelivery(dynamic value) {
+      if (value is bool) return value;
+      if (value is String) {
+        final normalized = value.trim().toLowerCase();
+        return normalized == 'true' || normalized == '1' || normalized == 'yes';
+      }
+      if (value is num) return value != 0;
+      return true;
+    }
 
     for (final item in cartItems) {
       final productRef = _firestore
@@ -1397,6 +1515,28 @@ class FirestoreService {
         throw Exception(
             'Insufficient stock for "${latestProduct.name}". Please update cart.');
       }
+
+      if (!sellerShopSettingsById.containsKey(latestProduct.userId)) {
+        sellerShopSettingsById[latestProduct.userId] =
+            await getShopSettings(latestProduct.userId);
+      }
+      if (!sellerUserSettingsById.containsKey(latestProduct.userId)) {
+        sellerUserSettingsById[latestProduct.userId] =
+            await getUserSettings(latestProduct.userId);
+      }
+      final shopSettings = sellerShopSettingsById[latestProduct.userId]!;
+      final userSettings = sellerUserSettingsById[latestProduct.userId]!;
+      final profileWorkflowEnabled =
+          parseAllowDelivery(userSettings['enableShopDeliveryWorkflow']);
+      final allowDeliveryIfAvailable =
+          parseAllowDelivery(shopSettings['enableDeliveryIfAvailable']);
+      final configuredMaxDeliveryQty =
+          parseMaxDeliveryQuantity(shopSettings['maxDeliveryQuantity']);
+      final appliedMaxDeliveryQty =
+          configuredMaxDeliveryQty > 0 ? configuredMaxDeliveryQty : 10;
+      final deliveryByPartner = profileWorkflowEnabled &&
+          allowDeliveryIfAvailable &&
+          item.quantity <= appliedMaxDeliveryQty;
 
       final orderRef =
           _firestore.collection(AppConstants.ordersCollection).doc();
@@ -1425,6 +1565,8 @@ class FirestoreService {
         sellerTransferStatus: 'credited_simulated',
         sellerTransferAt: now,
         statusTimeline: {'pending': now},
+        deliveryByPartner: deliveryByPartner,
+        deliveryQuantityLimit: appliedMaxDeliveryQty,
         createdAt: now,
         updatedAt: now,
       );
@@ -1476,13 +1618,7 @@ class FirestoreService {
     required String sellerId,
     required String status,
   }) async {
-    const allowedStatuses = {
-      'pending',
-      'confirmed',
-      'shipped',
-      'delivered',
-      'cancelled',
-    };
+    const allowedStatuses = {'confirmed', 'shipped', 'delivered', 'cancelled'};
     if (!allowedStatuses.contains(status)) {
       throw Exception('Invalid order status.');
     }
@@ -1497,6 +1633,36 @@ class FirestoreService {
     final orderSellerId = orderSnap.data()?['sellerId'] as String?;
     if (orderSellerId != sellerId) {
       throw Exception('You are not authorized to update this order.');
+    }
+
+    final data = orderSnap.data() ?? <String, dynamic>{};
+    final currentStatus = (data['status'] as String?)?.trim() ?? 'pending';
+    final deliveryByPartner = data['deliveryByPartner'] == true;
+
+    bool isAllowedTransition() {
+      if (currentStatus == 'pending') {
+        return status == 'confirmed' || status == 'cancelled';
+      }
+      if (currentStatus == 'confirmed') {
+        if (deliveryByPartner) {
+          return status == 'cancelled';
+        }
+        return status == 'shipped' || status == 'cancelled';
+      }
+      if (currentStatus == 'shipped') {
+        return status == 'delivered' || status == 'cancelled';
+      }
+      return false;
+    }
+
+    if (!isAllowedTransition()) {
+      throw Exception(
+          'Invalid transition: $currentStatus -> $status for this order.');
+    }
+
+    if (deliveryByPartner && (status == 'shipped' || status == 'delivered')) {
+      throw Exception(
+          'Seller cannot mark shipped/delivered for delivery-partner orders.');
     }
 
     await orderRef.update({
@@ -1524,17 +1690,18 @@ class FirestoreService {
     });
   }
 
-  /// Stream orders that are 'shipped' and have no delivery partner (available to pick up).
+  /// Stream orders that are confirmed for partner delivery and unassigned.
   Stream<List<OrderModel>> streamAvailableDeliveries() {
     return _firestore
         .collection(AppConstants.ordersCollection)
-        .where('status', isEqualTo: 'shipped')
+        .where('status', isEqualTo: 'confirmed')
         .snapshots()
         .map((snapshot) {
       final orders = snapshot.docs
           .map((doc) => OrderModel.fromMap(doc.data(), doc.id))
           .where((o) =>
-              o.deliveryPartnerId == null || o.deliveryPartnerId!.isEmpty)
+              o.deliveryByPartner &&
+              (o.deliveryPartnerId == null || o.deliveryPartnerId!.isEmpty))
           .toList();
       orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return orders;
@@ -1548,23 +1715,44 @@ class FirestoreService {
     required String deliveryPartnerName,
     DateTime? estimatedDelivery,
   }) async {
+    final ref =
+        _firestore.collection(AppConstants.ordersCollection).doc(orderId);
+    final snap = await ref.get();
+    if (!snap.exists) {
+      throw Exception('Order not found.');
+    }
+    final data = snap.data() ?? <String, dynamic>{};
+    final status = (data['status'] as String?)?.trim() ?? '';
+    final deliveryByPartner = data['deliveryByPartner'] == true;
+    final assignedPartnerId =
+        (data['deliveryPartnerId'] as String?)?.trim() ?? '';
+
+    if (!deliveryByPartner) {
+      throw Exception(
+          'This order is not configured for delivery partner flow.');
+    }
+    if (status != 'confirmed') {
+      throw Exception('Only confirmed orders can be accepted for delivery.');
+    }
+    if (assignedPartnerId.isNotEmpty) {
+      throw Exception('This order is already assigned to a delivery partner.');
+    }
+
     final updateData = <String, dynamic>{
       'deliveryPartnerId': deliveryPartnerId,
       'deliveryPartnerName': deliveryPartnerName,
       'status': 'out_for_delivery',
+      'statusTimeline.shipped': FieldValue.serverTimestamp(),
       'statusTimeline.out_for_delivery': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
     if (estimatedDelivery != null) {
       updateData['estimatedDelivery'] = Timestamp.fromDate(estimatedDelivery);
     }
-    await _firestore
-        .collection(AppConstants.ordersCollection)
-        .doc(orderId)
-        .update(updateData);
+    await ref.update(updateData);
   }
 
-  /// Update order delivery status (only delivery partner or seller can do this).
+  /// Update order delivery status (only assigned delivery partner can do this).
   Future<void> updateDeliveryStatus({
     required String orderId,
     required String deliveryPartnerId,
@@ -1584,6 +1772,10 @@ class FirestoreService {
     if (!snap.exists) throw Exception('Order not found.');
     final data = snap.data()!;
     final assignedId = data['deliveryPartnerId'] as String?;
+    final deliveryByPartner = data['deliveryByPartner'] == true;
+    if (!deliveryByPartner) {
+      throw Exception('This order is not using delivery-partner flow.');
+    }
     if (assignedId != deliveryPartnerId) {
       throw Exception(
           'You are not the assigned delivery partner for this order.');
@@ -1591,6 +1783,35 @@ class FirestoreService {
     await ref.update({
       'status': status,
       'statusTimeline.$status': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Update estimated delivery timeline for the assigned delivery partner.
+  Future<void> updateDeliveryEstimate({
+    required String orderId,
+    required String deliveryPartnerId,
+    required DateTime estimatedDelivery,
+  }) async {
+    final ref =
+        _firestore.collection(AppConstants.ordersCollection).doc(orderId);
+    final snap = await ref.get();
+    if (!snap.exists) {
+      throw Exception('Order not found.');
+    }
+    final data = snap.data() ?? <String, dynamic>{};
+    final deliveryByPartner = data['deliveryByPartner'] == true;
+    final assignedId = (data['deliveryPartnerId'] as String?)?.trim() ?? '';
+    if (!deliveryByPartner) {
+      throw Exception('This order is not using delivery-partner flow.');
+    }
+    if (assignedId != deliveryPartnerId) {
+      throw Exception(
+          'You are not the assigned delivery partner for this order.');
+    }
+
+    await ref.update({
+      'estimatedDelivery': Timestamp.fromDate(estimatedDelivery),
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -1633,9 +1854,51 @@ class FirestoreService {
   }
 
   Future<void> applyForJob(String jobId, String userId) async {
-    await _firestore.collection(AppConstants.jobsCollection).doc(jobId).update({
-      'applicants': FieldValue.arrayUnion([userId]),
-      'updatedAt': FieldValue.serverTimestamp(),
+    final jobRef =
+        _firestore.collection(AppConstants.jobsCollection).doc(jobId);
+    final userRef =
+        _firestore.collection(AppConstants.usersCollection).doc(userId);
+
+    await _firestore.runTransaction((transaction) async {
+      final jobSnap = await transaction.get(jobRef);
+      if (!jobSnap.exists) {
+        throw Exception('Job not found.');
+      }
+
+      final userSnap = await transaction.get(userRef);
+      if (!userSnap.exists) {
+        throw Exception('User not found.');
+      }
+
+      final jobData = jobSnap.data()!;
+      final userData = userSnap.data()!;
+      final role = (userData['role'] as String?)?.trim().toLowerCase() ?? '';
+
+      if (role != AppConstants.roleSkilledUser) {
+        throw Exception('Only skilled users can apply for jobs.');
+      }
+      if ((jobData['status'] as String?) != AppConstants.jobStatusOpen) {
+        throw Exception('This job is no longer open.');
+      }
+      if ((jobData['companyId'] as String?) == userId ||
+          (jobData['postedBy'] as String?) == userId) {
+        throw Exception('You cannot apply to your own job.');
+      }
+
+      final existingStatus =
+          (jobData['applicationStatus'] as Map<String, dynamic>? ?? {})[userId]
+              ?.toString();
+      if (existingStatus == 'accepted') {
+        throw Exception('You are already accepted for this job.');
+      }
+
+      final Map<String, dynamic> updates = {
+        'applicants': FieldValue.arrayUnion([userId]),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'applicationStatus.$userId': 'pending',
+      };
+
+      transaction.update(jobRef, updates);
     });
   }
 
@@ -1652,6 +1915,101 @@ class FirestoreService {
           .toList();
       jobs.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return jobs.take(limit).toList();
+    });
+  }
+
+  /// Real-time stream of jobs posted by a specific company/user (all statuses).
+  Stream<List<JobModel>> streamCompanyJobs(String companyId,
+      {int limit = 100}) {
+    return _firestore
+        .collection(AppConstants.jobsCollection)
+        .where('companyId', isEqualTo: companyId)
+        .limit(limit)
+        .snapshots()
+        .map((snapshot) {
+      final jobs = snapshot.docs
+          .map((doc) => JobModel.fromMap(doc.data(), doc.id))
+          .toList();
+      jobs.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return jobs;
+    });
+  }
+
+  /// Realtime stream for a single job document.
+  Stream<JobModel?> streamJob(String jobId) {
+    return _firestore
+        .collection(AppConstants.jobsCollection)
+        .doc(jobId)
+        .snapshots()
+        .map((doc) {
+      if (!doc.exists || doc.data() == null) return null;
+      return JobModel.fromMap(doc.data()!, doc.id);
+    });
+  }
+
+  /// Accept one applicant for a job.
+  /// Sets selectedApplicant and moves job to in_progress.
+  Future<void> acceptJobApplicant({
+    required String jobId,
+    required String applicantId,
+    required String companyId,
+  }) async {
+    final jobRef =
+        _firestore.collection(AppConstants.jobsCollection).doc(jobId);
+    await _firestore.runTransaction((transaction) async {
+      final jobSnap = await transaction.get(jobRef);
+      if (!jobSnap.exists) throw Exception('Job not found.');
+
+      final data = jobSnap.data()!;
+      final ownerId =
+          (data['companyId'] as String?) ?? (data['postedBy'] as String?) ?? '';
+      if (ownerId != companyId) {
+        throw Exception('Only job owner can accept applicants.');
+      }
+
+      final applicants = List<String>.from(data['applicants'] ?? const []);
+      if (!applicants.contains(applicantId)) {
+        throw Exception('Applicant not found in this job.');
+      }
+
+      transaction.update(jobRef, {
+        'selectedApplicant': applicantId,
+        'status': AppConstants.jobStatusInProgress,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'applicationStatus.$applicantId': 'accepted',
+      });
+    });
+  }
+
+  /// Reject an applicant for a job.
+  /// Keeps applicant history but marks status as rejected.
+  Future<void> rejectJobApplicant({
+    required String jobId,
+    required String applicantId,
+    required String companyId,
+  }) async {
+    final jobRef =
+        _firestore.collection(AppConstants.jobsCollection).doc(jobId);
+    await _firestore.runTransaction((transaction) async {
+      final jobSnap = await transaction.get(jobRef);
+      if (!jobSnap.exists) throw Exception('Job not found.');
+
+      final data = jobSnap.data()!;
+      final ownerId =
+          (data['companyId'] as String?) ?? (data['postedBy'] as String?) ?? '';
+      if (ownerId != companyId) {
+        throw Exception('Only job owner can reject applicants.');
+      }
+
+      final applicants = List<String>.from(data['applicants'] ?? const []);
+      if (!applicants.contains(applicantId)) {
+        throw Exception('Applicant not found in this job.');
+      }
+
+      transaction.update(jobRef, {
+        'updatedAt': FieldValue.serverTimestamp(),
+        'applicationStatus.$applicantId': 'rejected',
+      });
     });
   }
 
@@ -1821,11 +2179,27 @@ class FirestoreService {
       throw Exception('You already have a pending hire request for this user.');
     }
 
+    final skilledUser = await getUserById(skilledUserId);
+    final chatId = await _ensureDirectChatBetweenUsers(
+      userA: requester,
+      userB: skilledUser,
+      userAId: requesterId,
+      userBId: skilledUserId,
+    );
+
     final now = DateTime.now();
     final request = ServiceRequestModel(
       id: '',
+      type: _chatWorkRequestType,
+      chatId: chatId,
       customerId: requesterId,
       skilledUserId: skilledUserId,
+      requesterId: requesterId,
+      requesterName: requester?.name,
+      requesterPhoto: requester?.profilePhoto,
+      skilledUserName: skilledUser?.name,
+      skilledUserPhoto: skilledUser?.profilePhoto,
+      participants: [requesterId, skilledUserId],
       serviceId: 'direct_hire',
       title: normalizedTitle,
       description: normalizedDescription,
@@ -1870,6 +2244,7 @@ class FirestoreService {
         'This skilled profile is not available for work requests yet.',
       );
     }
+    final skilledUser = await getUserById(skilledUserId);
 
     // No duplicate check — customers can submit multiple work requests per chat.
     final docRef = _firestore.collection(AppConstants.requestsCollection).doc();
@@ -1878,7 +2253,11 @@ class FirestoreService {
       'chatId': chatId,
       'customerId': customerId,
       'requesterId': customerId,
+      'requesterName': customer?.name ?? '',
+      'requesterPhoto': customer?.profilePhoto ?? '',
       'skilledUserId': skilledUserId,
+      'skilledUserName': skilledUser?.name ?? '',
+      'skilledUserPhoto': skilledUser?.profilePhoto ?? '',
       'participants': [customerId, skilledUserId],
       'serviceId': 'chat_work',
       'title': normalizedTitle,
@@ -1899,7 +2278,7 @@ class FirestoreService {
         .map((snapshot) {
       final requests = snapshot.docs
           .map((doc) => ServiceRequestModel.fromMap(doc.data(), doc.id))
-          .where((r) => r.type == _chatWorkRequestType) // type filter in memory
+          .where(_isWorkRequestLike) // type filter in memory
           .toList();
       requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return requests;
@@ -1915,7 +2294,7 @@ class FirestoreService {
         .map((snapshot) {
       final requests = snapshot.docs
           .map((doc) => ServiceRequestModel.fromMap(doc.data(), doc.id))
-          .where((r) => r.type == _chatWorkRequestType) // type filter in memory
+          .where(_isWorkRequestLike) // type filter in memory
           .toList();
       requests.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       return requests;
@@ -1934,7 +2313,7 @@ class FirestoreService {
 
     final requests = snapshot.docs
         .map((doc) => ServiceRequestModel.fromMap(doc.data(), doc.id))
-        .where((r) => r.type == _chatWorkRequestType) // type filter in memory
+        .where(_isWorkRequestLike) // type filter in memory
         .toList();
     requests.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     if (requests.length > limit) {
@@ -1947,20 +2326,32 @@ class FirestoreService {
     String userId, {
     int limit = 20,
   }) async {
-    final snapshots = await Future.wait([
-      _firestore
+    // Run each query independently so a permission error on one field
+    // (e.g. deliveryPartnerId for a non-delivery user) doesn't block others.
+    Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> safeDocs(
+        Query<Map<String, dynamic>> q) async {
+      try {
+        return (await q.get()).docs;
+      } catch (_) {
+        return const [];
+      }
+    }
+
+    final results = await Future.wait([
+      safeDocs(_firestore
           .collection(AppConstants.ordersCollection)
-          .where('buyerId', isEqualTo: userId)
-          .get(),
-      _firestore
+          .where('buyerId', isEqualTo: userId)),
+      safeDocs(_firestore
           .collection(AppConstants.ordersCollection)
-          .where('sellerId', isEqualTo: userId)
-          .get(),
+          .where('sellerId', isEqualTo: userId)),
+      safeDocs(_firestore
+          .collection(AppConstants.ordersCollection)
+          .where('deliveryPartnerId', isEqualTo: userId)),
     ]);
 
     final ordersById = <String, OrderModel>{};
-    for (final snapshot in snapshots) {
-      for (final doc in snapshot.docs) {
+    for (final docs in results) {
+      for (final doc in docs) {
         ordersById[doc.id] = OrderModel.fromMap(doc.data(), doc.id);
       }
     }
@@ -1988,6 +2379,7 @@ class FirestoreService {
     String? customerId;
     String? requestTitle;
     String? requestDescription;
+    String? originChatId;
 
     await _firestore.runTransaction((transaction) async {
       final requestSnap = await transaction.get(requestRef);
@@ -1998,7 +2390,10 @@ class FirestoreService {
       final data = requestSnap.data() ?? <String, dynamic>{};
       final requestType =
           ((data['type'] as String?) ?? '').toLowerCase().trim();
-      if (requestType != _chatWorkRequestType) {
+      final serviceId =
+          ((data['serviceId'] as String?) ?? '').toLowerCase().trim();
+      if (requestType != _chatWorkRequestType &&
+          serviceId != _legacyDirectHireServiceId) {
         throw Exception('Invalid work request type.');
       }
 
@@ -2017,6 +2412,7 @@ class FirestoreService {
           ((data['customerId'] ?? data['requesterId']) as String?)?.trim();
       requestTitle = (data['title'] as String?)?.trim() ?? 'Unnamed Project';
       requestDescription = (data['description'] as String?)?.trim() ?? '';
+      originChatId = (data['chatId'] as String?)?.trim();
 
       final nextStatus = approve
           ? AppConstants.requestStatusAccepted
@@ -2043,16 +2439,76 @@ class FirestoreService {
 
     // After transaction: add to customer/company assignedProjects
     if (approve && customerId != null && customerId!.isNotEmpty) {
+      final workChatId = await _ensureWorkProjectChat(
+        requestId: requestId,
+        customerId: customerId!,
+        skilledUserId: skilledUserId,
+        originChatId: originChatId,
+        requestTitle: requestTitle,
+      );
+      await requestRef.set({
+        'workChatId': workChatId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
       final projectEntry = {
         'requestId': requestId,
         'title': requestTitle,
         'description': requestDescription,
         'skilledUserId': skilledUserId,
+        'workChatId': workChatId,
         'status': 'accepted',
         'assignedAt': DateTime.now().toIso8601String(),
       };
       await _addProjectToUserProfile(customerId!, projectEntry);
     }
+  }
+
+  Future<String> ensureWorkChatForRequest({
+    required String requestId,
+  }) async {
+    final requestRef =
+        _firestore.collection(AppConstants.requestsCollection).doc(requestId);
+    final snap = await requestRef.get();
+    if (!snap.exists) {
+      throw Exception('Work request not found.');
+    }
+    final data = snap.data() ?? <String, dynamic>{};
+    final type = ((data['type'] as String?) ?? '').toLowerCase().trim();
+    final serviceId =
+        ((data['serviceId'] as String?) ?? '').toLowerCase().trim();
+    if (type != _chatWorkRequestType &&
+        serviceId != _legacyDirectHireServiceId) {
+      throw Exception('Invalid work request type.');
+    }
+    final status = ((data['status'] as String?) ?? '').toLowerCase().trim();
+    if (status != AppConstants.requestStatusAccepted &&
+        status != AppConstants.requestStatusCompleted) {
+      throw Exception('Work chat is available only for accepted projects.');
+    }
+
+    final existing = (data['workChatId'] as String?)?.trim() ?? '';
+    if (existing.isNotEmpty) return existing;
+
+    final customerId =
+        ((data['customerId'] ?? data['requesterId']) as String?)?.trim() ?? '';
+    final skilledUserId = (data['skilledUserId'] as String?)?.trim() ?? '';
+    if (customerId.isEmpty || skilledUserId.isEmpty) {
+      throw Exception('Invalid work request participants.');
+    }
+
+    final workChatId = await _ensureWorkProjectChat(
+      requestId: requestId,
+      customerId: customerId,
+      skilledUserId: skilledUserId,
+      originChatId: (data['chatId'] as String?)?.trim(),
+      requestTitle: (data['title'] as String?)?.trim(),
+    );
+    await requestRef.set({
+      'workChatId': workChatId,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    return workChatId;
   }
 
   /// Adds a project entry to the customer_profiles or company_profiles assignedProjects array.
@@ -2089,13 +2545,20 @@ class FirestoreService {
         .collection(AppConstants.skilledUsersCollection)
         .doc(userId)
         .get();
-    if (!doc.exists) return <String, dynamic>{};
+    const defaults = <String, dynamic>{
+      'enableDeliveryIfAvailable': true,
+      'maxDeliveryQuantity': 10,
+    };
+    if (!doc.exists) return defaults;
     final data = doc.data();
     final settings = data?['shopSettings'];
     if (settings is Map) {
-      return Map<String, dynamic>.from(settings);
+      return {
+        ...defaults,
+        ...Map<String, dynamic>.from(settings),
+      };
     }
-    return <String, dynamic>{};
+    return defaults;
   }
 
   Future<void> updateShopSettings(
@@ -2322,5 +2785,35 @@ class FirestoreService {
       'status': 'cancelled',
       'updatedAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  // ===== Animated Avatar Config =====
+
+  /// Save custom animated avatar configuration for any user role.
+  /// Stores in the `users` collection so it's universally accessible.
+  Future<void> saveAvatarConfig(String userId, dynamic avatarConfig) async {
+    final configMap = avatarConfig is Map<String, dynamic>
+        ? avatarConfig
+        : (avatarConfig as dynamic).toMap() as Map<String, dynamic>;
+    await _firestore.collection(AppConstants.usersCollection).doc(userId).set(
+      {
+        'avatarConfig': configMap,
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  /// Remove the custom animated avatar (revert to photo / emoji / letter).
+  Future<void> removeAvatarConfig(String userId) async {
+    await _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(userId)
+        .update(
+      {
+        'avatarConfig': FieldValue.delete(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+    );
   }
 }

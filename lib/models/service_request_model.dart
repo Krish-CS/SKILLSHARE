@@ -7,6 +7,11 @@ class ServiceRequestModel {
   final String customerId;
   final String skilledUserId;
   final String? requesterId;
+  final String? requesterName;
+  final String? requesterPhoto;
+  final String? skilledUserName;
+  final String? skilledUserPhoto;
+  final String? workChatId;
   final List<String> participants;
   final String serviceId;
   final String title;
@@ -28,6 +33,11 @@ class ServiceRequestModel {
     required this.customerId,
     required this.skilledUserId,
     this.requesterId,
+    this.requesterName,
+    this.requesterPhoto,
+    this.skilledUserName,
+    this.skilledUserPhoto,
+    this.workChatId,
     this.participants = const [],
     required this.serviceId,
     required this.title,
@@ -63,6 +73,11 @@ class ServiceRequestModel {
       customerId: customerId,
       skilledUserId: skilledUserId,
       requesterId: requesterId,
+      requesterName: (map['requesterName'] as String?)?.trim(),
+      requesterPhoto: (map['requesterPhoto'] as String?)?.trim(),
+      skilledUserName: (map['skilledUserName'] as String?)?.trim(),
+      skilledUserPhoto: (map['skilledUserPhoto'] as String?)?.trim(),
+      workChatId: (map['workChatId'] as String?)?.trim(),
       participants: participants,
       serviceId: map['serviceId'] ?? '',
       title: map['title'] ?? '',
@@ -85,6 +100,11 @@ class ServiceRequestModel {
       'chatId': chatId,
       'customerId': customerId,
       'requesterId': requesterId ?? customerId,
+      if (requesterName != null) 'requesterName': requesterName,
+      if (requesterPhoto != null) 'requesterPhoto': requesterPhoto,
+      if (skilledUserName != null) 'skilledUserName': skilledUserName,
+      if (skilledUserPhoto != null) 'skilledUserPhoto': skilledUserPhoto,
+      if (workChatId != null) 'workChatId': workChatId,
       'skilledUserId': skilledUserId,
       'participants':
           participants.isNotEmpty ? participants : [customerId, skilledUserId],

@@ -9,9 +9,10 @@ import '../../providers/auth_provider.dart';
 import '../../models/customer_profile.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/firestore_service.dart';
-import '../../utils/web_image_loader.dart';
 import '../../utils/app_dialog.dart';
 import '../../widgets/avatar_picker.dart';
+import '../../widgets/universal_avatar.dart';
+import '../../screens/avatar/avatar_builder_screen.dart';
 import '../main_navigation.dart';
 
 class CustomerSetupScreen extends StatefulWidget {
@@ -41,6 +42,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
   Uint8List? _profileImageBytes; // For web
   String? _profileImageUrl;
   String? _avatarKey; // WhatsApp-style emoji avatar
+  Map<String, dynamic>? _avatarConfig; // Animated avatar config
 
   final List<String> _serviceCategories = [
     'Home Baking',
@@ -80,25 +82,12 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
           : null;
       _locationController.text = profile.location ?? '';
       _avatarKey = profile.avatarKey;
+      _avatarConfig = profile.avatarConfig;
     }
 
     setState(() {
       _isLoading = false;
     });
-  }
-
-  /// Returns the appropriate ImageProvider based on available image data.
-  ImageProvider? _getProfileImage() {
-    if (kIsWeb && _profileImageBytes != null) {
-      return MemoryImage(_profileImageBytes!);
-    }
-    if (_profileImage != null) {
-      return FileImage(_profileImage!);
-    }
-    if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) {
-      return WebImageLoader.getImageProvider(_profileImageUrl);
-    }
-    return null;
   }
 
   @override
@@ -215,11 +204,17 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
         location: _locationController.text.trim(),
         preferredCategories: _lookingFor,
         avatarKey: _avatarKey,
+        avatarConfig: _avatarConfig,
         createdAt: currentProfile?.createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
       );
 
       await userProvider.updateCustomerProfile(profile);
+
+      // Save animated avatar config to users collection
+      if (_avatarConfig != null) {
+        await FirestoreService().saveAvatarConfig(widget.userId, _avatarConfig);
+      }
 
       if (effectiveProfileUrl != null) {
         try {
@@ -324,33 +319,13 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                                       ),
                                     ],
                                   ),
-                                  child: _avatarKey != null && _avatarKey!.isNotEmpty
-                                      ? buildAvatarOrPhoto(
-                                          avatarKey: _avatarKey,
-                                          radius: 52,
-                                          fallback: const CircleAvatar(
-                                            radius: 52,
-                                            backgroundColor: Colors.white,
-                                            child: Icon(Icons.person,
-                                                size: 52, color: Color(0xFF00695C)),
-                                          ),
-                                        )
-                                      : CircleAvatar(
-                                          radius: 52,
-                                          backgroundColor: Colors.white,
-                                          backgroundImage: _getProfileImage(),
-                                          onBackgroundImageError:
-                                              _getProfileImage() != null
-                                                  ? (_, __) {}
-                                                  : null,
-                                          child: _profileImage == null &&
-                                                  _profileImageBytes == null &&
-                                                  (_profileImageUrl == null ||
-                                                      _profileImageUrl!.isEmpty)
-                                              ? const Icon(Icons.person,
-                                                  size: 52, color: Color(0xFF00695C))
-                                              : null,
-                                        ),
+                                  child: UniversalAvatar(
+                                    avatarConfig: _avatarConfig,
+                                    avatarKey: _avatarKey,
+                                    photoUrl: _profileImageUrl,
+                                    fallbackName: _bioController.text.isNotEmpty ? _bioController.text : 'U',
+                                    radius: 52,
+                                  ),
                                 ),
                                 Positioned(
                                   bottom: 0,
@@ -405,8 +380,57 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                                   const SizedBox(width: 4),
                                   Text(
                                     _avatarKey != null
-                                        ? 'Change Avatar'
-                                        : 'Use Avatar',
+                                        ? 'Change Emoji'
+                                        : 'Use Emoji',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          // Create animated avatar button
+                          GestureDetector(
+                            onTap: () async {
+                              final config = await Navigator.push<dynamic>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => AvatarBuilderScreen(
+                                    initialConfig: _avatarConfig,
+                                  ),
+                                ),
+                              );
+                              if (config != null) {
+                                setState(() {
+                                  _avatarConfig = config as Map<String, dynamic>;
+                                  _avatarKey = null;
+                                });
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.25),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.face_retouching_natural,
+                                      color: Colors.white, size: 14),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _avatarConfig != null
+                                        ? 'Edit Avatar'
+                                        : 'Create Avatar',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 12,

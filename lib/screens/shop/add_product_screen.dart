@@ -29,29 +29,37 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
   final ImagePicker _picker = ImagePicker();
-  
+
   String? _selectedCategory;
   final List<String> _imageUrls = [];
   final List<XFile> _selectedImages = [];
   final List<Uint8List> _selectedImageBytes = [];
+  int _stockIncrease = 0;
   bool _isLoading = false;
   bool _isUploading = false;
   bool get _isEditing => widget.existingProduct != null;
 
-  final List<String> _categories = AppConstants.categories;
+  late final List<String> _categories;
 
   @override
   void initState() {
     super.initState();
+    // Build category list, including the product's existing category if missing
+    final base = List<String>.from(AppConstants.categories);
     if (_isEditing) {
       final p = widget.existingProduct!;
       _nameController.text = p.name;
       _descriptionController.text = p.description;
       _priceController.text = p.price.toString();
       _stockController.text = p.stock.toString();
+      _stockIncrease = 0;
       _selectedCategory = p.category;
       _imageUrls.addAll(p.images);
+      if (_selectedCategory != null && !base.contains(_selectedCategory)) {
+        base.insert(0, _selectedCategory!);
+      }
     }
+    _categories = base;
   }
 
   @override
@@ -66,7 +74,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
   Future<void> _pickImages() async {
     try {
       if (_selectedImages.length + _imageUrls.length >= 5) {
-        AppDialog.info(context, 'Maximum 5 images allowed', title: 'Limit Reached');
+        AppDialog.info(context, 'Maximum 5 images allowed',
+            title: 'Limit Reached');
         return;
       }
 
@@ -85,14 +94,17 @@ class _AddProductScreenState extends State<AddProductScreen> {
         _selectedImages.addAll(newImages);
       });
       // Read bytes for preview and web upload
-      for (final img in images.take(5 - (_selectedImageBytes.length + _imageUrls.length))) {
+      for (final img in images
+          .take(5 - (_selectedImageBytes.length + _imageUrls.length))) {
         final bytes = await img.readAsBytes();
         _selectedImageBytes.add(bytes);
       }
       if (mounted) setState(() {});
     } on Exception catch (e) {
       // Only show error for actual errors, not cancellations
-      if (mounted && e.toString().isNotEmpty && !e.toString().contains('cancel')) {
+      if (mounted &&
+          e.toString().isNotEmpty &&
+          !e.toString().contains('cancel')) {
         AppDialog.error(context, 'Error picking images', detail: e.toString());
       }
     }
@@ -115,7 +127,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   Future<void> _saveProduct() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     if (_selectedCategory == null) {
       AppDialog.info(context, 'Please select a category');
       return;
@@ -135,7 +147,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
       final userId = FirebaseAuth.instance.currentUser!.uid;
       final now = DateTime.now();
       List<String> finalImageUrls = List.from(_imageUrls);
-      
+      final baseStock = _isEditing ? widget.existingProduct!.stock : 0;
+      final updatedStock = _isEditing
+          ? baseStock + _stockIncrease
+          : int.parse(_stockController.text.trim());
+
       // Upload selected images
       if (_selectedImages.isNotEmpty) {
         for (int i = 0; i < _selectedImages.length; i++) {
@@ -157,16 +173,18 @@ class _AddProductScreenState extends State<AddProductScreen> {
           }
         }
       }
-      
+
       final product = ProductModel(
-        id: _isEditing ? widget.existingProduct!.id : '', // Preserve ID when editing
+        id: _isEditing
+            ? widget.existingProduct!.id
+            : '', // Preserve ID when editing
         userId: userId,
         name: _nameController.text.trim(),
         description: _descriptionController.text.trim(),
         price: double.parse(_priceController.text.trim()),
         images: finalImageUrls,
         category: _selectedCategory!,
-        stock: int.parse(_stockController.text.trim()),
+        stock: updatedStock,
         isAvailable: _isEditing ? widget.existingProduct!.isAvailable : true,
         rating: _isEditing ? widget.existingProduct!.rating : 0.0,
         reviewCount: _isEditing ? widget.existingProduct!.reviewCount : 0,
@@ -183,7 +201,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
       if (mounted) {
         AppDialog.success(
           context,
-          _isEditing ? 'Product updated successfully!' : 'Product added successfully!',
+          _isEditing
+              ? 'Product updated successfully!'
+              : 'Product added successfully!',
           onDismiss: () => Navigator.of(context).pop(true),
         );
       }
@@ -204,7 +224,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<app_auth.AuthProvider>(context);
-    
+
     // CRITICAL: Only skilled persons can sell products
     if (!authProvider.isSkilledPerson) {
       return Scaffold(
@@ -244,14 +264,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
     // CRITICAL: Check Aadhaar verification
     final userProvider = Provider.of<UserProvider>(context, listen: false);
-    if (userProvider.currentProfile == null && authProvider.currentUser != null) {
+    if (userProvider.currentProfile == null &&
+        authProvider.currentUser != null) {
       userProvider.loadProfile(authProvider.currentUser!.uid);
     }
     final isVerified = userProvider.currentProfile?.isVerified ?? false;
     if (!isVerified) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Add Product', style: TextStyle(color: Colors.white)),
+          title:
+              const Text('Add Product', style: TextStyle(color: Colors.white)),
           iconTheme: const IconThemeData(color: Colors.white),
           flexibleSpace: Container(
             decoration: const BoxDecoration(
@@ -267,7 +289,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.fingerprint, size: 80, color: Color(0xFF9C27B0)),
+                const Icon(Icons.fingerprint,
+                    size: 80, color: Color(0xFF9C27B0)),
                 const SizedBox(height: 20),
                 const Text(
                   'Verification Required',
@@ -284,14 +307,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   'Profile \u2192 Edit Profile \u2192 Verify Identity',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF9C27B0)),
+                      fontWeight: FontWeight.bold, color: Color(0xFF9C27B0)),
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE91E63)),
-                  child: const Text('Go Back', style: TextStyle(color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFE91E63)),
+                  child: const Text('Go Back',
+                      style: TextStyle(color: Colors.white)),
                 ),
               ],
             ),
@@ -299,10 +323,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
         ),
       );
     }
-    
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? 'Edit Product' : 'Add Product', style: const TextStyle(color: Colors.white)),
+        title: Text(_isEditing ? 'Edit Product' : 'Add Product',
+            style: const TextStyle(color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
         flexibleSpace: Container(
           decoration: const BoxDecoration(
@@ -511,26 +536,106 @@ class _AddProductScreenState extends State<AddProductScreen> {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          TextFormField(
-                            controller: _stockController,
-                            decoration: InputDecoration(
-                              hintText: '0',
-                              border: OutlineInputBorder(
+                          if (_isEditing) ...[
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey.shade300),
+                                color: Colors.grey.shade50,
                               ),
-                              prefixIcon: const Icon(Icons.inventory),
+                              child: Text(
+                                'Current: ${widget.existingProduct!.stock}',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
-                            keyboardType: TextInputType.number,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Enter stock';
-                              }
-                              if (int.tryParse(value) == null) {
-                                return 'Invalid';
-                              }
-                              return null;
-                            },
-                          ),
+                            const SizedBox(height: 8),
+                            Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                              child: Row(
+                                children: [
+                                  IconButton(
+                                    onPressed: _stockIncrease > 0
+                                        ? () {
+                                            setState(() {
+                                              _stockIncrease--;
+                                            });
+                                          }
+                                        : null,
+                                    icon:
+                                        const Icon(Icons.remove_circle_outline),
+                                  ),
+                                  Expanded(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text(
+                                          'Increase By',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '$_stockIncrease',
+                                          style: const TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _stockIncrease++;
+                                      });
+                                    },
+                                    icon: const Icon(Icons.add_circle_outline),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'New Stock: ${widget.existingProduct!.stock + _stockIncrease}',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFE91E63),
+                              ),
+                            ),
+                          ] else
+                            TextFormField(
+                              controller: _stockController,
+                              decoration: InputDecoration(
+                                hintText: '0',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                prefixIcon: const Icon(Icons.inventory),
+                              ),
+                              keyboardType: TextInputType.number,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Enter stock';
+                                }
+                                if (int.tryParse(value) == null) {
+                                  return 'Invalid';
+                                }
+                                return null;
+                              },
+                            ),
                         ],
                       ),
                     ),
@@ -569,7 +674,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    
+
                     // Image Preview Grid
                     if (_selectedImages.isNotEmpty || _imageUrls.isNotEmpty)
                       SizedBox(
@@ -588,7 +693,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                     margin: const EdgeInsets.only(right: 12),
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: Colors.grey[300]!),
+                                      border:
+                                          Border.all(color: Colors.grey[300]!),
                                       image: DecorationImage(
                                         image: NetworkImage(_imageUrls[index]),
                                         fit: BoxFit.cover,
@@ -627,9 +733,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                     margin: const EdgeInsets.only(right: 12),
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: Colors.grey[300]!),
+                                      border:
+                                          Border.all(color: Colors.grey[300]!),
                                       image: DecorationImage(
-                                        image: MemoryImage(_selectedImageBytes[fileIndex]),
+                                        image: MemoryImage(
+                                            _selectedImageBytes[fileIndex]),
                                         fit: BoxFit.cover,
                                       ),
                                     ),
@@ -659,10 +767,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           },
                         ),
                       ),
-                    
+
                     if (_selectedImages.isNotEmpty || _imageUrls.isNotEmpty)
                       const SizedBox(height: 12),
-                    
+
                     // Add Images Button
                     InkWell(
                       onTap: (_selectedImages.length + _imageUrls.length < 5)
@@ -672,9 +780,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         height: 100,
                         decoration: BoxDecoration(
                           border: Border.all(
-                            color: (_selectedImages.length + _imageUrls.length < 5)
-                                ? const Color(0xFFE91E63)
-                                : Colors.grey[400]!,
+                            color:
+                                (_selectedImages.length + _imageUrls.length < 5)
+                                    ? const Color(0xFFE91E63)
+                                    : Colors.grey[400]!,
                             width: 2,
                             style: BorderStyle.solid,
                           ),
@@ -688,7 +797,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
                               Icon(
                                 Icons.add_photo_alternate,
                                 size: 40,
-                                color: (_selectedImages.length + _imageUrls.length < 5)
+                                color: (_selectedImages.length +
+                                            _imageUrls.length <
+                                        5)
                                     ? const Color(0xFFE91E63)
                                     : Colors.grey,
                               ),
@@ -698,7 +809,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                     ? 'Tap to add images'
                                     : 'Maximum 5 images',
                                 style: TextStyle(
-                                  color: (_selectedImages.length + _imageUrls.length < 5)
+                                  color: (_selectedImages.length +
+                                              _imageUrls.length <
+                                          5)
                                       ? const Color(0xFFE91E63)
                                       : Colors.grey,
                                   fontWeight: FontWeight.w500,
@@ -737,7 +850,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     )
                   : Text(
                       _isEditing ? 'Update Product' : 'Add Product',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold),
                     ),
             ),
           ],

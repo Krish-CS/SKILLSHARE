@@ -5,6 +5,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/user_provider.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/web_image_loader.dart';
+import '../../widgets/universal_avatar.dart';
 import '../../widgets/filter_bottom_sheet.dart';
 import '../profile/profile_screen.dart';
 
@@ -454,10 +455,12 @@ class _ExploreScreenState extends State<ExploreScreen> {
             context,
             MaterialPageRoute(
                 builder: (_) => ProfileScreen(userId: profile.userId))),
-        leading: WebImageLoader.loadAvatar(
-          imageUrl: profile.profilePicture,
+        leading: UniversalAvatar(
+          avatarConfig: profile.avatarConfig,
+          photoUrl: profile.profilePicture,
+          fallbackName: profile.name ?? '?',
           radius: 28,
-          fallbackText: (profile.name?.isNotEmpty == true) ? profile.name![0] : '?',
+          animate: false,
         ),
         title: Row(
           children: [

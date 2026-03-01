@@ -28,6 +28,8 @@ class CompanyProfile {
   final List<Map<String, dynamic>> assignedProjects;
   /// Banner customisation data (image or styled text).
   final Map<String, dynamic>? bannerData;
+  /// Animated avatar configuration.
+  final Map<String, dynamic>? avatarConfig;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -54,6 +56,7 @@ class CompanyProfile {
     this.verifiedAt,
     this.assignedProjects = const [],
     this.bannerData,
+    this.avatarConfig,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -84,6 +87,9 @@ class CompanyProfile {
           .map((e) => Map<String, dynamic>.from(e is Map ? e : {}))
           .toList(),
       bannerData: map['bannerData'] as Map<String, dynamic>?,
+      avatarConfig: map['avatarConfig'] is Map
+          ? Map<String, dynamic>.from(map['avatarConfig'] as Map)
+          : null,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -111,7 +117,8 @@ class CompanyProfile {
       'reviewCount': reviewCount,
       'verifiedAt': verifiedAt != null ? Timestamp.fromDate(verifiedAt!) : null,
       'assignedProjects': assignedProjects,
-      'bannerData': bannerData,
+      if (bannerData != null) 'bannerData': bannerData,
+      if (avatarConfig != null) 'avatarConfig': avatarConfig,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -138,6 +145,7 @@ class CompanyProfile {
     int? reviewCount,
     DateTime? verifiedAt,
     List<Map<String, dynamic>>? assignedProjects,
+    Map<String, dynamic>? avatarConfig,
   }) {
     return CompanyProfile(
       userId: userId,
@@ -161,6 +169,7 @@ class CompanyProfile {
       reviewCount: reviewCount ?? this.reviewCount,
       verifiedAt: verifiedAt ?? this.verifiedAt,
       assignedProjects: assignedProjects ?? this.assignedProjects,
+      avatarConfig: avatarConfig ?? this.avatarConfig,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );

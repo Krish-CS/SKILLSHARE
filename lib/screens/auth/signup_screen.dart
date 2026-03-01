@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
@@ -86,7 +86,8 @@ class _SignUpScreenState extends State<SignUpScreen>
         final slide = Tween<Offset>(
           begin: const Offset(0, 0.06),
           end: Offset.zero,
-        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+        ).animate(
+            CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
         return FadeTransition(
           opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
           child: SlideTransition(position: slide, child: child),
@@ -104,9 +105,11 @@ class _SignUpScreenState extends State<SignUpScreen>
         tween: Tween(begin: 0.8, end: 1.0),
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOutBack,
-        builder: (_, scale, child) => Transform.scale(scale: scale, child: child),
+        builder: (_, scale, child) =>
+            Transform.scale(scale: scale, child: child),
         child: AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           contentPadding: EdgeInsets.zero,
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -183,9 +186,11 @@ class _SignUpScreenState extends State<SignUpScreen>
         tween: Tween(begin: 0.7, end: 1.0),
         duration: const Duration(milliseconds: 400),
         curve: Curves.easeOutBack,
-        builder: (_, scale, child) => Transform.scale(scale: scale, child: child),
+        builder: (_, scale, child) =>
+            Transform.scale(scale: scale, child: child),
         child: AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           contentPadding: EdgeInsets.zero,
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -309,14 +314,15 @@ class _SignUpScreenState extends State<SignUpScreen>
           Navigator.of(context).pushReplacement(
               _slideUpRoute(CompanySetupScreen(userId: userId)));
         } else {
-          Navigator.of(context).pushReplacement(
-              _slideUpRoute(const MainNavigation()));
+          Navigator.of(context)
+              .pushReplacement(_slideUpRoute(const MainNavigation()));
         }
       }
 
       await _showSuccessDialog(name, navigate);
     } else {
-      _showErrorDialog(authProvider.error ?? 'Sign up failed. Please try again.');
+      _showErrorDialog(
+          authProvider.error ?? 'Sign up failed. Please try again.');
     }
   }
 
@@ -326,8 +332,8 @@ class _SignUpScreenState extends State<SignUpScreen>
         await authProvider.signInWithGoogle(defaultRole: _selectedRole);
     if (!mounted) return;
     if (success) {
-      Navigator.of(context).pushReplacement(
-          _slideUpRoute(const MainNavigation()));
+      Navigator.of(context)
+          .pushReplacement(_slideUpRoute(const MainNavigation()));
     } else {
       _showErrorDialog(
           authProvider.error ?? 'Google sign-in failed. Please try again.');
@@ -390,424 +396,454 @@ class _SignUpScreenState extends State<SignUpScreen>
             SafeArea(
               child: Center(
                 child: ScrollConfiguration(
-                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                  behavior: ScrollConfiguration.of(context)
+                      .copyWith(scrollbars: false),
                   child: SingleChildScrollView(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 420),
-                    child: Column(
-                      children: [
-                        // Brand name
-                        Text(
-                          'SkillShare',
-                          style: GoogleFonts.pacifico(
-                            fontSize: 36,
-                            color: Colors.white,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withValues(alpha: 0.25),
-                                blurRadius: 12,
-                              ),
-                            ],
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 32),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Column(
+                        children: [
+                          // Brand name
+                          Text(
+                            'SkillShare',
+                            style: GoogleFonts.pacifico(
+                              fontSize: 36,
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withValues(alpha: 0.25),
+                                  blurRadius: 12,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Create your account',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white.withValues(alpha: 0.85),
-                            letterSpacing: 0.3,
+                          const SizedBox(height: 6),
+                          Text(
+                            'Create your account',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white.withValues(alpha: 0.85),
+                              letterSpacing: 0.3,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 28),
+                          const SizedBox(height: 28),
 
-                        // â”€â”€ Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                        Card(
-                          elevation: 24,
-                          shadowColor: Colors.black.withValues(alpha: 0.3),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          child: Padding(
-                            padding:
-                                const EdgeInsets.fromLTRB(28, 28, 28, 20),
-                            child: Form(
-                              key: _formKey,
-                              child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.stretch,
-                                children: [
-                                  // Heading
-                                  const Text(
-                                    'Join SkillShare',
-                                    style: TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF1A1A2E),
+                          // â”€â”€ Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                          Card(
+                            elevation: 24,
+                            shadowColor: Colors.black.withValues(alpha: 0.3),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.fromLTRB(28, 28, 28, 20),
+                              child: Form(
+                                key: _formKey,
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    // Heading
+                                    const Text(
+                                      'Join SkillShare',
+                                      style: TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF1A1A2E),
+                                      ),
+                                      textAlign: TextAlign.center,
                                     ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Fill in the details below',
-                                    style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.grey[500]),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 22),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Fill in the details below',
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey[500]),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 22),
 
-                                  // Full Name
-                                  TextFormField(
-                                    controller: _nameController,
-                                    textCapitalization:
-                                        TextCapitalization.words,
-                                    style: const TextStyle(fontSize: 15),
-                                    decoration: _inputDecoration(
-                                      label: 'Full Name',
-                                      icon: Icons.person_outlined,
+                                    // Full Name
+                                    TextFormField(
+                                      controller: _nameController,
+                                      textCapitalization:
+                                          TextCapitalization.words,
+                                      style: const TextStyle(fontSize: 15),
+                                      decoration: _inputDecoration(
+                                        label: 'Full Name',
+                                        icon: Icons.person_outlined,
+                                      ),
+                                      validator: (v) =>
+                                          (v == null || v.trim().isEmpty)
+                                              ? 'Please enter your name'
+                                              : null,
                                     ),
-                                    validator: (v) =>
-                                        (v == null || v.trim().isEmpty)
-                                            ? 'Please enter your name'
+                                    const SizedBox(height: 14),
+
+                                    // Email
+                                    TextFormField(
+                                      controller: _emailController,
+                                      keyboardType: TextInputType.emailAddress,
+                                      style: const TextStyle(fontSize: 15),
+                                      decoration: _inputDecoration(
+                                        label: 'Email',
+                                        icon: Icons.email_outlined,
+                                      ).copyWith(
+                                        hintText: 'username@gmail.com',
+                                        hintStyle: TextStyle(
+                                            color: Colors.grey[400],
+                                            fontSize: 14),
+                                      ),
+                                      validator: (v) =>
+                                          (v == null || v.trim().isEmpty)
+                                              ? 'Please enter your email'
+                                              : null,
+                                    ),
+                                    const SizedBox(height: 14),
+
+                                    // Phone (optional)
+                                    TextFormField(
+                                      controller: _phoneController,
+                                      keyboardType: TextInputType.phone,
+                                      style: const TextStyle(fontSize: 15),
+                                      decoration: _inputDecoration(
+                                        label: 'Phone (Optional)',
+                                        icon: Icons.phone_outlined,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 14),
+
+                                    // Role
+                                    DropdownButtonFormField<String>(
+                                      value: _selectedRole,
+                                      style: const TextStyle(
+                                          fontSize: 15,
+                                          color: Color(0xFF1A1A2E)),
+                                      decoration: _inputDecoration(
+                                        label: 'I am a',
+                                        icon: null,
+                                      ),
+                                      items: const [
+                                        DropdownMenuItem(
+                                            value: AppConstants.roleCustomer,
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.person_outline,
+                                                    size: 20,
+                                                    color: Color(0xFF6A11CB)),
+                                                SizedBox(width: 10),
+                                                Text('Customer',
+                                                    style: TextStyle(
+                                                        fontSize: 15)),
+                                              ],
+                                            )),
+                                        DropdownMenuItem(
+                                            value: AppConstants.roleSkilledUser,
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.engineering,
+                                                    size: 20,
+                                                    color: Color(0xFF6A11CB)),
+                                                SizedBox(width: 10),
+                                                Text('Skilled Professional',
+                                                    style: TextStyle(
+                                                        fontSize: 15)),
+                                              ],
+                                            )),
+                                        DropdownMenuItem(
+                                            value: AppConstants.roleCompany,
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.business,
+                                                    size: 20,
+                                                    color: Color(0xFF6A11CB)),
+                                                SizedBox(width: 10),
+                                                Text('Company',
+                                                    style: TextStyle(
+                                                        fontSize: 15)),
+                                              ],
+                                            )),
+                                        DropdownMenuItem(
+                                            value: AppConstants
+                                                .roleDeliveryPartner,
+                                            child: Row(
+                                              children: [
+                                                Icon(
+                                                    Icons
+                                                        .local_shipping_outlined,
+                                                    size: 20,
+                                                    color: Color(0xFF6A11CB)),
+                                                SizedBox(width: 10),
+                                                Text('Delivery Partner',
+                                                    style: TextStyle(
+                                                        fontSize: 15)),
+                                              ],
+                                            )),
+                                      ],
+                                      onChanged: (v) =>
+                                          setState(() => _selectedRole = v!),
+                                    ),
+                                    const SizedBox(height: 14),
+
+                                    // Password
+                                    TextFormField(
+                                      controller: _passwordController,
+                                      focusNode: _passwordFocusNode,
+                                      obscureText: _obscurePassword,
+                                      style: const TextStyle(fontSize: 15),
+                                      decoration: _inputDecoration(
+                                        label: 'Password',
+                                        icon: Icons.lock_outline,
+                                      ).copyWith(
+                                        suffixIcon: (_passwordFocusNode
+                                                    .hasFocus ||
+                                                _passwordController
+                                                    .text.isNotEmpty)
+                                            ? IconButton(
+                                                icon: Icon(
+                                                  _obscurePassword
+                                                      ? Icons
+                                                          .visibility_off_rounded
+                                                      : Icons
+                                                          .visibility_rounded,
+                                                  color: _obscurePassword
+                                                      ? Colors.grey[400]
+                                                      : const Color(0xFF6A11CB),
+                                                  size: 22,
+                                                ),
+                                                onPressed: () => setState(() =>
+                                                    _obscurePassword =
+                                                        !_obscurePassword),
+                                              )
                                             : null,
-                                  ),
-                                  const SizedBox(height: 14),
-
-                                  // Email
-                                  TextFormField(
-                                    controller: _emailController,
-                                    keyboardType:
-                                        TextInputType.emailAddress,
-                                    style: const TextStyle(fontSize: 15),
-                                    decoration: _inputDecoration(
-                                      label: 'Email',
-                                      icon: Icons.email_outlined,
-                                    ).copyWith(
-                                      hintText: 'username@gmail.com',
-                                      hintStyle: TextStyle(
-                                          color: Colors.grey[400],
-                                          fontSize: 14),
+                                      ),
+                                      validator: (v) {
+                                        if (v == null || v.isEmpty) {
+                                          return 'Please enter a password';
+                                        }
+                                        if (v.length < 6) {
+                                          return 'Minimum 6 characters';
+                                        }
+                                        return null;
+                                      },
                                     ),
-                                    validator: (v) =>
-                                        (v == null || v.trim().isEmpty)
-                                            ? 'Please enter your email'
+                                    const SizedBox(height: 14),
+
+                                    // Confirm Password
+                                    TextFormField(
+                                      controller: _confirmPasswordController,
+                                      focusNode: _confirmPasswordFocusNode,
+                                      obscureText: _obscureConfirmPassword,
+                                      style: const TextStyle(fontSize: 15),
+                                      decoration: _inputDecoration(
+                                        label: 'Confirm Password',
+                                        icon: Icons.lock_outline,
+                                      ).copyWith(
+                                        suffixIcon: (_confirmPasswordFocusNode
+                                                    .hasFocus ||
+                                                _confirmPasswordController
+                                                    .text.isNotEmpty)
+                                            ? IconButton(
+                                                icon: Icon(
+                                                  _obscureConfirmPassword
+                                                      ? Icons
+                                                          .visibility_off_rounded
+                                                      : Icons
+                                                          .visibility_rounded,
+                                                  color: _obscureConfirmPassword
+                                                      ? Colors.grey[400]
+                                                      : const Color(0xFF6A11CB),
+                                                  size: 22,
+                                                ),
+                                                onPressed: () => setState(() =>
+                                                    _obscureConfirmPassword =
+                                                        !_obscureConfirmPassword),
+                                              )
                                             : null,
-                                  ),
-                                  const SizedBox(height: 14),
-
-                                  // Phone (optional)
-                                  TextFormField(
-                                    controller: _phoneController,
-                                    keyboardType: TextInputType.phone,
-                                    style: const TextStyle(fontSize: 15),
-                                    decoration: _inputDecoration(
-                                      label: 'Phone (Optional)',
-                                      icon: Icons.phone_outlined,
+                                      ),
+                                      validator: (v) =>
+                                          v != _passwordController.text
+                                              ? 'Passwords do not match'
+                                              : null,
                                     ),
-                                  ),
-                                  const SizedBox(height: 14),
+                                    const SizedBox(height: 22),
 
-                                  // Role
-                                  DropdownButtonFormField<String>(
-                                    value: _selectedRole,
-                                    style: const TextStyle(
-                                        fontFamily: 'SourceSerif4',
-                                        fontSize: 15,
-                                        color: Color(0xFF1A1A2E)),
-                                    decoration: _inputDecoration(
-                                      label: 'I am a',
-                                      icon: null,
-                                    ),
-                                    items: const [
-                                      DropdownMenuItem(
-                                          value: AppConstants.roleCustomer,
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.person_outline, size: 20, color: Color(0xFF6A11CB)),
-                                              SizedBox(width: 10),
-                                              Text('Customer', style: TextStyle(fontFamily: 'SourceSerif4', fontSize: 15)),
-                                            ],
-                                          )),
-                                      DropdownMenuItem(
-                                          value: AppConstants.roleSkilledUser,
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.engineering, size: 20, color: Color(0xFF6A11CB)),
-                                              SizedBox(width: 10),
-                                              Text('Skilled Professional', style: TextStyle(fontFamily: 'SourceSerif4', fontSize: 15)),
-                                            ],
-                                          )),
-                                      DropdownMenuItem(
-                                          value: AppConstants.roleCompany,
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.business, size: 20, color: Color(0xFF6A11CB)),
-                                              SizedBox(width: 10),
-                                              Text('Company', style: TextStyle(fontFamily: 'SourceSerif4', fontSize: 15)),
-                                            ],
-                                          )),
-                                    ],
-                                    onChanged: (v) =>
-                                        setState(() => _selectedRole = v!),
-                                  ),
-                                  const SizedBox(height: 14),
-
-                                  // Password
-                                  TextFormField(
-                                    controller: _passwordController,
-                                    focusNode: _passwordFocusNode,
-                                    obscureText: _obscurePassword,
-                                    style: const TextStyle(fontSize: 15),
-                                    decoration: _inputDecoration(
-                                      label: 'Password',
-                                      icon: Icons.lock_outline,
-                                    ).copyWith(
-                                      suffixIcon: (_passwordFocusNode.hasFocus ||
-                                              _passwordController
-                                                  .text.isNotEmpty)
-                                          ? IconButton(
-                                              icon: Icon(
-                                                _obscurePassword
-                                                    ? Icons
-                                                        .visibility_off_rounded
-                                                    : Icons.visibility_rounded,
-                                                color: _obscurePassword
-                                                    ? Colors.grey[400]
-                                                    : const Color(0xFF6A11CB),
-                                                size: 22,
+                                    // Sign Up button
+                                    Consumer<AuthProvider>(
+                                      builder: (context, auth, _) {
+                                        return Container(
+                                          decoration: BoxDecoration(
+                                            gradient: const LinearGradient(
+                                              colors: [
+                                                Color(0xFF6A11CB),
+                                                Color(0xFF2575FC),
+                                              ],
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: const Color(0xFF6A11CB)
+                                                    .withValues(alpha: 0.4),
+                                                blurRadius: 12,
+                                                offset: const Offset(0, 6),
                                               ),
-                                              onPressed: () => setState(() =>
-                                                  _obscurePassword =
-                                                      !_obscurePassword),
-                                            )
-                                          : null,
-                                    ),
-                                    validator: (v) {
-                                      if (v == null || v.isEmpty) {
-                                        return 'Please enter a password';
-                                      }
-                                      if (v.length < 6) {
-                                        return 'Minimum 6 characters';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 14),
-
-                                  // Confirm Password
-                                  TextFormField(
-                                    controller: _confirmPasswordController,
-                                    focusNode: _confirmPasswordFocusNode,
-                                    obscureText: _obscureConfirmPassword,
-                                    style: const TextStyle(fontSize: 15),
-                                    decoration: _inputDecoration(
-                                      label: 'Confirm Password',
-                                      icon: Icons.lock_outline,
-                                    ).copyWith(
-                                      suffixIcon: (_confirmPasswordFocusNode
-                                                  .hasFocus ||
-                                              _confirmPasswordController
-                                                  .text.isNotEmpty)
-                                          ? IconButton(
-                                              icon: Icon(
-                                                _obscureConfirmPassword
-                                                    ? Icons
-                                                        .visibility_off_rounded
-                                                    : Icons.visibility_rounded,
-                                                color: _obscureConfirmPassword
-                                                    ? Colors.grey[400]
-                                                    : const Color(0xFF6A11CB),
-                                                size: 22,
-                                              ),
-                                              onPressed: () => setState(() =>
-                                                  _obscureConfirmPassword =
-                                                      !_obscureConfirmPassword),
-                                            )
-                                          : null,
-                                    ),
-                                    validator: (v) =>
-                                        v != _passwordController.text
-                                            ? 'Passwords do not match'
-                                            : null,
-                                  ),
-                                  const SizedBox(height: 22),
-
-                                  // Sign Up button
-                                  Consumer<AuthProvider>(
-                                    builder: (context, auth, _) {
-                                      return Container(
-                                        decoration: BoxDecoration(
-                                          gradient: const LinearGradient(
-                                            colors: [
-                                              Color(0xFF6A11CB),
-                                              Color(0xFF2575FC),
                                             ],
                                           ),
-                                          borderRadius:
-                                              BorderRadius.circular(14),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: const Color(0xFF6A11CB)
-                                                  .withValues(alpha: 0.4),
-                                              blurRadius: 12,
-                                              offset: const Offset(0, 6),
+                                          child: ElevatedButton(
+                                            onPressed: auth.isLoading
+                                                ? null
+                                                : _handleSignUp,
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor:
+                                                  Colors.transparent,
+                                              shadowColor: Colors.transparent,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 16),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(14),
+                                              ),
                                             ),
-                                          ],
+                                            child: auth.isLoading
+                                                ? const SizedBox(
+                                                    height: 20,
+                                                    width: 20,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      valueColor:
+                                                          AlwaysStoppedAnimation(
+                                                              Colors.white),
+                                                    ),
+                                                  )
+                                                : const Text(
+                                                    'Create Account',
+                                                    style: TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: Colors.white,
+                                                      letterSpacing: 0.5,
+                                                    ),
+                                                  ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                    const SizedBox(height: 20),
+
+                                    // OR divider
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                            child: Divider(
+                                                color: Colors.grey[300],
+                                                thickness: 1)),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 12),
+                                          child: Text(
+                                            'OR',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[500],
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: 1,
+                                            ),
+                                          ),
                                         ),
-                                        child: ElevatedButton(
+                                        Expanded(
+                                            child: Divider(
+                                                color: Colors.grey[300],
+                                                thickness: 1)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 16),
+
+                                    // Google button
+                                    Consumer<AuthProvider>(
+                                      builder: (context, auth, _) {
+                                        return OutlinedButton.icon(
                                           onPressed: auth.isLoading
                                               ? null
-                                              : _handleSignUp,
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                Colors.transparent,
-                                            shadowColor: Colors.transparent,
-                                            padding:
-                                                const EdgeInsets.symmetric(
-                                                    vertical: 16),
+                                              : _handleGoogleSignIn,
+                                          style: OutlinedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                                vertical: 14),
+                                            side: BorderSide(
+                                                color: Colors.grey[300]!,
+                                                width: 1.5),
                                             shape: RoundedRectangleBorder(
                                               borderRadius:
                                                   BorderRadius.circular(14),
                                             ),
+                                            backgroundColor: Colors.grey[50],
                                           ),
-                                          child: auth.isLoading
+                                          icon: auth.isLoading
                                               ? const SizedBox(
-                                                  height: 20,
-                                                  width: 20,
+                                                  height: 18,
+                                                  width: 18,
                                                   child:
                                                       CircularProgressIndicator(
-                                                    strokeWidth: 2,
-                                                    valueColor:
-                                                        AlwaysStoppedAnimation(
-                                                            Colors.white),
-                                                  ),
+                                                          strokeWidth: 2),
                                                 )
-                                              : const Text(
-                                                  'Create Account',
-                                                  style: TextStyle(
-                                                    fontSize: 16,
-                                                    fontWeight:
-                                                        FontWeight.bold,
-                                                    color: Colors.white,
-                                                    letterSpacing: 0.5,
-                                                  ),
-                                                ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(height: 20),
-
-                                  // OR divider
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                          child: Divider(
-                                              color: Colors.grey[300],
-                                              thickness: 1)),
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 12),
-                                        child: Text(
-                                          'OR',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey[500],
-                                            fontWeight: FontWeight.w600,
-                                            letterSpacing: 1,
+                                              : const GoogleGLogo(size: 22),
+                                          label: const Text(
+                                            'Continue with Google',
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF333333),
+                                            ),
                                           ),
-                                        ),
-                                      ),
-                                      Expanded(
-                                          child: Divider(
-                                              color: Colors.grey[300],
-                                              thickness: 1)),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 16),
-
-                                  // Google button
-                                  Consumer<AuthProvider>(
-                                    builder: (context, auth, _) {
-                                      return OutlinedButton.icon(
-                                        onPressed: auth.isLoading
-                                            ? null
-                                            : _handleGoogleSignIn,
-                                        style: OutlinedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                              vertical: 14),
-                                          side: BorderSide(
-                                              color: Colors.grey[300]!,
-                                              width: 1.5),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(14),
-                                          ),
-                                          backgroundColor: Colors.grey[50],
-                                        ),
-                                        icon: auth.isLoading
-                                            ? const SizedBox(
-                                                height: 18,
-                                                width: 18,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                        strokeWidth: 2),
-                                              )
-                                            : const GoogleGLogo(size: 22),
-                                        label: const Text(
-                                          'Continue with Google',
-                                          style: TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFF333333),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        // Already have account
-                        const SizedBox(height: 20),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Already have an account? ',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.85),
-                                fontSize: 14,
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: () => Navigator.of(context)
-                                  .pushReplacement(MaterialPageRoute(
-                                      builder: (_) => const LoginScreen())),
-                              child: const Text(
-                                'Login',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                  decoration: TextDecoration.underline,
-                                  decorationColor: Colors.white,
+                                        );
+                                      },
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                      ],
+                          ),
+
+                          // Already have account
+                          const SizedBox(height: 20),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Already have an account? ',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                  fontSize: 14,
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () => Navigator.of(context)
+                                    .pushReplacement(MaterialPageRoute(
+                                        builder: (_) => const LoginScreen())),
+                                child: const Text(
+                                  'Login',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    decoration: TextDecoration.underline,
+                                    decorationColor: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
                     ),
                   ),
-                ),
                 ),
               ),
             ),
@@ -822,11 +858,12 @@ class _SignUpScreenState extends State<SignUpScreen>
     return InputDecoration(
       labelText: label,
       labelStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
-      prefixIcon: icon != null ? Icon(icon, color: const Color(0xFF6A11CB), size: 20) : null,
+      prefixIcon: icon != null
+          ? Icon(icon, color: const Color(0xFF6A11CB), size: 20)
+          : null,
       filled: true,
       fillColor: Colors.grey[50],
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(color: Colors.grey[200]!, width: 1),
@@ -837,8 +874,7 @@ class _SignUpScreenState extends State<SignUpScreen>
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide:
-            const BorderSide(color: Color(0xFF6A11CB), width: 1.8),
+        borderSide: const BorderSide(color: Color(0xFF6A11CB), width: 1.8),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),

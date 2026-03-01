@@ -8,7 +8,7 @@ import '../../models/service_request_model.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/user_roles.dart';
 import '../../utils/add_dummy_profiles.dart';
-import '../../utils/web_image_loader.dart';
+import '../../widgets/universal_avatar.dart';
 import '../../widgets/expert_card.dart';
 import '../../services/firestore_service.dart';
 import '../../services/chat_service.dart';
@@ -301,12 +301,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         }
                       },
-                      child: WebImageLoader.loadAvatar(
-                        imageUrl: profilePhotoUrl,
+                      child: UniversalAvatar(
+                        avatarConfig: currentUser?.avatarConfig,
+                        photoUrl: profilePhotoUrl,
+                        fallbackName: currentUser?.name ?? 'U',
                         radius: 18,
-                        fallbackText: currentUser?.name ?? 'U',
-                        backgroundColor: Colors.white,
-                        textColor: const Color(0xFF6A11CB),
+                        animate: false,
                       ),
                     ),
                   ),
@@ -1138,19 +1138,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     child: Center(
-                      child: CircleAvatar(
-                        radius: 45,
-                        backgroundColor: Colors.white,
-                        child: CircleAvatar(
-                          radius: 42,
-                          backgroundImage: WebImageLoader.getImageProvider(
-                              profile.profilePicture),
-                          child: (profile.profilePicture == null ||
-                                  profile.profilePicture!.isEmpty)
-                              ? const Icon(Icons.person,
-                                  size: 40, color: Colors.grey)
-                              : null,
-                        ),
+                      child: UniversalAvatar(
+                        photoUrl: profile.profilePicture,
+                        fallbackName: profile.name,
+                        radius: 42,
+                        animate: false,
+                        borderColor: Colors.white,
+                        borderWidth: 3,
                       ),
                     ),
                   ),

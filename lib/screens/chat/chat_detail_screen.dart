@@ -15,9 +15,11 @@ import '../../services/presence_service.dart';
 import '../../utils/app_helpers.dart';
 import '../../utils/app_dialog.dart';
 import '../../utils/web_image_loader.dart';
+import '../../widgets/universal_avatar.dart';
 import '../../utils/user_roles.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../widgets/app_popup.dart';
+import '../../widgets/gpay_simulation_dialog.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   final String chatId;
@@ -78,12 +80,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   // AppBar cycling gradient animation
   late final AnimationController _gradientCtrl;
   static const _gradientPhases = [
-    [Color(0xFF4A148C), Color(0xFF7B1FA2), Color(0xFF00B0FF)],  // purple→blue
-    [Color(0xFF1A237E), Color(0xFF3949AB), Color(0xFFE91E63)],  // indigo→pink
-    [Color(0xFF004D40), Color(0xFF00897B), Color(0xFF1565C0)],  // teal→blue
-    [Color(0xFF880E4F), Color(0xFFAD1457), Color(0xFFFF6F00)],  // magenta→amber
-    [Color(0xFF311B92), Color(0xFF6200EA), Color(0xFF00BFA5)],  // deep purple→teal
-    [Color(0xFF0D47A1), Color(0xFF1976D2), Color(0xFFE040FB)],  // blue→pink
+    [Color(0xFF4A148C), Color(0xFF7B1FA2), Color(0xFF00B0FF)], // purple→blue
+    [Color(0xFF1A237E), Color(0xFF3949AB), Color(0xFFE91E63)], // indigo→pink
+    [Color(0xFF004D40), Color(0xFF00897B), Color(0xFF1565C0)], // teal→blue
+    [Color(0xFF880E4F), Color(0xFFAD1457), Color(0xFFFF6F00)], // magenta→amber
+    [
+      Color(0xFF311B92),
+      Color(0xFF6200EA),
+      Color(0xFF00BFA5)
+    ], // deep purple→teal
+    [Color(0xFF0D47A1), Color(0xFF1976D2), Color(0xFFE040FB)], // blue→pink
   ];
   int _gradientPhase = 0;
 
@@ -91,7 +97,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   void initState() {
     super.initState();
     _currentUserId = FirebaseAuth.instance.currentUser?.uid;
-    _messageStream = _chatService.getMessages(widget.chatId).asBroadcastStream();
+    _messageStream =
+        _chatService.getMessages(widget.chatId).asBroadcastStream();
     _tabController = TabController(length: 2, vsync: this);
     _bubbleCtrl = AnimationController(
       vsync: this,
@@ -104,7 +111,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       duration: const Duration(seconds: 4),
     )..addStatusListener((s) {
         if (s == AnimationStatus.completed) {
-          setState(() => _gradientPhase = (_gradientPhase + 1) % _gradientPhases.length);
+          setState(() =>
+              _gradientPhase = (_gradientPhase + 1) % _gradientPhases.length);
           _gradientCtrl.forward(from: 0);
         }
       });
@@ -126,10 +134,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         .streamChatWorkRequests(widget.chatId)
         .listen((requests) {
       if (!mounted) return;
-      final pending =
-          requests.where((r) => r.status == 'pending').toList();
-      final accepted =
-          requests.where((r) => r.status == 'accepted').toList();
+      final pending = requests.where((r) => r.status == 'pending').toList();
+      final accepted = requests.where((r) => r.status == 'accepted').toList();
       setState(() {
         _allWorkRequests = requests;
         _pendingRequests = pending;
@@ -147,8 +153,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     _messageReadSubscription = _messageStream.listen((messages) {
       final uid = _currentUserId;
       if (uid == null) return;
-      final hasUnread =
-          messages.any((m) => !m.isRead && m.senderId != uid);
+      final hasUnread = messages.any((m) => !m.isRead && m.senderId != uid);
       if (hasUnread) {
         _chatService.markMessagesAsRead(widget.chatId, uid);
       }
@@ -156,8 +161,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        final auth =
-            Provider.of<app_auth.AuthProvider>(context, listen: false);
+        final auth = Provider.of<app_auth.AuthProvider>(context, listen: false);
         setState(() => _currentUserRole = auth.userRole);
       }
     });
@@ -195,8 +199,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       } catch (e) {
         if (mounted) {
           AppPopup.show(context,
-              message: 'Error editing message: $e',
-              type: PopupType.error);
+              message: 'Error editing message: $e', type: PopupType.error);
         }
       } finally {
         if (mounted) setState(() => _isSending = false);
@@ -220,14 +223,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       _messageController.clear();
       if (_scrollController.hasClients) {
         _scrollController.animateTo(0,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut);
+            duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
       }
     } catch (e) {
       if (mounted) {
         AppPopup.show(context,
-            message: 'Error sending message: $e',
-            type: PopupType.error);
+            message: 'Error sending message: $e', type: PopupType.error);
       }
     } finally {
       if (mounted) setState(() => _isSending = false);
@@ -254,21 +255,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Delete Message'),
-        content:
-            const Text('Delete this message? This cannot be undone.'),
+        content: const Text('Delete this message? This cannot be undone.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel')),
           ElevatedButton(
-            style:
-                ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete',
-                style: TextStyle(color: Colors.white)),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -283,8 +280,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     } catch (e) {
       if (mounted) {
         AppPopup.show(context,
-            message: 'Error deleting message: $e',
-            type: PopupType.error);
+            message: 'Error deleting message: $e', type: PopupType.error);
       }
     }
   }
@@ -295,8 +291,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(20))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -310,14 +305,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   Navigator.pop(context);
                   Clipboard.setData(ClipboardData(text: msg.text));
                   AppPopup.show(context,
-                      message: 'Copied to clipboard',
-                      type: PopupType.info);
+                      message: 'Copied to clipboard', type: PopupType.info);
                 },
               ),
               if (isMe && msg.type == 'text' && !_workLocked)
                 ListTile(
-                  leading: const Icon(Icons.edit_outlined,
-                      color: Colors.deepPurple),
+                  leading:
+                      const Icon(Icons.edit_outlined, color: Colors.deepPurple),
                   title: const Text('Edit'),
                   onTap: () {
                     Navigator.pop(context);
@@ -326,10 +320,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 ),
               if (isMe && !_workLocked)
                 ListTile(
-                  leading: const Icon(Icons.delete_outline,
-                      color: Colors.red),
-                  title: const Text('Delete',
-                      style: TextStyle(color: Colors.red)),
+                  leading: const Icon(Icons.delete_outline, color: Colors.red),
+                  title:
+                      const Text('Delete', style: TextStyle(color: Colors.red)),
                   onTap: () {
                     Navigator.pop(context);
                     _deleteMessage(msg);
@@ -375,8 +368,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(20))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => _AskWorkSheet(
         chatId: widget.chatId,
         currentUserId: _currentUserId!,
@@ -403,17 +395,21 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         builder: (_, sc) => Container(
           decoration: const BoxDecoration(
             color: Colors.white,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Builder(
             builder: (context) {
               // allRequests is a snapshot — stable for this sheet session
-              final pending = allRequests.where((r) => r.status == 'pending').toList();
-              final accepted = allRequests.where((r) => r.status == 'accepted').toList();
-              final completed = allRequests.where((r) => r.status == 'completed').toList();
-              final rejected = allRequests.where((r) => r.status == 'rejected').toList();
-              final cancelled = allRequests.where((r) => r.status == 'cancelled').toList();
+              final pending =
+                  allRequests.where((r) => r.status == 'pending').toList();
+              final accepted =
+                  allRequests.where((r) => r.status == 'accepted').toList();
+              final completed =
+                  allRequests.where((r) => r.status == 'completed').toList();
+              final rejected =
+                  allRequests.where((r) => r.status == 'rejected').toList();
+              final cancelled =
+                  allRequests.where((r) => r.status == 'cancelled').toList();
 
               return Column(
                 children: [
@@ -431,8 +427,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   ),
                   // Header
                   Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: Row(
                       children: [
                         const Icon(Icons.format_list_bulleted,
@@ -441,8 +437,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         const Text(
                           'Work Requests List',
                           style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold),
+                              fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                         const Spacer(),
                         if (allRequests.isNotEmpty)
@@ -490,36 +485,31 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           if (pending.isNotEmpty) ...[
                             _monitoringSectionLabel(
                                 'Pending', Colors.orange, Icons.hourglass_top),
-                            ...pending.map((r) =>
-                                _monitoringTaskTile(r)),
+                            ...pending.map((r) => _monitoringTaskTile(r)),
                             const SizedBox(height: 8),
                           ],
                           if (accepted.isNotEmpty) ...[
                             _monitoringSectionLabel(
                                 'In Progress', Colors.blue, Icons.work),
-                            ...accepted.map((r) =>
-                                _monitoringTaskTile(r)),
+                            ...accepted.map((r) => _monitoringTaskTile(r)),
                             const SizedBox(height: 8),
                           ],
                           if (completed.isNotEmpty) ...[
                             _monitoringSectionLabel(
                                 'Completed', Colors.blue, Icons.done_all),
-                            ...completed.map((r) =>
-                                _monitoringTaskTile(r)),
+                            ...completed.map((r) => _monitoringTaskTile(r)),
                             const SizedBox(height: 8),
                           ],
                           if (rejected.isNotEmpty) ...[
                             _monitoringSectionLabel(
                                 'Rejected', Colors.red, Icons.close),
-                            ...rejected.map((r) =>
-                                _monitoringTaskTile(r)),
+                            ...rejected.map((r) => _monitoringTaskTile(r)),
                             const SizedBox(height: 8),
                           ],
                           if (cancelled.isNotEmpty) ...[
                             _monitoringSectionLabel(
                                 'Cancelled', Colors.grey, Icons.block),
-                            ...cancelled.map((r) =>
-                                _monitoringTaskTile(r)),
+                            ...cancelled.map((r) => _monitoringTaskTile(r)),
                           ],
                         ],
                       ),
@@ -533,8 +523,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     );
   }
 
-  Widget _monitoringSectionLabel(
-      String label, Color color, IconData icon) {
+  Widget _monitoringSectionLabel(String label, Color color, IconData icon) {
     return Padding(
       padding: const EdgeInsets.only(left: 4, bottom: 6),
       child: Row(
@@ -544,9 +533,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           Text(
             label,
             style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: color),
+                fontSize: 12, fontWeight: FontWeight.w700, color: color),
           ),
         ],
       ),
@@ -559,11 +546,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     final isCompleted = r.status == 'completed';
     final isRejected = r.status == 'rejected';
     final isCancelled = r.status == 'cancelled';
-    
+
     Color statusColor;
     String statusLabel;
     IconData statusIcon;
-    
+
     if (isPending) {
       statusColor = Colors.orange;
       statusLabel = 'Pending';
@@ -589,7 +576,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       statusLabel = r.status;
       statusIcon = Icons.info_outline;
     }
-    
+
     final isMyRequest = r.customerId == _currentUserId;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -621,8 +608,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                     if (r.description.isNotEmpty)
                       Text(
                         r.description,
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.grey[600]),
+                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -630,8 +616,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
@@ -672,8 +657,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                       } catch (e) {
                         if (mounted) {
                           AppPopup.show(context,
-                              message: 'Error: $e',
-                              type: PopupType.error);
+                              message: 'Error: $e', type: PopupType.error);
                         }
                       }
                     },
@@ -727,8 +711,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         } catch (e) {
                           if (mounted) {
                             AppPopup.show(context,
-                                message: 'Error: $e',
-                                type: PopupType.error);
+                                message: 'Error: $e', type: PopupType.error);
                           }
                         }
                       }
@@ -794,8 +777,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         } catch (e) {
                           if (mounted) {
                             AppPopup.show(context,
-                                message: 'Error: $e',
-                                type: PopupType.error);
+                                message: 'Error: $e', type: PopupType.error);
                           }
                         }
                       }
@@ -853,8 +835,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         } catch (e) {
                           if (mounted) {
                             AppPopup.show(context,
-                                message: 'Error: $e',
-                                type: PopupType.error);
+                                message: 'Error: $e', type: PopupType.error);
                           }
                         }
                       }
@@ -888,8 +869,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       );
       if (image == null) return;
       setState(() => _isLoading = true);
-      final imageUrl = await _cloudinaryService.uploadImage(
-          File(image.path),
+      final imageUrl = await _cloudinaryService.uploadImage(File(image.path),
           folder: 'chat_media');
       if (imageUrl != null) {
         await _sendMessage(imageUrl: imageUrl);
@@ -917,8 +897,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       );
       if (image == null) return;
       setState(() => _isLoading = true);
-      final imageUrl = await _cloudinaryService.uploadImage(
-          File(image.path),
+      final imageUrl = await _cloudinaryService.uploadImage(File(image.path),
           folder: 'chat_media');
       if (imageUrl != null) {
         await _sendMessage(imageUrl: imageUrl);
@@ -941,8 +920,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(20))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -950,8 +928,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.photo_library,
-                    color: Color(0xFF9C27B0)),
+                leading:
+                    const Icon(Icons.photo_library, color: Color(0xFF9C27B0)),
                 title: const Text('Choose from Gallery'),
                 onTap: () {
                   Navigator.pop(context);
@@ -959,8 +937,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.camera_alt,
-                    color: Color(0xFF9C27B0)),
+                leading: const Icon(Icons.camera_alt, color: Color(0xFF9C27B0)),
                 title: const Text('Take Photo'),
                 onTap: () {
                   Navigator.pop(context);
@@ -976,8 +953,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   void _showImagePreview(String imageUrl) {
     Navigator.of(context).push(MaterialPageRoute(
-        builder: (context) =>
-            _ImagePreviewScreen(imageUrl: imageUrl)));
+        builder: (context) => _ImagePreviewScreen(imageUrl: imageUrl)));
   }
 
   // ── Report / Block ───────────────────────────────────────────────────────────
@@ -1014,8 +990,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                     groupValue: selectedReason,
                     title: Text(r),
                     dense: true,
-                    onChanged: (v) =>
-                        setDlgState(() => selectedReason = v),
+                    onChanged: (v) => setDlgState(() => selectedReason = v),
                   )),
               const SizedBox(height: 8),
               TextField(
@@ -1033,8 +1008,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 onPressed: () => Navigator.pop(ctx),
                 child: const Text('Cancel')),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
               onPressed: () async {
                 Navigator.pop(ctx);
                 if (_currentUserId == null) return;
@@ -1048,20 +1022,18 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   );
                   if (mounted) {
                     AppPopup.show(context,
-                        message:
-                            'Chat reported. Our team will review it.',
+                        message: 'Chat reported. Our team will review it.',
                         type: PopupType.success);
                   }
                 } catch (e) {
                   if (mounted) {
                     AppPopup.show(context,
-                        message: 'Failed to report: $e',
-                        type: PopupType.error);
+                        message: 'Failed to report: $e', type: PopupType.error);
                   }
                 }
               },
-              child: const Text('Submit',
-                  style: TextStyle(color: Colors.white)),
+              child:
+                  const Text('Submit', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -1086,11 +1058,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel')),
           ElevatedButton(
-            style:
-                ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Block',
-                style: TextStyle(color: Colors.white)),
+            child: const Text('Block', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1110,8 +1080,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     } catch (e) {
       if (mounted) {
         AppPopup.show(context,
-            message: 'Failed to block user: $e',
-            type: PopupType.error);
+            message: 'Failed to block user: $e', type: PopupType.error);
       }
     }
   }
@@ -1126,7 +1095,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         // Cycling gradient lerp
         final gt = _gradientCtrl.value;
         final curr = _gradientPhases[_gradientPhase];
-        final next = _gradientPhases[(_gradientPhase + 1) % _gradientPhases.length];
+        final next =
+            _gradientPhases[(_gradientPhase + 1) % _gradientPhases.length];
         final c1 = Color.lerp(curr[0], next[0], gt)!;
         final c2 = Color.lerp(curr[1], next[1], gt)!;
         final c3 = Color.lerp(curr[2], next[2], gt)!;
@@ -1207,8 +1177,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   Widget build(BuildContext context) {
     final isCustomer = _currentUserRole == UserRoles.customer;
     final isCompany = _currentUserRole == UserRoles.company;
-    final canAskForWork =
-        (isCustomer || isCompany) && _currentUserId != null;
+    final canAskForWork = (isCustomer || isCompany) && _currentUserId != null;
     final hasPending = _pendingRequests.isNotEmpty;
 
     return DefaultTabController(
@@ -1241,17 +1210,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                     children: [
                       CircleAvatar(
                         radius: 18,
-                        backgroundImage:
-                            WebImageLoader.getImageProvider(widget.otherUserPhoto),
-                        child: widget.otherUserPhoto == null ||
-                                widget.otherUserPhoto!.isEmpty
-                            ? Text(
-                                widget.otherUserName.isNotEmpty
-                                    ? widget.otherUserName[0].toUpperCase()
-                                    : 'U',
-                                style: const TextStyle(fontSize: 16),
-                              )
-                            : null,
+                        backgroundColor: Colors.transparent,
+                        child: UniversalAvatar(
+                          photoUrl: widget.otherUserPhoto,
+                          fallbackName: widget.otherUserName,
+                          radius: 18,
+                          animate: false,
+                        ),
                       ),
                       // Online dot on avatar
                       Positioned(
@@ -1318,15 +1283,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         right: 6,
                         child: Container(
                           height: 17,
-                          constraints:
-                              const BoxConstraints(minWidth: 17),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 3),
+                          constraints: const BoxConstraints(minWidth: 17),
+                          padding: const EdgeInsets.symmetric(horizontal: 3),
                           decoration: BoxDecoration(
                             color: Colors.teal[600],
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                                color: Colors.white, width: 1.5),
+                            border: Border.all(color: Colors.white, width: 1.5),
                           ),
                           child: Center(
                             child: Text(
@@ -1362,15 +1324,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         right: 6,
                         child: Container(
                           height: 17,
-                          constraints:
-                              const BoxConstraints(minWidth: 17),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 3),
+                          constraints: const BoxConstraints(minWidth: 17),
+                          padding: const EdgeInsets.symmetric(horizontal: 3),
                           decoration: BoxDecoration(
                             color: Colors.orange[700],
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                                color: Colors.white, width: 1.5),
+                            border: Border.all(color: Colors.white, width: 1.5),
                           ),
                           child: Center(
                             child: Text(
@@ -1421,8 +1380,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.white60,
                   tabs: const [
-                    Tab(icon: Icon(Icons.chat_bubble_outline, size: 18), text: 'Chat'),
-                    Tab(icon: Icon(Icons.assignment_turned_in_outlined, size: 18), text: 'Work Project'),
+                    Tab(
+                        icon: Icon(Icons.chat_bubble_outline, size: 18),
+                        text: 'Chat'),
+                    Tab(
+                        icon:
+                            Icon(Icons.assignment_turned_in_outlined, size: 18),
+                        text: 'Work Project'),
                   ],
                 )
               : null,
@@ -1443,31 +1407,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   Widget _buildChatBody() {
     return Column(
       children: [
-        // Lock banner
-        if (_workLocked)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            color: const Color(0xFFFFF8E1),
-            child: Row(
-              children: [
-                const Icon(Icons.lock_outline,
-                    size: 16, color: Color(0xFFE65100)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Work in progress — messages are locked for integrity.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.orange[900],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
         // Messages
         Expanded(
           child: StreamBuilder<List<MessageModel>>(
@@ -1488,12 +1427,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           size: 64, color: Colors.grey[400]),
                       const SizedBox(height: 16),
                       Text('No messages yet',
-                          style: TextStyle(
-                              fontSize: 16, color: Colors.grey[600])),
+                          style:
+                              TextStyle(fontSize: 16, color: Colors.grey[600])),
                       const SizedBox(height: 8),
                       Text('Start the conversation!',
-                          style: TextStyle(
-                              fontSize: 14, color: Colors.grey[500])),
+                          style:
+                              TextStyle(fontSize: 14, color: Colors.grey[500])),
                     ],
                   ),
                 );
@@ -1569,8 +1508,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 Expanded(
                   child: Text(
                     'Editing: ${_editingMessage!.text}',
-                    style: const TextStyle(
-                        fontSize: 12, color: Colors.deepPurple),
+                    style:
+                        const TextStyle(fontSize: 12, color: Colors.deepPurple),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1598,85 +1537,59 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             ],
           ),
           child: SafeArea(
-            child: _workLocked
-                ? _buildLockedInputBar()
-                : Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.image,
-                            color: Color(0xFF9C27B0)),
-                        onPressed: _isLoading || _isSending
-                            ? null
-                            : _showImageOptions,
-                      ),
-                      Expanded(
-                        child: TextField(
-                          controller: _messageController,
-                          decoration: InputDecoration(
-                            hintText: 'Type a message...',
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(24),
-                                borderSide: BorderSide.none),
-                            filled: true,
-                            fillColor: Colors.grey[200],
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 10),
-                          ),
-                          maxLines: null,
-                          textCapitalization:
-                              TextCapitalization.sentences,
-                          enabled: !_isLoading && !_isSending,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(colors: [
-                            Color(0xFF9C27B0),
-                            Color(0xFFE91E63),
-                          ]),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          icon: _isSending
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                      color: Colors.white, strokeWidth: 2))
-                              : Icon(
-                                  _editingMessage != null
-                                      ? Icons.check
-                                      : Icons.send,
-                                  color: Colors.white),
-                          onPressed: _isLoading || _isSending
-                              ? null
-                              : () => _sendMessage(),
-                        ),
-                      ),
-                    ],
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.image, color: Color(0xFF9C27B0)),
+                  onPressed:
+                      _isLoading || _isSending ? null : _showImageOptions,
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: _messageController,
+                    decoration: InputDecoration(
+                      hintText: 'Type a message...',
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none),
+                      filled: true,
+                      fillColor: Colors.grey[200],
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                    ),
+                    maxLines: null,
+                    textCapitalization: TextCapitalization.sentences,
+                    enabled: !_isLoading && !_isSending,
                   ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(colors: [
+                      Color(0xFF9C27B0),
+                      Color(0xFFE91E63),
+                    ]),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: _isSending
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2))
+                        : Icon(
+                            _editingMessage != null ? Icons.check : Icons.send,
+                            color: Colors.white),
+                    onPressed:
+                        _isLoading || _isSending ? null : () => _sendMessage(),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildLockedInputBar() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.lock_outline, size: 16, color: Colors.grey[500]),
-          const SizedBox(width: 6),
-          Text(
-            'Chat locked — work project in progress.',
-            style: TextStyle(fontSize: 13, color: Colors.grey[500]),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1710,8 +1623,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               const SizedBox(width: 8),
               Text(
                 '${_acceptedRequests.length} Active Project${_acceptedRequests.length > 1 ? 's' : ''}',
-                style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.bold),
+                style:
+                    const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -1726,7 +1639,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             itemBuilder: (_, i) => _WorkProjectCard(
               request: _acceptedRequests[i],
               currentUserId: _currentUserId ?? '',
+              otherUserId: widget.otherUserId,
               otherUserName: widget.otherUserName,
+              otherUserPhoto: widget.otherUserPhoto,
               firestoreService: _firestoreService,
               projectIndex: i + 1,
               totalProjects: _acceptedRequests.length,
@@ -1758,26 +1673,22 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                        color:
-                            Colors.deepPurple.withValues(alpha: 0.3),
+                        color: Colors.deepPurple.withValues(alpha: 0.3),
                         blurRadius: 8),
                   ],
                 )
               : null,
           child: Column(
-            crossAxisAlignment: isMe
-                ? CrossAxisAlignment.end
-                : CrossAxisAlignment.start,
+            crossAxisAlignment:
+                isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
                   gradient: isMe && !isDeleted
-                      ? const LinearGradient(colors: [
-                          Color(0xFF9C27B0),
-                          Color(0xFFE91E63)
-                        ])
+                      ? const LinearGradient(
+                          colors: [Color(0xFF9C27B0), Color(0xFFE91E63)])
                       : null,
                   color: isDeleted
                       ? Colors.grey[200]
@@ -1795,8 +1706,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                     ? Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.block,
-                              size: 13, color: Colors.grey[500]),
+                          Icon(Icons.block, size: 13, color: Colors.grey[500]),
                           const SizedBox(width: 5),
                           Text(
                             'This message was deleted',
@@ -1810,8 +1720,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                       )
                     : message.type == 'image'
                         ? GestureDetector(
-                            onTap: () =>
-                                _showImagePreview(message.mediaUrl!),
+                            onTap: () => _showImagePreview(message.mediaUrl!),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(8),
                               child: WebImageLoader.loadImage(
@@ -1824,9 +1733,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         : Text(
                             message.text,
                             style: TextStyle(
-                                color: isMe
-                                    ? Colors.white
-                                    : Colors.black87,
+                                color: isMe ? Colors.white : Colors.black87,
                                 fontSize: 15),
                           ),
               ),
@@ -1838,12 +1745,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                     Padding(
                       padding: const EdgeInsets.only(right: 4),
                       child: Text('edited',
-                          style: TextStyle(
-                              fontSize: 10, color: Colors.grey[400])),
+                          style:
+                              TextStyle(fontSize: 10, color: Colors.grey[400])),
                     ),
                   Text(AppHelpers.formatTime(message.createdAt),
-                      style: TextStyle(
-                          fontSize: 11, color: Colors.grey[600])),
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600])),
                   if (isMe && !isDeleted) ...[
                     const SizedBox(width: 4),
                     Icon(
@@ -1875,7 +1781,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 class _WorkProjectCard extends StatefulWidget {
   final ServiceRequestModel request;
   final String currentUserId;
+  final String otherUserId;
   final String otherUserName;
+  final String? otherUserPhoto;
   final FirestoreService firestoreService;
   final int projectIndex;
   final int totalProjects;
@@ -1883,7 +1791,9 @@ class _WorkProjectCard extends StatefulWidget {
   const _WorkProjectCard({
     required this.request,
     required this.currentUserId,
+    required this.otherUserId,
     required this.otherUserName,
+    this.otherUserPhoto,
     required this.firestoreService,
     required this.projectIndex,
     required this.totalProjects,
@@ -1895,24 +1805,23 @@ class _WorkProjectCard extends StatefulWidget {
 
 class _WorkProjectCardState extends State<_WorkProjectCard> {
   bool _completing = false;
+  bool _openingWorkChat = false;
+  bool _paying = false;
 
   Future<void> _markCompleted() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Mark as Completed'),
-        content: const Text(
-            'Confirm that this project has been completed?'),
+        content: const Text('Confirm that this project has been completed?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirm',
-                style: TextStyle(color: Colors.white)),
+            child: const Text('Confirm', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1924,16 +1833,85 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
           .updateRequestStatus(widget.request.id, 'completed');
       if (mounted) {
         AppPopup.show(context,
-            message: 'Project marked as completed!',
-            type: PopupType.success);
+            message: 'Project marked as completed!', type: PopupType.success);
       }
     } catch (e) {
       if (mounted) {
-        AppPopup.show(context,
-            message: 'Error: $e', type: PopupType.error);
+        AppPopup.show(context, message: 'Error: $e', type: PopupType.error);
       }
     } finally {
       if (mounted) setState(() => _completing = false);
+    }
+  }
+
+  Future<void> _openWorkChat() async {
+    if (_openingWorkChat) return;
+    setState(() => _openingWorkChat = true);
+    try {
+      final workChatId = await widget.firestoreService.ensureWorkChatForRequest(
+        requestId: widget.request.id,
+      );
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatDetailScreen(
+            chatId: workChatId,
+            otherUserId: widget.otherUserId,
+            otherUserName: widget.otherUserName,
+            otherUserPhoto: widget.otherUserPhoto,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        AppPopup.show(context,
+            message: 'Unable to open work chat: $e', type: PopupType.error);
+      }
+    } finally {
+      if (mounted) setState(() => _openingWorkChat = false);
+    }
+  }
+
+  Future<void> _triggerPayment() async {
+    if (_paying) return;
+
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (ctx) => _WorkPaymentAmountDialog(
+        projectTitle: widget.request.title,
+        recipientName: widget.otherUserName,
+      ),
+    );
+    if (amount == null || !mounted) return;
+
+    setState(() => _paying = true);
+    try {
+      final txnId = await GPaySimulationDialog.show(
+        context,
+        amount: amount,
+        recipientName: widget.otherUserName,
+        description: widget.request.title,
+      );
+      if (txnId == null || !mounted) return;
+
+      await widget.firestoreService
+          .updateRequestStatus(widget.request.id, 'completed');
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message:
+            'Payment successful: Rs.${amount.toStringAsFixed(2)} (TXN: $txnId)',
+        type: PopupType.success,
+        duration: const Duration(seconds: 4),
+      );
+    } catch (e) {
+      if (mounted) {
+        AppPopup.show(context,
+            message: 'Payment failed: $e', type: PopupType.error);
+      }
+    } finally {
+      if (mounted) setState(() => _paying = false);
     }
   }
 
@@ -2001,8 +1979,8 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(20),
@@ -2033,8 +2011,8 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
                           color: Colors.grey)),
                   const SizedBox(height: 4),
                   Text(req.description,
-                      style: const TextStyle(
-                          fontSize: 14, color: Colors.black87)),
+                      style:
+                          const TextStyle(fontSize: 14, color: Colors.black87)),
                   const SizedBox(height: 12),
                 ],
 
@@ -2059,36 +2037,144 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
                       req.hireType!.replaceAll('_', ' ').toUpperCase()),
                 ],
 
-                // Locked notice
+                // Work chat notice
                 const SizedBox(height: 14),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFF8E1),
+                    color: const Color(0xFFE8F4FF),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                        color: Colors.orange.shade300, width: 1),
+                    border:
+                        Border.all(color: const Color(0xFF90CAF9), width: 1),
                   ),
                   child: const Row(
                     children: [
-                      Icon(Icons.lock_outline,
-                          size: 14, color: Colors.orange),
+                      Icon(Icons.forum_outlined,
+                          size: 14, color: Color(0xFF1565C0)),
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Chat messages are locked for integrity while work is in progress.',
-                          style: TextStyle(
-                              fontSize: 11, color: Colors.orange),
+                          'Main chat stays active. Use Work Chat for this project discussion and files.',
+                          style:
+                              TextStyle(fontSize: 11, color: Color(0xFF1565C0)),
                         ),
                       ),
                     ],
                   ),
                 ),
 
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                          color:
+                              const Color(0xFF1565C0).withValues(alpha: 0.25),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3)),
+                    ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: _openingWorkChat ? null : _openWorkChat,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _openingWorkChat
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.chat_bubble_outline_rounded,
+                                    color: Colors.white, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              _openingWorkChat
+                                  ? 'Opening...'
+                                  : 'Open Work Chat',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                if (isCustomer) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF2E7D32), Color(0xFF66BB6A)],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                            color:
+                                const Color(0xFF2E7D32).withValues(alpha: 0.25),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3)),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: _paying ? null : _triggerPayment,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _paying
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2, color: Colors.white))
+                                  : const Icon(Icons.payment_rounded,
+                                      color: Colors.white, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                _paying
+                                    ? 'Processing...'
+                                    : 'Pay via Google Pay',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+
                 // Mark Complete (skilled person only)
                 if (!isCustomer) ...[
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
                   Container(
                     width: double.infinity,
                     decoration: BoxDecoration(
@@ -2098,8 +2184,10 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                            color: const Color(0xFF5E35B1).withValues(alpha: 0.3),
-                            blurRadius: 8, offset: const Offset(0, 3)),
+                            color:
+                                const Color(0xFF5E35B1).withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3)),
                       ],
                     ),
                     child: Material(
@@ -2115,17 +2203,21 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
                             children: [
                               _completing
                                   ? const SizedBox(
-                                      width: 18, height: 18,
+                                      width: 18,
+                                      height: 18,
                                       child: CircularProgressIndicator(
                                           strokeWidth: 2, color: Colors.white))
                                   : const Icon(Icons.check_circle_outline,
                                       color: Colors.white, size: 20),
                               const SizedBox(width: 8),
                               Text(
-                                _completing ? 'Completing...' : 'Mark as Completed',
+                                _completing
+                                    ? 'Completing...'
+                                    : 'Mark as Completed',
                                 style: const TextStyle(
-                                  color: Colors.white, fontSize: 15,
-                                  fontWeight: FontWeight.w600),
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
@@ -2147,12 +2239,11 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
           Icon(icon, size: 16, color: Colors.grey[600]),
           const SizedBox(width: 6),
           Text('$label: ',
-              style: const TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w600)),
+              style:
+                  const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
           Expanded(
             child: Text(value,
-                style:
-                    const TextStyle(fontSize: 13, color: Colors.black87),
+                style: const TextStyle(fontSize: 13, color: Colors.black87),
                 overflow: TextOverflow.ellipsis),
           ),
         ],
@@ -2160,6 +2251,90 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
 }
 
 // ── Pending Requests Detail Sheet ─────────────────────────────────────────────
+
+class _WorkPaymentAmountDialog extends StatefulWidget {
+  final String projectTitle;
+  final String recipientName;
+
+  const _WorkPaymentAmountDialog({
+    required this.projectTitle,
+    required this.recipientName,
+  });
+
+  @override
+  State<_WorkPaymentAmountDialog> createState() =>
+      _WorkPaymentAmountDialogState();
+}
+
+class _WorkPaymentAmountDialogState extends State<_WorkPaymentAmountDialog> {
+  final _controller = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _confirm() {
+    final value = double.tryParse(_controller.text.trim());
+    if (value == null || value <= 0) {
+      setState(() => _error = 'Enter a valid amount');
+      return;
+    }
+    Navigator.pop(context, value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text('Enter Payment Amount'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Project: ${widget.projectTitle}',
+              style: const TextStyle(fontSize: 13, color: Colors.black54),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _controller,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: 'Amount',
+                prefixText: 'Rs. ',
+                errorText: _error,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _confirm,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF1976D2),
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Continue'),
+        ),
+      ],
+    );
+  }
+}
 
 class _PendingRequestsSheet extends StatefulWidget {
   final List<ServiceRequestModel> requests;
@@ -2181,8 +2356,7 @@ class _PendingRequestsSheet extends StatefulWidget {
   });
 
   @override
-  State<_PendingRequestsSheet> createState() =>
-      _PendingRequestsSheetState();
+  State<_PendingRequestsSheet> createState() => _PendingRequestsSheetState();
 }
 
 class _PendingRequestsSheetState extends State<_PendingRequestsSheet> {
@@ -2193,8 +2367,8 @@ class _PendingRequestsSheetState extends State<_PendingRequestsSheet> {
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -2229,10 +2403,9 @@ class _PendingRequestsSheetState extends State<_PendingRequestsSheet> {
                     const Text('Pending Work Requests',
                         style: TextStyle(
                             fontSize: 16, fontWeight: FontWeight.bold)),
-                    Text(
-                        'Sent to ${widget.otherUserName} · awaiting response',
-                        style: const TextStyle(
-                            fontSize: 12, color: Colors.grey)),
+                    Text('Sent to ${widget.otherUserName} · awaiting response',
+                        style:
+                            const TextStyle(fontSize: 12, color: Colors.grey)),
                   ],
                 ),
               ],
@@ -2311,8 +2484,7 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
     return DateTime.now().difference(last) < _remindCooldown;
   }
 
-  bool get _isMine =>
-      widget.request.customerId == widget.currentUserId;
+  bool get _isMine => widget.request.customerId == widget.currentUserId;
 
   Future<void> _remind() async {
     if (_remindedRecently) {
@@ -2339,8 +2511,7 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
       }
     } catch (e) {
       if (mounted) {
-        AppPopup.show(context,
-            message: 'Error: $e', type: PopupType.error);
+        AppPopup.show(context, message: 'Error: $e', type: PopupType.error);
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -2351,18 +2522,16 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Cancel Work Request'),
-        content: Text(
-            'Cancel "${widget.request.title}"? This cannot be undone.'),
+        content:
+            Text('Cancel "${widget.request.title}"? This cannot be undone.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Keep')),
           ElevatedButton(
-            style:
-                ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Cancel Request',
                 style: TextStyle(color: Colors.white)),
@@ -2380,14 +2549,12 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
       );
       if (mounted) {
         AppPopup.show(context,
-            message: 'Work request cancelled.',
-            type: PopupType.info);
+            message: 'Work request cancelled.', type: PopupType.info);
         widget.onActionDone();
       }
     } catch (e) {
       if (mounted) {
-        AppPopup.show(context,
-            message: 'Error: $e', type: PopupType.error);
+        AppPopup.show(context, message: 'Error: $e', type: PopupType.error);
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -2398,8 +2565,7 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('${approve ? 'Accept' : 'Reject'} Work Request'),
         content: Text(
             '${approve ? 'Accept' : 'Reject'} "${widget.request.title}"?${approve ? ' You will be committed to this work.' : ' This cannot be undone.'}'),
@@ -2434,8 +2600,7 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
       }
     } catch (e) {
       if (mounted) {
-        AppPopup.show(context,
-            message: 'Error: $e', type: PopupType.error);
+        AppPopup.show(context, message: 'Error: $e', type: PopupType.error);
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -2451,8 +2616,7 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
       decoration: BoxDecoration(
         color: const Color(0xFFFFFDE7),
         borderRadius: BorderRadius.circular(14),
-        border: Border(
-            left: BorderSide(color: Colors.orange[700]!, width: 4)),
+        border: Border(left: BorderSide(color: Colors.orange[700]!, width: 4)),
         boxShadow: [
           BoxShadow(
               color: Colors.orange.withValues(alpha: 0.08),
@@ -2477,8 +2641,8 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
                           fontWeight: FontWeight.w700, fontSize: 14)),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: Colors.orange.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
@@ -2495,8 +2659,7 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
             if (req.description.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(req.description,
-                  style: const TextStyle(
-                      fontSize: 13, color: Colors.black54)),
+                  style: const TextStyle(fontSize: 13, color: Colors.black54)),
             ],
             // Metadata
             const SizedBox(height: 10),
@@ -2506,15 +2669,12 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
                     size: 13, color: Colors.grey),
                 const SizedBox(width: 4),
                 Text('Sent ${AppHelpers.formatDate(req.createdAt)}',
-                    style: const TextStyle(
-                        fontSize: 12, color: Colors.grey)),
+                    style: const TextStyle(fontSize: 12, color: Colors.grey)),
                 const Spacer(),
-                const Icon(Icons.person_outline,
-                    size: 13, color: Colors.grey),
+                const Icon(Icons.person_outline, size: 13, color: Colors.grey),
                 const SizedBox(width: 4),
                 Text('To ${widget.otherUserName}',
-                    style: const TextStyle(
-                        fontSize: 12, color: Colors.grey)),
+                    style: const TextStyle(fontSize: 12, color: Colors.grey)),
               ],
             ),
             // Actions (only if this customer owns it)
@@ -2531,16 +2691,20 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
                         decoration: BoxDecoration(
                           gradient: _remindedRecently
                               ? null
-                              : const LinearGradient(
-                                  colors: [Color(0xFF7B1FA2), Color(0xFFAB47BC)]),
+                              : const LinearGradient(colors: [
+                                  Color(0xFF7B1FA2),
+                                  Color(0xFFAB47BC)
+                                ]),
                           color: _remindedRecently ? Colors.grey[300] : null,
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: _remindedRecently
                               ? null
                               : [
                                   BoxShadow(
-                                      color: const Color(0xFF7B1FA2).withValues(alpha: 0.25),
-                                      blurRadius: 6, offset: const Offset(0, 2)),
+                                      color: const Color(0xFF7B1FA2)
+                                          .withValues(alpha: 0.25),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2)),
                                 ],
                         ),
                         child: Material(
@@ -2595,12 +2759,14 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
                             child: const Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.cancel_outlined, size: 16,
-                                    color: Color(0xFFD32F2F)),
+                                Icon(Icons.cancel_outlined,
+                                    size: 16, color: Color(0xFFD32F2F)),
                                 SizedBox(width: 5),
-                                Text('Cancel', style: TextStyle(
-                                  color: Color(0xFFD32F2F), fontSize: 13,
-                                  fontWeight: FontWeight.w600)),
+                                Text('Cancel',
+                                    style: TextStyle(
+                                        color: Color(0xFFD32F2F),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600)),
                               ],
                             ),
                           ),
@@ -2627,8 +2793,10 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
-                                color: const Color(0xFF388E3C).withValues(alpha: 0.25),
-                                blurRadius: 6, offset: const Offset(0, 2)),
+                                color: const Color(0xFF388E3C)
+                                    .withValues(alpha: 0.25),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2)),
                           ],
                         ),
                         child: Material(
@@ -2642,12 +2810,14 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
                               child: const Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.check_circle, size: 16,
-                                      color: Colors.white),
+                                  Icon(Icons.check_circle,
+                                      size: 16, color: Colors.white),
                                   SizedBox(width: 5),
-                                  Text('Accept', style: TextStyle(
-                                    color: Colors.white, fontSize: 13,
-                                    fontWeight: FontWeight.w600)),
+                                  Text('Accept',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600)),
                                 ],
                               ),
                             ),
@@ -2669,12 +2839,14 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
                             child: const Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.cancel_outlined, size: 16,
-                                    color: Color(0xFFD32F2F)),
+                                Icon(Icons.cancel_outlined,
+                                    size: 16, color: Color(0xFFD32F2F)),
                                 SizedBox(width: 5),
-                                Text('Reject', style: TextStyle(
-                                  color: Color(0xFFD32F2F), fontSize: 13,
-                                  fontWeight: FontWeight.w600)),
+                                Text('Reject',
+                                    style: TextStyle(
+                                        color: Color(0xFFD32F2F),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600)),
                               ],
                             ),
                           ),
@@ -2751,8 +2923,7 @@ class _AskWorkSheetState extends State<_AskWorkSheet> {
       if (mounted) {
         setState(() => _submitting = false);
         if (parentCtx.mounted) {
-          AppPopup.show(parentCtx,
-              message: 'Error: $e', type: PopupType.error);
+          AppPopup.show(parentCtx, message: 'Error: $e', type: PopupType.error);
         }
       }
     }
@@ -2807,8 +2978,8 @@ class _AskWorkSheetState extends State<_AskWorkSheet> {
               decoration: InputDecoration(
                 labelText: 'Project / Work Title *',
                 hintText: 'e.g. Build a mobile app, Design a logo...',
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 prefixIcon: const Icon(Icons.title),
               ),
               validator: (v) => (v == null || v.trim().isEmpty)
@@ -2824,8 +2995,8 @@ class _AskWorkSheetState extends State<_AskWorkSheet> {
                 labelText: 'Description *',
                 hintText: 'Describe what needs to be done...',
                 alignLabelWithHint: true,
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 prefixIcon: const Padding(
                   padding: EdgeInsets.only(bottom: 40),
                   child: Icon(Icons.description_outlined),
@@ -2854,8 +3025,7 @@ class _AskWorkSheetState extends State<_AskWorkSheet> {
                     : const Icon(Icons.send, color: Colors.white),
                 label: Text(
                   _submitting ? 'Sending...' : 'Send Request',
-                  style:
-                      const TextStyle(color: Colors.white, fontSize: 16),
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.transparent,
@@ -2895,8 +3065,8 @@ class _ImagePreviewScreen extends StatelessWidget {
         child: InteractiveViewer(
           minScale: 0.5,
           maxScale: 4.0,
-          child: WebImageLoader.loadImage(
-              imageUrl: imageUrl, fit: BoxFit.contain),
+          child:
+              WebImageLoader.loadImage(imageUrl: imageUrl, fit: BoxFit.contain),
         ),
       ),
     );

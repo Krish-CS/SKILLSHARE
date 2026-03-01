@@ -34,8 +34,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final partnerId = authProvider.currentUser?.uid;
-    final partnerName =
-        authProvider.currentUser?.name ?? 'Delivery Partner';
+    final partnerName = authProvider.currentUser?.name ?? 'Delivery Partner';
 
     if (partnerId == null) {
       return const Scaffold(
@@ -75,8 +74,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _MyDeliveriesTab(
-              partnerId: partnerId, partnerName: partnerName),
+          _MyDeliveriesTab(partnerId: partnerId, partnerName: partnerName),
           _AvailableDeliveriesTab(
               partnerId: partnerId, partnerName: partnerName),
         ],
@@ -88,8 +86,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
 // ─── My Deliveries tab ───────────────────────────────────────────────────────
 
 class _MyDeliveriesTab extends StatelessWidget {
-  const _MyDeliveriesTab(
-      {required this.partnerId, required this.partnerName});
+  const _MyDeliveriesTab({required this.partnerId, required this.partnerName});
 
   final String partnerId;
   final String partnerName;
@@ -108,8 +105,7 @@ class _MyDeliveriesTab extends StatelessWidget {
           return const _EmptyState(
             icon: Icons.delivery_dining,
             message: 'No deliveries assigned to you yet.',
-            subtitle:
-                'Check the "Available" tab to pick up a delivery.',
+            subtitle: 'Check the "Available" tab to pick up a delivery.',
           );
         }
         return ListView.builder(
@@ -185,6 +181,8 @@ class _DeliveryCard extends StatelessWidget {
 
   Color _statusColor(String status) {
     switch (status) {
+      case 'confirmed':
+        return const Color(0xFF1976D2);
       case 'delivered':
         return Colors.green;
       case 'out_for_delivery':
@@ -200,6 +198,8 @@ class _DeliveryCard extends StatelessWidget {
 
   String _statusLabel(String status) {
     switch (status) {
+      case 'confirmed':
+        return 'Confirmed';
       case 'out_for_delivery':
         return 'Out for Delivery';
       case 'failed_delivery':
@@ -247,18 +247,16 @@ class _DeliveryCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         'Order #${order.id.substring(0, 8).toUpperCase()}',
-                        style:
-                            TextStyle(color: Colors.grey[600], fontSize: 12),
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
                       ),
                     ],
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _statusColor(order.status)
-                        .withValues(alpha: 0.12),
+                    color: _statusColor(order.status).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -288,11 +286,9 @@ class _DeliveryCard extends StatelessWidget {
               ),
             const SizedBox(height: 14),
             // Action buttons
-            if (!isAssigned && order.status == 'shipped')
+            if (!isAssigned && order.status == 'confirmed')
               _AcceptButton(
-                  order: order,
-                  partnerId: partnerId,
-                  partnerName: partnerName),
+                  order: order, partnerId: partnerId, partnerName: partnerName),
             if (isAssigned && order.status == 'out_for_delivery')
               Row(
                 children: [
@@ -301,8 +297,8 @@ class _DeliveryCard extends StatelessWidget {
                       label: 'Mark Delivered',
                       icon: Icons.check_circle,
                       color: Colors.green,
-                      onTap: () => _updateStatus(
-                          context, order, partnerId, 'delivered'),
+                      onTap: () =>
+                          _updateStatus(context, order, partnerId, 'delivered'),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -317,7 +313,20 @@ class _DeliveryCard extends StatelessWidget {
                   ),
                 ],
               ),
-            if (order.status == 'delivered' || order.status == 'out_for_delivery')
+            if (isAssigned && order.status == 'out_for_delivery')
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: TextButton.icon(
+                  onPressed: () =>
+                      _updateEstimatedDelivery(context, order, partnerId),
+                  icon: const Icon(Icons.schedule, size: 18),
+                  label: const Text('Update ETA'),
+                  style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF1976D2)),
+                ),
+              ),
+            if (order.status == 'delivered' ||
+                order.status == 'out_for_delivery')
               TextButton.icon(
                 onPressed: () => Navigator.push(
                   context,
@@ -356,9 +365,58 @@ class _DeliveryCard extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        AppDialog.error(context, 'Error updating delivery status', detail: e.toString());
+        AppDialog.error(context, 'Error updating delivery status',
+            detail: e.toString());
       }
     }
+  }
+
+  Future<void> _updateEstimatedDelivery(
+    BuildContext context,
+    OrderModel order,
+    String partnerId,
+  ) async {
+    final selected = await _pickEstimatedDelivery(context);
+    if (selected == null) return;
+    try {
+      await FirestoreService().updateDeliveryEstimate(
+        orderId: order.id,
+        deliveryPartnerId: partnerId,
+        estimatedDelivery: selected,
+      );
+      if (context.mounted) {
+        AppDialog.success(context, 'Delivery ETA updated.');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        AppDialog.error(context, 'Error updating ETA', detail: e.toString());
+      }
+    }
+  }
+
+  Future<DateTime?> _pickEstimatedDelivery(BuildContext context) async {
+    final now = DateTime.now();
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: now.add(const Duration(days: 1)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 14)),
+    );
+    if (pickedDate == null || !context.mounted) return null;
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 48))),
+    );
+    if (pickedTime == null) return null;
+
+    return DateTime(
+      pickedDate.year,
+      pickedDate.month,
+      pickedDate.day,
+      pickedTime.hour,
+      pickedTime.minute,
+    );
   }
 }
 
@@ -406,25 +464,53 @@ class _AcceptButtonState extends State<_AcceptButton> {
   }
 
   Future<void> _accept() async {
+    final estimatedDelivery = await _pickEstimatedDelivery(context);
+    if (estimatedDelivery == null) return;
+
     setState(() => _loading = true);
     try {
       await FirestoreService().assignDeliveryPartner(
         orderId: widget.order.id,
         deliveryPartnerId: widget.partnerId,
         deliveryPartnerName: widget.partnerName,
-        estimatedDelivery:
-            DateTime.now().add(const Duration(hours: 48)),
+        estimatedDelivery: estimatedDelivery,
       );
       if (mounted) {
         AppDialog.success(context, 'Delivery accepted! You are now assigned.');
       }
     } catch (e) {
       if (mounted) {
-        AppDialog.error(context, 'Error accepting delivery', detail: e.toString());
+        AppDialog.error(context, 'Error accepting delivery',
+            detail: e.toString());
       }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<DateTime?> _pickEstimatedDelivery(BuildContext context) async {
+    final now = DateTime.now();
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: now.add(const Duration(days: 1)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 14)),
+    );
+    if (pickedDate == null || !context.mounted) return null;
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 48))),
+    );
+    if (pickedTime == null) return null;
+
+    return DateTime(
+      pickedDate.year,
+      pickedDate.month,
+      pickedDate.day,
+      pickedTime.hour,
+      pickedTime.minute,
+    );
   }
 }
 
@@ -519,8 +605,7 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 20),
             Text(
               message,
-              style: const TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),

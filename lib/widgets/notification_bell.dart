@@ -40,11 +40,17 @@ class _NotificationBellState extends State<NotificationBell> {
   final _countCtrl = StreamController<int>.broadcast();
   StreamSubscription? _userSub;
   StreamSubscription? _requestSub;
+  StreamSubscription? _buyerOrderSub;
+  StreamSubscription? _sellerOrderSub;
+  StreamSubscription? _deliveryOrderSub;
   StreamSubscription? _chatSub;
 
-  DateTime? _lastSeen;        // lastNotificationSeenAt for requests/orders
-  DateTime? _chatSeenAt;      // time user last opened the bell (clears chat badge)
+  DateTime? _lastSeen; // lastNotificationSeenAt for requests/orders
+  DateTime? _chatSeenAt; // time user last opened the bell (clears chat badge)
   QuerySnapshot? _lastRequestSnap;
+  QuerySnapshot? _lastBuyerOrderSnap;
+  QuerySnapshot? _lastSellerOrderSnap;
+  QuerySnapshot? _lastDeliveryOrderSnap;
   int _chatUnread = 0;
 
   OverlayEntry? _overlayEntry;
@@ -78,6 +84,33 @@ class _NotificationBellState extends State<NotificationBell> {
         .snapshots()
         .listen((snap) {
       _lastRequestSnap = snap;
+      _recount();
+    });
+
+    _buyerOrderSub = _firestore
+        .collection(AppConstants.ordersCollection)
+        .where('buyerId', isEqualTo: widget.userId)
+        .snapshots()
+        .listen((snap) {
+      _lastBuyerOrderSnap = snap;
+      _recount();
+    });
+
+    _sellerOrderSub = _firestore
+        .collection(AppConstants.ordersCollection)
+        .where('sellerId', isEqualTo: widget.userId)
+        .snapshots()
+        .listen((snap) {
+      _lastSellerOrderSnap = snap;
+      _recount();
+    });
+
+    _deliveryOrderSub = _firestore
+        .collection(AppConstants.ordersCollection)
+        .where('deliveryPartnerId', isEqualTo: widget.userId)
+        .snapshots()
+        .listen((snap) {
+      _lastDeliveryOrderSnap = snap;
       _recount();
     });
 
@@ -120,6 +153,33 @@ class _NotificationBellState extends State<NotificationBell> {
         if (_lastSeen == null || ts.toDate().isAfter(_lastSeen!)) count++;
       }
     }
+
+    final latestOrderUpdateById = <String, DateTime>{};
+    final orderSnapshots = [
+      _lastBuyerOrderSnap,
+      _lastSellerOrderSnap,
+      _lastDeliveryOrderSnap,
+    ];
+    for (final snap in orderSnapshots) {
+      if (snap == null) continue;
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        if (data is! Map<String, dynamic>) continue;
+        final ts = data['updatedAt'];
+        if (ts is! Timestamp) continue;
+        final updatedAt = ts.toDate();
+        final existing = latestOrderUpdateById[doc.id];
+        if (existing == null || updatedAt.isAfter(existing)) {
+          latestOrderUpdateById[doc.id] = updatedAt;
+        }
+      }
+    }
+    for (final updatedAt in latestOrderUpdateById.values) {
+      if (_lastSeen == null || updatedAt.isAfter(_lastSeen!)) {
+        count++;
+      }
+    }
+
     if (!_countCtrl.isClosed) _countCtrl.add(count);
   }
 
@@ -128,6 +188,9 @@ class _NotificationBellState extends State<NotificationBell> {
     _closeDropdown();
     _userSub?.cancel();
     _requestSub?.cancel();
+    _buyerOrderSub?.cancel();
+    _sellerOrderSub?.cancel();
+    _deliveryOrderSub?.cancel();
     _chatSub?.cancel();
     _countCtrl.close();
     super.dispose();
@@ -139,18 +202,23 @@ class _NotificationBellState extends State<NotificationBell> {
       _isOpen ? _closeDropdown() : _openDropdown(context);
 
   void _openDropdown(BuildContext context) {
-    // Stamp everything as seen → badge resets to 0
-    _firestoreService.markNotificationsSeen(widget.userId);
-    // Record the time so any new chat message arriving AFTER this won't be
-    // counted until the bell is opened again
-    _chatSeenAt = DateTime.now();
+    // Optimistically stamp _lastSeen NOW so _recount() emits 0 immediately
+    // (instead of waiting for the Firestore round-trip via _userSub).
+    final seenAt = DateTime.now();
+    _lastSeen = seenAt;
+    _chatSeenAt = seenAt;
     _chatUnread = 0;
-    _recount();
+    _recount(); // emits 0 right away — no flicker
+
+    // Persist to Firestore in the background; when _userSub fires it will
+    // re-set _lastSeen to roughly the same value, causing a harmless recount.
+    _firestoreService.markNotificationsSeen(widget.userId);
 
     _overlayEntry = OverlayEntry(
       builder: (_) => _NotificationDropdown(
         layerLink: _layerLink,
         userId: widget.userId,
+        hostContext: context,
         onClose: _closeDropdown,
         onViewAll: () {
           _closeDropdown();
@@ -208,8 +276,8 @@ class _NotificationBellState extends State<NotificationBell> {
                         curve: Curves.elasticOut,
                         child: Container(
                           padding: const EdgeInsets.all(2),
-                          constraints: const BoxConstraints(
-                              minWidth: 16, minHeight: 16),
+                          constraints:
+                              const BoxConstraints(minWidth: 16, minHeight: 16),
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
                               colors: [Color(0xFFFF6B6B), Color(0xFFFF3D3D)],
@@ -252,12 +320,14 @@ class _NotificationDropdown extends StatefulWidget {
   const _NotificationDropdown({
     required this.layerLink,
     required this.userId,
+    required this.hostContext,
     required this.onClose,
     required this.onViewAll,
   });
 
   final LayerLink layerLink;
   final String userId;
+  final BuildContext hostContext;
   final VoidCallback onClose;
   final VoidCallback onViewAll;
 
@@ -280,8 +350,7 @@ class _NotificationDropdownState extends State<_NotificationDropdown>
       vsync: this,
       duration: const Duration(milliseconds: 200),
     )..forward();
-    _fadeAnim =
-        CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
+    _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
     _scaleAnim = Tween<double>(begin: 0.92, end: 1.0).animate(
       CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut),
     );
@@ -342,8 +411,7 @@ class _NotificationDropdownState extends State<_NotificationDropdown>
                       children: [
                         // ── Header
                         Padding(
-                          padding:
-                              const EdgeInsets.fromLTRB(16, 14, 8, 8),
+                          padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
                           child: Row(
                             children: [
                               const Text(
@@ -358,8 +426,8 @@ class _NotificationDropdownState extends State<_NotificationDropdown>
                                 onTap: widget.onClose,
                                 child: const Padding(
                                   padding: EdgeInsets.all(8),
-                                  child: Icon(Icons.close, size: 18,
-                                      color: Colors.grey),
+                                  child: Icon(Icons.close,
+                                      size: 18, color: Colors.grey),
                                 ),
                               ),
                             ],
@@ -427,8 +495,7 @@ class _NotificationDropdownState extends State<_NotificationDropdown>
           final items = snapshot.data ?? const [];
           if (items.isEmpty) {
             return const Padding(
-              padding:
-                  EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+              padding: EdgeInsets.symmetric(vertical: 24, horizontal: 16),
               child: Center(
                 child: Text(
                   'No notifications yet',
@@ -446,55 +513,72 @@ class _NotificationDropdownState extends State<_NotificationDropdown>
                 const Divider(height: 1, indent: 14, endIndent: 14),
             itemBuilder: (context, index) {
               final item = items[index];
-              return Padding(
-                padding: const EdgeInsets.symmetric(
-                    vertical: 9, horizontal: 14),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CircleAvatar(
-                      radius: 18,
-                      backgroundColor:
-                          item.color.withValues(alpha: 0.15),
-                      child: Icon(item.icon,
-                          color: item.color, size: 16),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.title,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            item.subtitle,
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 12,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            AppHelpers.getRelativeTime(item.createdAt),
-                            style: TextStyle(
-                              color: Colors.grey[400],
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
+              final isTappable = item.type == NotificationType.order
+                  ? item.orderData != null
+                  : (item.chatId != null || item.otherUserId != null);
+              return InkWell(
+                onTap: !isTappable
+                    ? null
+                    : () async {
+                        final navContext = widget.hostContext;
+                        widget.onClose();
+                        await openNotificationItem(
+                          navContext,
+                          item: item,
+                          currentUserId: widget.userId,
+                        );
+                      },
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 9, horizontal: 14),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: item.color.withValues(alpha: 0.15),
+                        child: Icon(item.icon, color: item.color, size: 16),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.title,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              item.subtitle,
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 12,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              AppHelpers.getRelativeTime(item.createdAt),
+                              style: TextStyle(
+                                color: Colors.grey[400],
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (isTappable)
+                        Icon(Icons.chevron_right,
+                            size: 16, color: Colors.grey[500]),
+                    ],
+                  ),
                 ),
               );
             },

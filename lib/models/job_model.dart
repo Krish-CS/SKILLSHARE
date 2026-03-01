@@ -12,6 +12,8 @@ class JobModel {
   final String jobType; // full-time, part-time, contract, freelance
   final String status; // open, in_progress, completed, cancelled
   final List<String> applicants;
+  final Map<String, String>
+      applicationStatus; // applicantId -> pending/accepted/rejected
   final String? selectedApplicant;
   final DateTime deadline;
   final DateTime createdAt;
@@ -29,6 +31,7 @@ class JobModel {
     required this.jobType,
     this.status = 'open',
     this.applicants = const [],
+    this.applicationStatus = const {},
     this.selectedApplicant,
     required this.deadline,
     required this.createdAt,
@@ -48,6 +51,9 @@ class JobModel {
       jobType: map['jobType'] ?? 'freelance',
       status: map['status'] ?? 'open',
       applicants: List<String>.from(map['applicants'] ?? []),
+      applicationStatus: (map['applicationStatus'] as Map<String, dynamic>? ??
+              {})
+          .map((key, value) => MapEntry(key, value?.toString() ?? 'pending')),
       selectedApplicant: map['selectedApplicant'],
       deadline: (map['deadline'] as Timestamp?)?.toDate() ?? DateTime.now(),
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -67,6 +73,7 @@ class JobModel {
       'jobType': jobType,
       'status': status,
       'applicants': applicants,
+      'applicationStatus': applicationStatus,
       'selectedApplicant': selectedApplicant,
       'deadline': Timestamp.fromDate(deadline),
       'createdAt': Timestamp.fromDate(createdAt),

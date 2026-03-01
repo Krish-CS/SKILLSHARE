@@ -10,6 +10,7 @@ import '../../models/company_profile.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/app_dialog.dart';
+import '../../screens/avatar/avatar_builder_screen.dart';
 import '../main_navigation.dart';
 
 class CompanySetupScreen extends StatefulWidget {
@@ -43,6 +44,7 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
   File? _logoImage;
   Uint8List? _logoImageBytes;
   String? _logoUrl;
+  Map<String, dynamic>? _avatarConfig;
 
   final List<String> _industries = [
     'Technology',
@@ -94,6 +96,7 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
           profile.industry.isNotEmpty ? profile.industry : 'Technology';
       _selectedEmployeeCount = profile.employeeCount ?? '1-10';
       _logoUrl = profile.logoUrl;
+      _avatarConfig = profile.avatarConfig;
       _verificationStatus = profile.verificationStatus;
       if (profile.verificationData != null) {
         _businessRegController.text =
@@ -179,6 +182,7 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
             ? _websiteController.text.trim()
             : null,
         logoUrl: finalLogoUrl,
+        avatarConfig: _avatarConfig,
         employeeCount: _selectedEmployeeCount,
         headOfficeLocation: _headOfficeController.text.trim().isNotEmpty
             ? _headOfficeController.text.trim()
@@ -194,6 +198,11 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
       );
 
       await userProvider.updateCompanyProfile(profile);
+
+      // Save animated avatar config to users collection
+      if (_avatarConfig != null) {
+        await FirestoreService().saveAvatarConfig(widget.userId, _avatarConfig);
+      }
 
       if (finalLogoUrl != null && finalLogoUrl.isNotEmpty) {
         try {
@@ -331,6 +340,56 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
                             ),
                           ],
                         ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // Create Avatar button
+            SliverToBoxAdapter(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: GestureDetector(
+                    onTap: () async {
+                      final config = await Navigator.push<dynamic>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AvatarBuilderScreen(
+                            initialConfig: _avatarConfig,
+                          ),
+                        ),
+                      );
+                      if (config != null) {
+                        setState(() {
+                          _avatarConfig = config as Map<String, dynamic>;
+                        });
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: _primary.withValues(alpha: 0.35)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.face_retouching_natural,
+                              color: _primary, size: 16),
+                          const SizedBox(width: 5),
+                          Text(
+                            _avatarConfig != null ? 'Edit Avatar' : 'Create Avatar',
+                            style: const TextStyle(
+                              color: _primary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),

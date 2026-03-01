@@ -35,6 +35,7 @@ class _JobsScreenState extends State<JobsScreen> {
   UserModel? _currentUser;
   CompanyProfile? _companyProfile;
   bool _isLoading = true;
+  String? _jobsScopeKey;
 
   String _searchQuery = '';
   String? _selectedJobType;
@@ -65,20 +66,47 @@ class _JobsScreenState extends State<JobsScreen> {
 
   void _subscribeToData() {
     final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId != null) {
-      _userSub = _firestoreService.streamUserModel(userId).listen((user) {
-        if (mounted) setState(() => _currentUser = user);
-        // Subscribe to company profile once we know the role is company
-        if (user?.role == AppConstants.roleCompany && _companySub == null) {
-          _companySub =
-              _firestoreService.companyProfileStream(userId).listen((profile) {
-            if (mounted) setState(() => _companyProfile = profile);
-          });
-        }
-      });
+    if (userId == null) {
+      _attachJobsStream();
+      return;
     }
 
-    _jobsSub = _firestoreService.streamOpenJobs().listen(
+    _userSub = _firestoreService.streamUserModel(userId).listen((user) {
+      if (!mounted) return;
+      setState(() => _currentUser = user);
+
+      // Subscribe to company profile only for company role.
+      if (user?.role == AppConstants.roleCompany) {
+        _companySub ??=
+            _firestoreService.companyProfileStream(userId).listen((profile) {
+          if (mounted) setState(() => _companyProfile = profile);
+        });
+      } else {
+        _companySub?.cancel();
+        _companySub = null;
+        if (_companyProfile != null) {
+          setState(() => _companyProfile = null);
+        }
+      }
+
+      _attachJobsStream();
+    });
+  }
+
+  void _attachJobsStream() {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    final isCompany = _currentUser?.role == AppConstants.roleCompany;
+    final scopeKey = isCompany ? 'company:${currentUid ?? ''}' : 'open';
+    if (_jobsScopeKey == scopeKey) return;
+    _jobsScopeKey = scopeKey;
+
+    _jobsSub?.cancel();
+
+    final stream = isCompany && currentUid != null
+        ? _firestoreService.streamCompanyJobs(currentUid)
+        : _firestoreService.streamOpenJobs();
+
+    _jobsSub = stream.listen(
       (jobs) {
         if (!mounted) return;
         _allJobs = jobs;
@@ -132,9 +160,7 @@ class _JobsScreenState extends State<JobsScreen> {
   }
 
   void _onSearchChanged(String query) {
-    setState(() {
-      _searchQuery = query;
-    });
+    _searchQuery = query;
     _applyFilters();
   }
 
@@ -203,8 +229,7 @@ class _JobsScreenState extends State<JobsScreen> {
         if (uid != null) {
           await Navigator.push(
             context,
-            MaterialPageRoute(
-                builder: (_) => CompanySetupScreen(userId: uid)),
+            MaterialPageRoute(builder: (_) => CompanySetupScreen(userId: uid)),
           );
         }
       }
@@ -498,7 +523,9 @@ class _JobsScreenState extends State<JobsScreen> {
             _searchQuery.isNotEmpty ||
                     _selectedJobType != null && _selectedJobType != 'All'
                 ? 'No jobs found'
-                : 'No jobs available',
+                : _canPostJobs
+                    ? 'No jobs posted yet'
+                    : 'No jobs available',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -510,7 +537,9 @@ class _JobsScreenState extends State<JobsScreen> {
             _searchQuery.isNotEmpty ||
                     _selectedJobType != null && _selectedJobType != 'All'
                 ? 'Try adjusting your filters'
-                : 'Check back later for new opportunities!',
+                : _canPostJobs
+                    ? 'Post your first job to start receiving applications.'
+                    : 'Check back later for new opportunities!',
             style: TextStyle(
               fontSize: 14,
               color: Colors.grey[500],
@@ -527,6 +556,7 @@ class _JobsScreenState extends State<JobsScreen> {
                 label: const Text('Post a Job'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF2196F3),
+                  foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 24,
                     vertical: 12,

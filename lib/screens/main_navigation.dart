@@ -64,14 +64,13 @@ class _MainNavigationState extends State<MainNavigation> {
       }
       if (count > _prevNotifCount) {
         // New notification arrived
-        final newDocs = snap.docs
-            .where((d) {
-              final ts = d.data()['updatedAt'] as Timestamp?;
-              return ts != null &&
-                  ts.toDate().isAfter(
-                      DateTime.now().subtract(const Duration(minutes: 5)));
-            })
-            .toList();
+        final newDocs = snap.docs.where((d) {
+          final ts = d.data()['updatedAt'] as Timestamp?;
+          return ts != null &&
+              ts
+                  .toDate()
+                  .isAfter(DateTime.now().subtract(const Duration(minutes: 5)));
+        }).toList();
         if (newDocs.isNotEmpty) {
           final data = newDocs.first.data();
           final chatIdx = _getChatTabIndex(capturedRole);
@@ -159,7 +158,8 @@ class _MainNavigationState extends State<MainNavigation> {
           index: _currentIndex,
           children: screens,
         ),
-        bottomNavigationBar: _buildCustomBottomNav(navItems, userRole, currentUserId),
+        bottomNavigationBar:
+            _buildCustomBottomNav(navItems, userRole, currentUserId),
       ),
     );
   }
@@ -209,8 +209,8 @@ class _MainNavigationState extends State<MainNavigation> {
                   iconW = StreamBuilder<List<dynamic>>(
                     stream: _firestoreService.streamCartItems(uid),
                     builder: (_, snap) {
-                      final cnt = snap.data?.fold<int>(
-                              0, (a, x) => a + ((x as dynamic).quantity as int)) ??
+                      final cnt = snap.data?.fold<int>(0,
+                              (a, x) => a + ((x as dynamic).quantity as int)) ??
                           0;
                       return _navBadge(icData, selected, cnt);
                     },
@@ -237,14 +237,20 @@ class _MainNavigationState extends State<MainNavigation> {
                               final d = doc.data() as Map<String, dynamic>;
                               final status = (d['status'] as String?) ?? '';
                               final type = (d['type'] as String?) ?? '';
-                              if (type == 'chat_work_request' &&
+                              final serviceId =
+                                  (d['serviceId'] as String?) ?? '';
+                              if ((type == 'chat_work_request' ||
+                                      serviceId == 'direct_hire') &&
                                   status == 'pending') {
                                 pendingWork++;
                               }
                             }
                           }
                           return _navDoubleBadge(
-                            Icons.chat, selected, unread, pendingWork,
+                            Icons.chat,
+                            selected,
+                            unread,
+                            pendingWork,
                           );
                         },
                       );
@@ -290,7 +296,6 @@ class _MainNavigationState extends State<MainNavigation> {
                         label,
                         style: TextStyle(
                           fontSize: 10,
-                          fontFamily: 'SourceSerif4',
                           color: selected ? g0 : Colors.grey[500],
                           fontWeight:
                               selected ? FontWeight.w700 : FontWeight.w400,
@@ -324,8 +329,7 @@ class _MainNavigationState extends State<MainNavigation> {
               padding: const EdgeInsets.all(2),
               decoration: const BoxDecoration(
                   color: Colors.red, shape: BoxShape.circle),
-              constraints:
-                  const BoxConstraints(minWidth: 14, minHeight: 14),
+              constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
               child: Text(
                 count > 99 ? '99+' : '$count',
                 style: const TextStyle(
@@ -357,8 +361,7 @@ class _MainNavigationState extends State<MainNavigation> {
               padding: const EdgeInsets.all(2),
               decoration: const BoxDecoration(
                   color: Colors.red, shape: BoxShape.circle),
-              constraints:
-                  const BoxConstraints(minWidth: 14, minHeight: 14),
+              constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
               child: Text(
                 chatUnread > 99 ? '99+' : '$chatUnread',
                 style: const TextStyle(
@@ -378,8 +381,7 @@ class _MainNavigationState extends State<MainNavigation> {
               padding: const EdgeInsets.all(2),
               decoration: const BoxDecoration(
                   color: Color(0xFFFF8F00), shape: BoxShape.circle),
-              constraints:
-                  const BoxConstraints(minWidth: 14, minHeight: 14),
+              constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
               child: Text(
                 workReqCount > 99 ? '99+' : '$workReqCount',
                 style: const TextStyle(
@@ -422,11 +424,7 @@ class _MainNavigationState extends State<MainNavigation> {
           Icons.person
         ][index];
       case UserRoles.deliveryPartner:
-        return const [
-          Icons.local_shipping,
-          Icons.chat,
-          Icons.person
-        ][index];
+        return const [Icons.local_shipping, Icons.chat, Icons.person][index];
       default:
         return const [
           Icons.home,
@@ -441,11 +439,16 @@ class _MainNavigationState extends State<MainNavigation> {
   /// Returns the index of the Chats tab for each user role.
   int _getChatTabIndex(String role) {
     switch (role) {
-      case UserRoles.customer:    return 3; // Home, Shop, Cart, *Chats*, Profile
-      case UserRoles.company:     return 3; // Home, Jobs, Shop, *Chats*, Profile
-      case UserRoles.skilledPerson: return 3; // Home, Portfolio, MyShop, *Chats*, Profile
-      case UserRoles.deliveryPartner: return 1; // Deliveries, *Chats*, Profile
-      default:                    return 3;
+      case UserRoles.customer:
+        return 3; // Home, Shop, Cart, *Chats*, Profile
+      case UserRoles.company:
+        return 3; // Home, Jobs, Shop, *Chats*, Profile
+      case UserRoles.skilledPerson:
+        return 3; // Home, Portfolio, MyShop, *Chats*, Profile
+      case UserRoles.deliveryPartner:
+        return 1; // Deliveries, *Chats*, Profile
+      default:
+        return 3;
     }
   }
 
@@ -667,6 +670,7 @@ class _InAppBanner extends StatefulWidget {
   final String title;
   final String subtitle;
   final VoidCallback onDismiss;
+
   /// If set, tapping the banner body calls this instead of onDismiss.
   final VoidCallback? onTap;
 
@@ -708,83 +712,83 @@ class _InAppBannerState extends State<_InAppBanner>
           left: 12,
           right: 12,
           child: SlideTransition(
-        position: _slideAnim,
-        child: Material(
-          color: Colors.transparent,
-          child: GestureDetector(
-            onTap: widget.onTap ?? widget.onDismiss,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.18),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  const CircleAvatar(
-                    radius: 18,
-                    backgroundColor: Colors.white24,
-                    child: Icon(Icons.notifications,
-                        color: Colors.white, size: 18),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          widget.title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          widget.subtitle,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (widget.onTap != null)
-                          const Text(
-                            'Tap to open chats →',
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: 11,
-                            ),
-                          ),
-                      ],
+            position: _slideAnim,
+            child: Material(
+              color: Colors.transparent,
+              child: GestureDetector(
+                onTap: widget.onTap ?? widget.onDismiss,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                  GestureDetector(
-                    onTap: widget.onDismiss,
-                    child: const Icon(Icons.close,
-                        color: Colors.white70, size: 18),
+                  child: Row(
+                    children: [
+                      const CircleAvatar(
+                        radius: 18,
+                        backgroundColor: Colors.white24,
+                        child: Icon(Icons.notifications,
+                            color: Colors.white, size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.title,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              widget.subtitle,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (widget.onTap != null)
+                              const Text(
+                                'Tap to open chats →',
+                                style: TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 11,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: widget.onDismiss,
+                        child: const Icon(Icons.close,
+                            color: Colors.white70, size: 18),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-        ),
           ),
         ),
       ],

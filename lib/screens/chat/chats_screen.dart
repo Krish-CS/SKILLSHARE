@@ -7,7 +7,7 @@ import '../../services/chat_service.dart';
 import '../../services/presence_service.dart';
 import '../../utils/app_helpers.dart';
 import '../../utils/app_constants.dart';
-import '../../utils/web_image_loader.dart';
+import '../../widgets/universal_avatar.dart';
 import 'chat_detail_screen.dart';
 
 class ChatsScreen extends StatefulWidget {
@@ -47,10 +47,11 @@ class _ChatsScreenState extends State<ChatsScreen> {
         final newCounts = <String, int>{};
         for (final doc in snap.docs) {
           final d = doc.data();
-          final type   = (d['type']   as String?) ?? '';
+          final type = (d['type'] as String?) ?? '';
+          final serviceId = (d['serviceId'] as String?) ?? '';
           final status = (d['status'] as String?) ?? '';
           final chatId = (d['chatId'] as String?) ?? '';
-          if (type == 'chat_work_request' &&
+          if ((type == 'chat_work_request' || serviceId == 'direct_hire') &&
               status == AppConstants.requestStatusPending &&
               chatId.isNotEmpty) {
             newCounts[chatId] = (newCounts[chatId] ?? 0) + 1;
@@ -290,13 +291,13 @@ class _ChatsScreenState extends State<ChatsScreen> {
                   children: [
                     CircleAvatar(
                       radius: 28,
-                      backgroundImage: WebImageLoader.getImageProvider(photo),
-                      child: photo == null || photo.isEmpty
-                          ? Text(
-                              name.isNotEmpty ? name[0].toUpperCase() : 'U',
-                              style: const TextStyle(fontSize: 24),
-                            )
-                          : null,
+                      backgroundColor: Colors.transparent,
+                      child: UniversalAvatar(
+                        photoUrl: photo,
+                        fallbackName: name,
+                        radius: 28,
+                        animate: false,
+                      ),
                     ),
                     // Online indicator dot
                     Positioned(

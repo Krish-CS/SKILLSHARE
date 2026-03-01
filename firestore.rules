@@ -141,12 +141,14 @@ service cloud.firestore {
     match /orders/{orderId} {
       allow read: if isAuthenticated() &&
         (resource.data.buyerId == request.auth.uid ||
-         resource.data.sellerId == request.auth.uid);
+         resource.data.sellerId == request.auth.uid ||
+         resource.data.deliveryPartnerId == request.auth.uid);
       allow create: if isAuthenticated() &&
         request.resource.data.buyerId == request.auth.uid;
       allow update: if isAuthenticated() &&
         (resource.data.sellerId == request.auth.uid ||
-         resource.data.buyerId == request.auth.uid);
+         resource.data.buyerId == request.auth.uid ||
+         resource.data.deliveryPartnerId == request.auth.uid);
       allow delete: if false;
     }
     
@@ -167,9 +169,14 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
         (request.resource.data.companyId == request.auth.uid ||
          request.resource.data.postedBy == request.auth.uid);
-      allow update: if isAuthenticated() &&
-        (resource.data.companyId == request.auth.uid ||
-         resource.data.postedBy == request.auth.uid);
+      // Owner can update anything; skilled users can apply (modify applicants,
+      // applicationStatus & updatedAt only)
+      allow update: if isAuthenticated() && (
+        resource.data.companyId == request.auth.uid ||
+        resource.data.postedBy == request.auth.uid ||
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['applicants', 'applicationStatus', 'updatedAt'])
+      );
       allow delete: if isAuthenticated() &&
         (resource.data.companyId == request.auth.uid ||
          resource.data.postedBy == request.auth.uid);

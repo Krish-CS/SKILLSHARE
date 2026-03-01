@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import '../../utils/notification_helpers.dart';
 import '../../utils/app_helpers.dart';
 import '../../services/firestore_service.dart';
-import '../chat/chat_detail_screen.dart';
-import '../shop/order_tracking_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key, required this.userId});
@@ -71,8 +69,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             );
           }
 
-          final notifications =
-              snapshot.data ?? const <NotificationItem>[];
+          final notifications = snapshot.data ?? const <NotificationItem>[];
 
           if (notifications.isEmpty) {
             return Center(
@@ -101,7 +98,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (context, index) {
               final item = notifications[index];
-              return _NotificationCard(item: item);
+              return _NotificationCard(
+                item: item,
+                currentUserId: widget.userId,
+              );
             },
           );
         },
@@ -111,48 +111,29 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 }
 
 class _NotificationCard extends StatelessWidget {
-  const _NotificationCard({required this.item});
+  const _NotificationCard({
+    required this.item,
+    required this.currentUserId,
+  });
   final NotificationItem item;
+  final String currentUserId;
 
   bool get _isTappable {
     switch (item.type) {
       case NotificationType.workRequest:
       case NotificationType.chatMessage:
-        return item.chatId != null && item.otherUserId != null;
+        return item.chatId != null || item.otherUserId != null;
       case NotificationType.order:
         return item.orderData != null;
     }
   }
 
-  void _navigate(BuildContext context) {
-    switch (item.type) {
-      case NotificationType.workRequest:
-      case NotificationType.chatMessage:
-        if (item.chatId != null && item.otherUserId != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ChatDetailScreen(
-                chatId: item.chatId!,
-                otherUserId: item.otherUserId!,
-                otherUserName: item.otherUserName ?? 'User',
-                otherUserPhoto: item.otherUserPhoto,
-              ),
-            ),
-          );
-        }
-        break;
-      case NotificationType.order:
-        if (item.orderData != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => OrderTrackingScreen(order: item.orderData!),
-            ),
-          );
-        }
-        break;
-    }
+  Future<void> _navigate(BuildContext context) async {
+    await openNotificationItem(
+      context,
+      item: item,
+      currentUserId: currentUserId,
+    );
   }
 
   @override
@@ -168,7 +149,8 @@ class _NotificationCard extends StatelessWidget {
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
             border: _isTappable
-                ? Border.all(color: item.color.withValues(alpha: 0.25), width: 1)
+                ? Border.all(
+                    color: item.color.withValues(alpha: 0.25), width: 1)
                 : null,
             boxShadow: [
               BoxShadow(

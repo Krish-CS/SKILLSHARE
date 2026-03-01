@@ -6,6 +6,7 @@ import '../../models/skilled_user_profile.dart';
 import '../../models/service_model.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/web_image_loader.dart';
+import '../../widgets/universal_avatar.dart';
 import '../../utils/app_dialog.dart';
 import 'skilled_user_setup_screen.dart';
 
@@ -290,11 +291,13 @@ class _EditSkilledProfileScreenState extends State<EditSkilledProfileScreen> {
                 child: Column(children: [
                   Container(
                     decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 3)),
-                    child: WebImageLoader.loadAvatar(
-                      imageUrl: _profile?.profilePicture ?? currentUser?.profilePhoto,
+                    child: UniversalAvatar(
+                      avatarConfig: currentUser?.avatarConfig,
+                      photoUrl: _profile?.profilePicture ?? currentUser?.profilePhoto,
+                      fallbackName: currentUser?.name,
                       radius: 50,
-                      fallbackText: currentUser?.name,
-                      backgroundColor: Colors.grey[400],
+                      borderColor: Colors.white,
+                      borderWidth: 3,
                     ),
                   ),
                   const SizedBox(height: 12),

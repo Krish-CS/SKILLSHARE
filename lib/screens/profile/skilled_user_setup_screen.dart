@@ -12,6 +12,8 @@ import '../../utils/app_constants.dart';
 import '../../utils/app_dialog.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/firestore_service.dart';
+import '../../widgets/universal_avatar.dart';
+import '../../screens/avatar/avatar_builder_screen.dart';
 import '../../services/biometric_service.dart';
 import '../main_navigation.dart';
 
@@ -49,6 +51,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
   File? _profileImage;
   Uint8List? _profileImageBytes;
   String? _profileImageUrl;
+  Map<String, dynamic>? _avatarConfig;
   final List<File> _portfolioImages = [];
   final List<Uint8List> _portfolioImageBytes = [];
   List<String> _portfolioImageUrls = [];
@@ -95,6 +98,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       
       _skills = List.from(profile.skills);
       _profileImageUrl = profile.profilePicture;
+      _avatarConfig = profile.avatarConfig;
       _portfolioImageUrls = List.from(profile.portfolioImages);
       _isVerified = profile.isVerified;
       _verificationStatus = profile.verificationStatus;
@@ -656,11 +660,17 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
         projectCount: currentProfile?.projectCount ?? 0,
         isVerified: _isVerified,
         verifiedAt: _isVerified ? DateTime.now() : null,
+        avatarConfig: _avatarConfig,
         createdAt: currentProfile?.createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
       );
 
       final success = await userProvider.updateProfile(profile);
+
+      // Save animated avatar config to users collection
+      if (_avatarConfig != null) {
+        await FirestoreService().saveAvatarConfig(widget.userId, _avatarConfig);
+      }
 
       if (!mounted) return;
 
@@ -754,7 +764,14 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                           onTap: _showImageSourceDialog,
                           child: Stack(
                             children: [
-                                CircleAvatar(
+                              _avatarConfig != null
+                                ? UniversalAvatar(
+                                    avatarConfig: _avatarConfig,
+                                    photoUrl: _profileImageUrl,
+                                    fallbackName: _bioController.text.isNotEmpty ? _bioController.text : 'U',
+                                    radius: 60,
+                                  )
+                                : CircleAvatar(
                                 radius: 60,
                                 backgroundColor: Colors.grey[300],
                                 backgroundImage: (kIsWeb && _profileImageBytes != null)
@@ -791,6 +808,48 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                         Text(
                           'Tap to ${_profileImage != null || (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) ? 'change' : 'add'} photo',
                           style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                        ),
+                        const SizedBox(height: 6),
+                        GestureDetector(
+                          onTap: () async {
+                            final config = await Navigator.push<dynamic>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => AvatarBuilderScreen(
+                                  initialConfig: _avatarConfig,
+                                ),
+                              ),
+                            );
+                            if (config != null) {
+                              setState(() {
+                                _avatarConfig = config as Map<String, dynamic>;
+                              });
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF9C27B0).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFF9C27B0).withValues(alpha: 0.4)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.face_retouching_natural,
+                                    color: Color(0xFF9C27B0), size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _avatarConfig != null ? 'Edit Avatar' : 'Create Avatar',
+                                  style: const TextStyle(
+                                    color: Color(0xFF9C27B0),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ],
                     ),

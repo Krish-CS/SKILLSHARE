@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:share_plus/share_plus.dart';
+import 'dart:async';
 import '../../models/job_model.dart';
 import '../../models/user_model.dart';
 import '../../models/skilled_user_profile.dart';
@@ -9,7 +10,7 @@ import '../../services/chat_service.dart';
 import '../../utils/app_helpers.dart';
 import '../../utils/app_dialog.dart';
 import '../../utils/app_constants.dart';
-import '../../utils/web_image_loader.dart';
+import '../../widgets/universal_avatar.dart';
 import '../profile/profile_screen.dart';
 import '../chat/chat_detail_screen.dart';
 import 'create_job_screen.dart';
@@ -29,18 +30,45 @@ class JobDetailScreen extends StatefulWidget {
 class _JobDetailScreenState extends State<JobDetailScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final ChatService _chatService = ChatService();
-  
+
   UserModel? _currentUser;
   UserModel? _employer;
+  late JobModel _job;
+  StreamSubscription<JobModel?>? _jobSub;
   bool _isLoading = false;
   bool _hasApplied = false;
+  String? _processingApplicantId;
   List<SkilledUserProfile> _applicantProfiles = [];
-  Map<String, UserModel> _applicantUsers = {}; // Store UserModel for each applicant
+  Map<String, UserModel> _applicantUsers =
+      {}; // Store UserModel for each applicant
 
   @override
   void initState() {
     super.initState();
+    _job = widget.job;
+    _subscribeToJob();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _jobSub?.cancel();
+    super.dispose();
+  }
+
+  void _subscribeToJob() {
+    _jobSub?.cancel();
+    _jobSub = _firestoreService.streamJob(widget.job.id).listen((job) {
+      if (!mounted || job == null) return;
+      setState(() {
+        _job = job;
+        _hasApplied =
+            _currentUser != null && _job.applicants.contains(_currentUser!.uid);
+      });
+      if (_isEmployer) {
+        _loadApplicantProfiles();
+      }
+    });
   }
 
   Future<void> _loadData() async {
@@ -48,31 +76,53 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       final userId = FirebaseAuth.instance.currentUser?.uid;
       if (userId != null) {
         _currentUser = await _firestoreService.getUserById(userId);
-        _hasApplied = widget.job.applicants.contains(userId);
+        _hasApplied = _job.applicants.contains(userId);
       }
-      
-      _employer = await _firestoreService.getUserById(widget.job.companyId);
-      
-      // Load applicant profiles if user is the employer
-      if (_currentUser?.uid == widget.job.companyId && widget.job.applicants.isNotEmpty) {
-        _applicantProfiles = [];
-        _applicantUsers = {};
-        for (var applicantId in widget.job.applicants) {
-          final profile = await _firestoreService.getSkilledUserProfile(applicantId);
-          final user = await _firestoreService.getUserById(applicantId);
-          if (profile != null) {
-            _applicantProfiles.add(profile);
-            if (user != null) {
-              _applicantUsers[applicantId] = user;
-            }
-          }
-        }
+
+      _employer = await _firestoreService.getUserById(_job.companyId);
+
+      if (_isEmployer) {
+        await _loadApplicantProfiles();
       }
-      
+
       if (mounted) setState(() {});
     } catch (e) {
       debugPrint('Error loading data: $e');
     }
+  }
+
+  Future<void> _loadApplicantProfiles() async {
+    if (!_isEmployer) return;
+    if (_job.applicants.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _applicantProfiles = [];
+          _applicantUsers = {};
+        });
+      }
+      return;
+    }
+
+    final profiles = <SkilledUserProfile>[];
+    final users = <String, UserModel>{};
+
+    for (var applicantId in _job.applicants) {
+      final profile =
+          await _firestoreService.getSkilledUserProfile(applicantId);
+      final user = await _firestoreService.getUserById(applicantId);
+      if (profile != null) {
+        profiles.add(profile);
+        if (user != null) {
+          users[applicantId] = user;
+        }
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _applicantProfiles = profiles;
+      _applicantUsers = users;
+    });
   }
 
   Future<void> _applyForJob() async {
@@ -86,8 +136,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _firestoreService.applyForJob(widget.job.id, _currentUser!.uid);
-      
+      await _firestoreService.applyForJob(_job.id, _currentUser!.uid);
+
       setState(() {
         _hasApplied = true;
       });
@@ -97,7 +147,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       }
     } catch (e) {
       if (mounted) {
-        AppDialog.error(context, 'Error applying for job', detail: e.toString());
+        AppDialog.error(context, 'Error applying for job',
+            detail: e.toString());
       }
     } finally {
       if (mounted) {
@@ -108,13 +159,13 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
   Future<void> _shareJob() async {
     await Share.share(
-      '${widget.job.title}\n\n'
-      '${widget.job.description}\n\n'
-      'Location: ${widget.job.location}\n'
-      'Job Type: ${widget.job.jobType}\n'
-      'Deadline: ${AppHelpers.formatDate(widget.job.deadline)}\n\n'
+      '${_job.title}\n\n'
+      '${_job.description}\n\n'
+      'Location: ${_job.location}\n'
+      'Job Type: ${_job.jobType}\n'
+      'Deadline: ${AppHelpers.formatDate(_job.deadline)}\n\n'
       'Apply now on SkillShare!',
-      subject: widget.job.title,
+      subject: _job.title,
     );
   }
 
@@ -123,7 +174,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Job'),
-        content: const Text('Are you sure you want to delete this job posting? This action cannot be undone.'),
+        content: const Text(
+            'Are you sure you want to delete this job posting? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -141,7 +193,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     if (confirm == true) {
       setState(() => _isLoading = true);
       try {
-        await _firestoreService.deleteJob(widget.job.id);
+        await _firestoreService.deleteJob(_job.id);
         if (mounted) {
           AppDialog.success(context, 'Job deleted successfully',
               onDismiss: () => Navigator.of(context).pop(true));
@@ -157,18 +209,18 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   }
 
   bool get _isEmployer {
-    return _currentUser?.uid == widget.job.companyId;
+    return _currentUser?.uid == _job.companyId;
   }
 
   bool get _canApply {
-    return !_isEmployer && 
-           !_hasApplied && 
-           widget.job.status == 'open' &&
-           _currentUser?.role == AppConstants.roleSkilledUser;
+    return !_isEmployer &&
+        !_hasApplied &&
+        _job.status == 'open' &&
+        _currentUser?.role == AppConstants.roleSkilledUser;
   }
 
   Color get _statusColor {
-    switch (widget.job.status) {
+    switch (_job.status) {
       case 'open':
         return Colors.green;
       case 'in_progress':
@@ -179,6 +231,54 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
         return Colors.red;
       default:
         return Colors.grey;
+    }
+  }
+
+  String _applicationState(String applicantId) {
+    return _job.applicationStatus[applicantId] ?? 'pending';
+  }
+
+  Future<void> _acceptApplicant(String applicantId) async {
+    if (!_isEmployer || _currentUser == null) return;
+    setState(() => _processingApplicantId = applicantId);
+    try {
+      await _firestoreService.acceptJobApplicant(
+        jobId: _job.id,
+        applicantId: applicantId,
+        companyId: _currentUser!.uid,
+      );
+      if (!mounted) return;
+      AppDialog.success(context, 'Applicant accepted.');
+    } catch (e) {
+      if (!mounted) return;
+      AppDialog.error(context, 'Failed to accept applicant',
+          detail: e.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _processingApplicantId = null);
+      }
+    }
+  }
+
+  Future<void> _rejectApplicant(String applicantId) async {
+    if (!_isEmployer || _currentUser == null) return;
+    setState(() => _processingApplicantId = applicantId);
+    try {
+      await _firestoreService.rejectJobApplicant(
+        jobId: _job.id,
+        applicantId: applicantId,
+        companyId: _currentUser!.uid,
+      );
+      if (!mounted) return;
+      AppDialog.success(context, 'Applicant rejected.');
+    } catch (e) {
+      if (!mounted) return;
+      AppDialog.error(context, 'Failed to reject applicant',
+          detail: e.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _processingApplicantId = null);
+      }
     }
   }
 
@@ -259,7 +359,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      widget.job.jobType.toUpperCase(),
+                      _job.jobType.toUpperCase(),
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -268,10 +368,10 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  
+
                   // Job Title
                   Text(
-                    widget.job.title,
+                    _job.title,
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -279,15 +379,16 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  
+
                   // Location and Budget
                   Row(
                     children: [
-                      const Icon(Icons.location_on, color: Colors.white, size: 18),
+                      const Icon(Icons.location_on,
+                          color: Colors.white, size: 18),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          widget.job.location,
+                          _job.location,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 14,
@@ -296,14 +397,15 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                       ),
                     ],
                   ),
-                  if (widget.job.budgetMin != null && widget.job.budgetMax != null) ...[
+                  if (_job.budgetMin != null && _job.budgetMax != null) ...[
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(Icons.attach_money, color: Colors.white, size: 18),
+                        const Icon(Icons.attach_money,
+                            color: Colors.white, size: 18),
                         const SizedBox(width: 4),
                         Text(
-                          '${AppHelpers.formatCurrency(widget.job.budgetMin!)} - ${AppHelpers.formatCurrency(widget.job.budgetMax!)}',
+                          '${AppHelpers.formatCurrency(_job.budgetMin!)} - ${AppHelpers.formatCurrency(_job.budgetMax!)}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,
@@ -337,11 +439,15 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(_statusColor == Colors.green ? Icons.circle : Icons.work, 
-                              color: _statusColor, size: 12),
+                            Icon(
+                                _statusColor == Colors.green
+                                    ? Icons.circle
+                                    : Icons.work,
+                                color: _statusColor,
+                                size: 12),
                             const SizedBox(width: 6),
                             Text(
-                              widget.job.status.toUpperCase(),
+                              _job.status.toUpperCase(),
                               style: TextStyle(
                                 color: _statusColor,
                                 fontWeight: FontWeight.bold,
@@ -352,10 +458,11 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                         ),
                       ),
                       const Spacer(),
-                      Icon(Icons.access_time, color: Colors.grey[600], size: 16),
+                      Icon(Icons.access_time,
+                          color: Colors.grey[600], size: 16),
                       const SizedBox(width: 4),
                       Text(
-                        'Deadline: ${AppHelpers.formatDate(widget.job.deadline)}',
+                        'Deadline: ${AppHelpers.formatDate(_job.deadline)}',
                         style: TextStyle(
                           color: Colors.grey[700],
                           fontSize: 12,
@@ -376,7 +483,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    widget.job.description,
+                    _job.description,
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.grey[700],
@@ -397,7 +504,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: widget.job.requiredSkills.map((skill) {
+                    children: _job.requiredSkills.map((skill) {
                       return Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
@@ -407,7 +514,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                           color: const Color(0xFF2196F3).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                            color: const Color(0xFF2196F3).withValues(alpha: 0.3),
+                            color:
+                                const Color(0xFF2196F3).withValues(alpha: 0.3),
                           ),
                         ),
                         child: Text(
@@ -438,15 +546,12 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                         padding: const EdgeInsets.all(16),
                         child: Row(
                           children: [
-                            CircleAvatar(
+                            UniversalAvatar(
+                              avatarConfig: _employer!.avatarConfig,
+                              photoUrl: _employer!.profilePhoto,
+                              fallbackName: _employer!.name,
                               radius: 30,
-                              backgroundImage: WebImageLoader.getImageProvider(_employer!.profilePhoto),
-                              child: _employer!.profilePhoto == null || _employer!.profilePhoto!.isEmpty
-                                  ? Text(
-                                      _employer!.name.isNotEmpty ? _employer!.name[0].toUpperCase() : 'E',
-                                      style: const TextStyle(fontSize: 24),
-                                    )
-                                  : null,
+                              animate: false,
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -477,31 +582,38 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                   // Start chat with employer
                                   final nav = Navigator.of(context);
                                   try {
-                                    final currentUser = FirebaseAuth.instance.currentUser;
-                                    if (currentUser == null || _employer == null) return;
-                                    
+                                    final currentUser =
+                                        FirebaseAuth.instance.currentUser;
+                                    if (currentUser == null ||
+                                        _employer == null) {
+                                      return;
+                                    }
+
                                     // Show loading
                                     if (!mounted) return;
                                     showDialog(
                                       context: context,
                                       barrierDismissible: false,
-                                      builder: (_) => const Center(child: CircularProgressIndicator()),
+                                      builder: (_) => const Center(
+                                          child: CircularProgressIndicator()),
                                     );
-                                    
+
                                     // Get or create chat
-                                    final chatId = await _chatService.getOrCreateChat(
+                                    final chatId =
+                                        await _chatService.getOrCreateChat(
                                       currentUser.uid,
-                                      widget.job.companyId,
+                                      _job.companyId,
                                       {
                                         'name': _currentUser!.name,
-                                        'profilePhoto': _currentUser!.profilePhoto,
+                                        'profilePhoto':
+                                            _currentUser!.profilePhoto,
                                       },
                                       {
                                         'name': _employer!.name,
                                         'profilePhoto': _employer!.profilePhoto,
                                       },
                                     );
-                                    
+
                                     // Close loading
                                     if (!mounted) return;
                                     nav.pop();
@@ -509,9 +621,10 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                       MaterialPageRoute(
                                         builder: (_) => ChatDetailScreen(
                                           chatId: chatId,
-                                          otherUserId: widget.job.companyId,
+                                          otherUserId: _job.companyId,
                                           otherUserName: _employer!.name,
-                                          otherUserPhoto: _employer!.profilePhoto,
+                                          otherUserPhoto:
+                                              _employer!.profilePhoto,
                                         ),
                                       ),
                                     );
@@ -519,7 +632,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                     // Close loading if still showing
                                     if (!context.mounted) return;
                                     nav.pop();
-                                    AppDialog.error(context, 'Failed to start chat', detail: e.toString());
+                                    AppDialog.error(
+                                        context, 'Failed to start chat',
+                                        detail: e.toString());
                                   }
                                 },
                                 icon: const Icon(Icons.chat_bubble_outline),
@@ -551,7 +666,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF2196F3).withValues(alpha: 0.1),
+                            color:
+                                const Color(0xFF2196F3).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -568,6 +684,15 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                     const SizedBox(height: 12),
                     ..._applicantProfiles.map((profile) {
                       final applicantUser = _applicantUsers[profile.userId];
+                      final status = _applicationState(profile.userId);
+                      final isAccepted = status == 'accepted' ||
+                          _job.selectedApplicant == profile.userId;
+                      final isRejected = status == 'rejected';
+                      final isPending = !isAccepted && !isRejected;
+                      final anotherApplicantSelected =
+                          _job.selectedApplicant != null &&
+                              _job.selectedApplicant!.isNotEmpty &&
+                              _job.selectedApplicant != profile.userId;
                       return Card(
                         margin: const EdgeInsets.only(bottom: 12),
                         child: Padding(
@@ -579,19 +704,18 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) => ProfileScreen(userId: profile.userId),
+                                      builder: (context) =>
+                                          ProfileScreen(userId: profile.userId),
                                     ),
                                   );
                                 },
-                                child: CircleAvatar(
+                                child: UniversalAvatar(
+                                  avatarConfig: applicantUser?.avatarConfig,
+                                  photoUrl: profile.profilePicture,
+                                  fallbackName:
+                                      applicantUser?.name ?? profile.name,
                                   radius: 25,
-                                  backgroundImage: WebImageLoader.getImageProvider(profile.profilePicture),
-                                  child: profile.profilePicture == null || profile.profilePicture!.isEmpty
-                                      ? Text(
-                                          applicantUser?.name.isNotEmpty == true ? applicantUser!.name[0].toUpperCase() : 'U',
-                                          style: const TextStyle(fontSize: 20),
-                                        )
-                                      : null,
+                                  animate: false,
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -601,12 +725,14 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (context) => ProfileScreen(userId: profile.userId),
+                                        builder: (context) => ProfileScreen(
+                                            userId: profile.userId),
                                       ),
                                     );
                                   },
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Row(
                                         children: [
@@ -651,66 +777,159 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                           ),
                                         ],
                                       ),
+                                      const SizedBox(height: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: isAccepted
+                                              ? Colors.green
+                                                  .withValues(alpha: 0.12)
+                                              : isRejected
+                                                  ? Colors.red
+                                                      .withValues(alpha: 0.12)
+                                                  : Colors.orange
+                                                      .withValues(alpha: 0.12),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                        child: Text(
+                                          isAccepted
+                                              ? 'Accepted'
+                                              : isRejected
+                                                  ? 'Rejected'
+                                                  : 'Pending',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: isAccepted
+                                                ? Colors.green[700]
+                                                : isRejected
+                                                    ? Colors.red[700]
+                                                    : Colors.orange[800],
+                                          ),
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
                               ),
-                              // Contact button
-                              IconButton(
-                                onPressed: () async {
-                                  // Start chat with applicant
-                                  if (applicantUser == null || _currentUser == null) return;
-                                  final nav = Navigator.of(context);
-                                  
-                                  try {
-                                    final currentUser = FirebaseAuth.instance.currentUser;
-                                    if (currentUser == null) return;
-                                    
-                                    // Show loading
-                                    if (!mounted) return;
-                                    showDialog(
-                                      context: context,
-                                      barrierDismissible: false,
-                                      builder: (_) => const Center(child: CircularProgressIndicator()),
-                                    );
-                                    
-                                    // Get or create chat
-                                    final chatId = await _chatService.getOrCreateChat(
-                                      currentUser.uid,
-                                      profile.userId,
-                                      {
-                                        'name': _currentUser!.name,
-                                        'profilePhoto': _currentUser!.profilePhoto,
-                                      },
-                                      {
-                                        'name': applicantUser.name,
-                                        'profilePhoto': applicantUser.profilePhoto,
-                                      },
-                                    );
-                                    
-                                    // Close loading
-                                    if (!mounted) return;
-                                    nav.pop();
-                                    nav.push(
-                                      MaterialPageRoute(
-                                        builder: (_) => ChatDetailScreen(
-                                          chatId: chatId,
-                                          otherUserId: profile.userId,
-                                          otherUserName: applicantUser.name,
-                                          otherUserPhoto: applicantUser.profilePhoto,
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  IconButton(
+                                    onPressed: () async {
+                                      if (applicantUser == null ||
+                                          _currentUser == null) {
+                                        return;
+                                      }
+                                      final nav = Navigator.of(context);
+
+                                      try {
+                                        final currentUser =
+                                            FirebaseAuth.instance.currentUser;
+                                        if (currentUser == null) return;
+
+                                        if (!mounted) return;
+                                        showDialog(
+                                          context: context,
+                                          barrierDismissible: false,
+                                          builder: (_) => const Center(
+                                              child:
+                                                  CircularProgressIndicator()),
+                                        );
+
+                                        final chatId =
+                                            await _chatService.getOrCreateChat(
+                                          currentUser.uid,
+                                          profile.userId,
+                                          {
+                                            'name': _currentUser!.name,
+                                            'profilePhoto':
+                                                _currentUser!.profilePhoto,
+                                          },
+                                          {
+                                            'name': applicantUser.name,
+                                            'profilePhoto':
+                                                applicantUser.profilePhoto,
+                                          },
+                                        );
+
+                                        if (!mounted) return;
+                                        nav.pop();
+                                        nav.push(
+                                          MaterialPageRoute(
+                                            builder: (_) => ChatDetailScreen(
+                                              chatId: chatId,
+                                              otherUserId: profile.userId,
+                                              otherUserName: applicantUser.name,
+                                              otherUserPhoto:
+                                                  applicantUser.profilePhoto,
+                                            ),
+                                          ),
+                                        );
+                                      } catch (e) {
+                                        if (!context.mounted) return;
+                                        nav.pop();
+                                        AppDialog.error(
+                                            context, 'Failed to start chat',
+                                            detail: e.toString());
+                                      }
+                                    },
+                                    icon: const Icon(Icons.chat_bubble_outline),
+                                    color: const Color(0xFF2196F3),
+                                    tooltip: 'Contact',
+                                  ),
+                                  if (isPending && !anotherApplicantSelected)
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        TextButton(
+                                          onPressed: _processingApplicantId ==
+                                                  profile.userId
+                                              ? null
+                                              : () => _rejectApplicant(
+                                                  profile.userId),
+                                          child: const Text(
+                                            'Reject',
+                                            style: TextStyle(color: Colors.red),
+                                          ),
                                         ),
-                                      ),
-                                    );
-                                  } catch (e) {
-                                    // Close loading if still showing
-                                    if (!context.mounted) return;
-                                    nav.pop();
-                                    AppDialog.error(context, 'Failed to start chat', detail: e.toString());
-                                  }
-                                },
-                                icon: const Icon(Icons.chat_bubble_outline),
-                                color: const Color(0xFF2196F3),
-                                tooltip: 'Contact',
+                                        const SizedBox(width: 4),
+                                        ElevatedButton(
+                                          onPressed: _processingApplicantId ==
+                                                  profile.userId
+                                              ? null
+                                              : () => _acceptApplicant(
+                                                  profile.userId),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor:
+                                                const Color(0xFF4CAF50),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 10, vertical: 6),
+                                            minimumSize: Size.zero,
+                                          ),
+                                          child: _processingApplicantId ==
+                                                  profile.userId
+                                              ? const SizedBox(
+                                                  width: 12,
+                                                  height: 12,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    color: Colors.white,
+                                                  ),
+                                                )
+                                              : const Text(
+                                                  'Accept',
+                                                  style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 12),
+                                                ),
+                                        ),
+                                      ],
+                                    ),
+                                ],
                               ),
                             ],
                           ),
@@ -751,8 +970,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                           final result = await Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => CreateJobScreen(
-                                  existingJob: widget.job),
+                              builder: (_) =>
+                                  CreateJobScreen(existingJob: _job),
                             ),
                           );
                           if (result == true && mounted) {
@@ -772,10 +991,13 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: () {
-                          // Show applicants or manage job
+                          AppDialog.info(
+                            context,
+                            'Applicant management is available in the Applicants section below. Scroll down to accept or reject applications.',
+                          );
                         },
                         icon: const Icon(Icons.people),
-                        label: Text('${widget.job.applicants.length} Applicants'),
+                        label: Text('${_job.applicants.length} Applicants'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2196F3),
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -785,9 +1007,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                   ],
                 )
               : ElevatedButton(
-                  onPressed: _canApply
-                      ? (_isLoading ? null : _applyForJob)
-                      : null,
+                  onPressed:
+                      _canApply ? (_isLoading ? null : _applyForJob) : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF2196F3),
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -805,9 +1026,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                       : Text(
                           _hasApplied
                               ? 'Already Applied'
-                              : widget.job.status != 'open'
-                              ? 'Job Closed'
-                              : 'Apply Now',
+                              : _job.status != 'open'
+                                  ? 'Job Closed'
+                                  : 'Apply Now',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,

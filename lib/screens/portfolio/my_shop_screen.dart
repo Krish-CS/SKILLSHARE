@@ -8,6 +8,7 @@ import '../../models/order_model.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/web_image_loader.dart';
 import '../../utils/app_dialog.dart';
+import '../profile/settings_screen.dart';
 import '../shop/add_product_screen.dart';
 import '../shop/product_detail_screen.dart';
 
@@ -21,7 +22,8 @@ class MyShopScreen extends StatefulWidget {
   State<MyShopScreen> createState() => _MyShopScreenState();
 }
 
-class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderStateMixin {
+class _MyShopScreenState extends State<MyShopScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final FirestoreService _firestoreService = FirestoreService();
   List<ProductModel> _products = [];
@@ -70,7 +72,7 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<app_auth.AuthProvider>(context);
-    
+
     // CRITICAL: Only skilled persons can manage shop
     if (!authProvider.isSkilledPerson) {
       return _buildAccessDenied();
@@ -295,8 +297,7 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
                         color: Colors.grey[700])),
                 const SizedBox(height: 8),
                 Text('Orders from your shop will appear here',
-                    style:
-                        TextStyle(fontSize: 14, color: Colors.grey[500])),
+                    style: TextStyle(fontSize: 14, color: Colors.grey[500])),
               ],
             ),
           );
@@ -318,10 +319,14 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
       'pending': Colors.orange,
       'confirmed': Colors.blue,
       'shipped': Colors.purple,
+      'out_for_delivery': const Color(0xFFEF6C00),
       'delivered': Colors.green,
+      'failed_delivery': Colors.red,
       'cancelled': Colors.red,
     };
     final color = statusColors[order.status] ?? Colors.grey;
+    final usesDeliveryPartner = order.deliveryByPartner;
+    final canCancel = order.status == 'pending' || order.status == 'confirmed';
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
@@ -353,41 +358,59 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
               ],
             ),
             const SizedBox(height: 6),
-            Text('Qty: ${order.quantity}  •  \${order.totalPrice.toStringAsFixed(2)}',
-                style: const TextStyle(color: Colors.grey)),
+            Text(
+              'Qty: ${order.quantity}  -  Rs ${order.totalPrice.toStringAsFixed(2)}',
+              style: const TextStyle(color: Colors.grey),
+            ),
             if (order.buyerName != null)
               Text('Buyer: ${order.buyerName}',
                   style: const TextStyle(color: Colors.grey, fontSize: 12)),
+            Text(
+              usesDeliveryPartner
+                  ? 'Fulfillment: Delivery Partner'
+                  : 'Fulfillment: Seller Delivery',
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
             const SizedBox(height: 8),
-            if (order.status != 'delivered' && order.status != 'cancelled')
+            if (order.status != 'delivered' &&
+                order.status != 'cancelled' &&
+                order.status != 'failed_delivery')
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   if (order.status == 'pending')
                     TextButton(
-                      onPressed: () =>
-                          _updateOrderStatus(order, 'confirmed'),
-                      child: const Text('Confirm'),
+                      onPressed: () => _updateOrderStatus(order, 'confirmed'),
+                      child: const Text('Confirm Availability'),
                     ),
-                  if (order.status == 'confirmed')
+                  if (order.status == 'confirmed' && !usesDeliveryPartner)
                     TextButton(
-                      onPressed: () =>
-                          _updateOrderStatus(order, 'shipped'),
+                      onPressed: () => _updateOrderStatus(order, 'shipped'),
                       child: const Text('Mark Shipped'),
                     ),
-                  if (order.status == 'shipped')
+                  if (order.status == 'confirmed' && usesDeliveryPartner)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 8),
+                      child: Text(
+                        'Awaiting delivery pickup',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFFEF6C00),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  if (order.status == 'shipped' && !usesDeliveryPartner)
                     TextButton(
-                      onPressed: () =>
-                          _updateOrderStatus(order, 'delivered'),
+                      onPressed: () => _updateOrderStatus(order, 'delivered'),
                       child: const Text('Mark Delivered'),
                     ),
-                  TextButton(
-                    onPressed: () =>
-                        _updateOrderStatus(order, 'cancelled'),
-                    style:
-                        TextButton.styleFrom(foregroundColor: Colors.red),
-                    child: const Text('Cancel'),
-                  ),
+                  if (canCancel)
+                    TextButton(
+                      onPressed: () => _updateOrderStatus(order, 'cancelled'),
+                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                      child: const Text('Cancel'),
+                    ),
                 ],
               ),
           ],
@@ -417,10 +440,12 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
 
   Widget _buildAnalyticsTab() {
     final totalProducts = _products.length;
-    final totalStock = _products.fold<int>(0, (sum, product) => sum + product.stock);
+    final totalStock =
+        _products.fold<int>(0, (sum, product) => sum + product.stock);
     final averagePrice = _products.isEmpty
         ? 0.0
-        : _products.fold<double>(0, (sum, product) => sum + product.price) / _products.length;
+        : _products.fold<double>(0, (sum, product) => sum + product.price) /
+            _products.length;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -456,7 +481,8 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildAnalyticsCard(String title, String value, IconData icon, Color color) {
+  Widget _buildAnalyticsCard(
+      String title, String value, IconData icon, Color color) {
     return Card(
       child: ListTile(
         leading: CircleAvatar(
@@ -478,12 +504,14 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
 
   void _addProduct(BuildContext context) async {
     // SECURITY: Check if user is verified before allowing shop/product creation
-    final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
+    final authProvider =
+        Provider.of<app_auth.AuthProvider>(context, listen: false);
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final nav = Navigator.of(context);
 
     // Load profile if not already loaded
-    if (userProvider.currentProfile == null && authProvider.currentUser != null) {
+    if (userProvider.currentProfile == null &&
+        authProvider.currentUser != null) {
       await userProvider.loadProfile(authProvider.currentUser!.uid);
     }
 
@@ -585,7 +613,8 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
         }
       } catch (e) {
         if (mounted) {
-          AppDialog.error(context, 'Error deleting product', detail: e.toString());
+          AppDialog.error(context, 'Error deleting product',
+              detail: e.toString());
         }
       }
     }
@@ -594,8 +623,79 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
   void _openShopSettings(BuildContext context) {
     final userId = FirebaseAuth.instance.currentUser?.uid;
     if (userId == null) return;
+    _openShopSettingsGuarded(context, userId);
+  }
+
+  Future<void> _openShopSettingsGuarded(
+      BuildContext context, String userId) async {
+    final userSettings = await _firestoreService.getUserSettings(userId);
+    final isDeliveryWorkflowEnabled =
+        userSettings['enableShopDeliveryWorkflow'] as bool? ?? true;
+
+    if (!isDeliveryWorkflowEnabled) {
+      if (!context.mounted) return;
+      final result = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.settings_suggest, color: Color(0xFFE91E63)),
+              SizedBox(width: 8),
+              Text('Enable Delivery Workflow'),
+            ],
+          ),
+          content: const Text(
+            'Shop delivery settings are disabled in your profile settings.\n\n'
+            'Enable it to manage delivery controls in My Shop.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'cancel'),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'open_profile'),
+              child: const Text('Open Profile Settings'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, 'enable_now'),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE91E63)),
+              child: const Text('Enable Now',
+                  style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+
+      if (result == 'open_profile' && context.mounted) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const SettingsScreen()),
+        );
+        return;
+      }
+
+      if (result == 'enable_now') {
+        await _firestoreService.updateUserSettings(userId, {
+          ...userSettings,
+          'enableShopDeliveryWorkflow': true,
+        });
+        if (context.mounted) {
+          AppDialog.success(
+              context, 'Delivery workflow enabled. You can configure it now.');
+        }
+      } else {
+        return;
+      }
+    }
+
+    if (!context.mounted) return;
     final shopNameController = TextEditingController();
     final shopDescController = TextEditingController();
+    final maxDeliveryQtyController = TextEditingController(text: '10');
+    bool enableDeliveryIfAvailable = true;
+    bool hasLoadedSettings = false;
     bool isLoading = false;
     bool isSaving = false;
 
@@ -603,13 +703,22 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
-          if (!isLoading && shopNameController.text.isEmpty) {
+          if (!isLoading && !hasLoadedSettings) {
             isLoading = true;
             _firestoreService.getShopSettings(userId).then((settings) {
               setDialogState(() {
                 shopNameController.text = settings['shopName'] as String? ?? '';
                 shopDescController.text =
                     settings['shopDescription'] as String? ?? '';
+                enableDeliveryIfAvailable =
+                    settings['enableDeliveryIfAvailable'] != false;
+                final configuredLimit = settings['maxDeliveryQuantity'];
+                final maxLimit = configuredLimit is int
+                    ? configuredLimit
+                    : int.tryParse('${configuredLimit ?? ''}') ?? 10;
+                maxDeliveryQtyController.text =
+                    (maxLimit > 0 ? maxLimit : 10).toString();
+                hasLoadedSettings = true;
                 isLoading = false;
               });
             });
@@ -648,6 +757,28 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
                           ),
                           maxLines: 3,
                         ),
+                        const SizedBox(height: 12),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: enableDeliveryIfAvailable,
+                          onChanged: (value) => setDialogState(
+                              () => enableDeliveryIfAvailable = value),
+                          title: const Text('Allow Delivery Partner'),
+                          subtitle: const Text(
+                            'Enable delivery-partner flow when stock is available.',
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: maxDeliveryQtyController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Max Delivery Quantity',
+                            hintText: 'Example: 10',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.numbers),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -661,10 +792,18 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
                     ? null
                     : () async {
                         setDialogState(() => isSaving = true);
+                        final parsedMaxQty = int.tryParse(
+                                maxDeliveryQtyController.text.trim()) ??
+                            10;
+                        final maxDeliveryQty =
+                            parsedMaxQty > 0 ? parsedMaxQty : 10;
                         try {
                           await _firestoreService.updateShopSettings(userId, {
                             'shopName': shopNameController.text.trim(),
                             'shopDescription': shopDescController.text.trim(),
+                            'enableDeliveryIfAvailable':
+                                enableDeliveryIfAvailable,
+                            'maxDeliveryQuantity': maxDeliveryQty,
                           });
                           if (!ctx.mounted) return;
                           Navigator.pop(ctx);
@@ -672,7 +811,9 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
                           AppDialog.success(context, 'Shop settings saved!');
                         } catch (e) {
                           setDialogState(() => isSaving = false);
-                          AppDialog.error(context, 'Could not save shop settings', detail: e.toString());
+                          AppDialog.error(
+                              context, 'Could not save shop settings',
+                              detail: e.toString());
                         }
                       },
                 style: ElevatedButton.styleFrom(
@@ -683,8 +824,7 @@ class _MyShopScreenState extends State<MyShopScreen> with SingleTickerProviderSt
                         height: 16,
                         child: CircularProgressIndicator(
                             color: Colors.white, strokeWidth: 2))
-                    : const Text('Save',
-                        style: TextStyle(color: Colors.white)),
+                    : const Text('Save', style: TextStyle(color: Colors.white)),
               ),
             ],
           );

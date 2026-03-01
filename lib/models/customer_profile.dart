@@ -22,6 +22,8 @@ class CustomerProfile {
   final Map<String, dynamic>? bannerData;
   /// Emoji avatar key (e.g. 'avatar_smile'). When set, shown instead of photo.
   final String? avatarKey;
+  /// Animated avatar configuration.
+  final Map<String, dynamic>? avatarConfig;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -41,6 +43,7 @@ class CustomerProfile {
     this.assignedProjects = const [],
     this.bannerData,
     this.avatarKey,
+    this.avatarConfig,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -66,6 +69,9 @@ class CustomerProfile {
           ? Map<String, dynamic>.from(map['bannerData'] as Map)
           : null,
       avatarKey: map['avatarKey'] as String?,
+      avatarConfig: map['avatarConfig'] is Map
+          ? Map<String, dynamic>.from(map['avatarConfig'] as Map)
+          : null,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -87,6 +93,7 @@ class CustomerProfile {
       'assignedProjects': assignedProjects,
       if (bannerData != null) 'bannerData': bannerData,
       if (avatarKey != null) 'avatarKey': avatarKey,
+      if (avatarConfig != null) 'avatarConfig': avatarConfig,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -109,6 +116,7 @@ class CustomerProfile {
     bool clearBanner = false,
     String? avatarKey,
     bool clearAvatar = false,
+    Map<String, dynamic>? avatarConfig,
   }) {
     return CustomerProfile(
       userId: userId,
@@ -126,6 +134,7 @@ class CustomerProfile {
       assignedProjects: assignedProjects ?? this.assignedProjects,
       bannerData: clearBanner ? null : (bannerData ?? this.bannerData),
       avatarKey: clearAvatar ? null : (avatarKey ?? this.avatarKey),
+      avatarConfig: avatarConfig ?? this.avatarConfig,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );

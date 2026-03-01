@@ -24,9 +24,9 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   final _budgetMinController = TextEditingController();
   final _budgetMaxController = TextEditingController();
   final _skillController = TextEditingController();
-  
+
   final FirestoreService _firestoreService = FirestoreService();
-  
+
   String? _selectedJobType;
   final List<String> _requiredSkills = [];
   DateTime? _selectedDeadline;
@@ -88,7 +88,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         );
       },
     );
-    
+
     if (picked != null) {
       setState(() {
         _selectedDeadline = picked;
@@ -114,7 +114,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
 
   Future<void> _saveJob() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     if (_selectedJobType == null) {
       AppDialog.info(context, 'Please select a job type');
       return;
@@ -153,6 +153,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           jobType: _selectedJobType!.toLowerCase(),
           status: widget.existingJob!.status,
           applicants: widget.existingJob!.applicants,
+          applicationStatus: widget.existingJob!.applicationStatus,
           selectedApplicant: widget.existingJob!.selectedApplicant,
           deadline: _selectedDeadline!,
           createdAt: widget.existingJob!.createdAt,
@@ -179,6 +180,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
               : null,
           jobType: _selectedJobType!.toLowerCase(),
           status: 'open',
+          applicationStatus: const {},
           deadline: _selectedDeadline!,
           createdAt: now,
           updatedAt: now,
@@ -203,7 +205,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<app_auth.AuthProvider>(context);
-    
+
     // CRITICAL: Only companies and customers can post jobs
     if (!authProvider.canPostJobs) {
       return Scaffold(
@@ -240,12 +242,12 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         ),
       );
     }
-    
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEditing ? 'Edit Job' : 'Post a Job',
             style: const TextStyle(color: Colors.white)),
-      flexibleSpace: Container(
+        flexibleSpace: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               colors: [Color(0xFF2196F3), Color(0xFF00BCD4)],
@@ -315,7 +317,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
               controller: _descriptionController,
               decoration: InputDecoration(
                 labelText: 'Job Description *',
-                hintText: 'Describe the role, responsibilities, requirements...',
+                hintText:
+                    'Describe the role, responsibilities, requirements...',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -401,7 +404,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                           return 'Invalid amount';
                         }
                         if (_budgetMinController.text.isNotEmpty) {
-                          final minAmount = double.parse(_budgetMinController.text);
+                          final minAmount =
+                              double.parse(_budgetMinController.text);
                           if (amount < minAmount) {
                             return 'Max must be >= Min';
                           }
@@ -465,7 +469,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    
+
                     // Skill Input
                     Row(
                       children: [
@@ -494,7 +498,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                         ),
                       ],
                     ),
-                    
+
                     // Skills List
                     if (_requiredSkills.isNotEmpty) ...[
                       const SizedBox(height: 12),
@@ -506,7 +510,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                             label: Text(skill),
                             deleteIcon: const Icon(Icons.close, size: 18),
                             onDeleted: () => _removeSkill(skill),
-                            backgroundColor: const Color(0xFF2196F3).withValues(alpha: 0.1),
+                            backgroundColor:
+                                const Color(0xFF2196F3).withValues(alpha: 0.1),
                             labelStyle: const TextStyle(
                               color: Color(0xFF2196F3),
                             ),

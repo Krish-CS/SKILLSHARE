@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/app_dialog.dart';
+import '../../utils/user_roles.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -26,6 +27,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _profileVisible = true;
   bool _showEmail = false;
   bool _showPhone = false;
+  bool _enableShopDeliveryWorkflow = true;
+  bool _isSkilledPerson = false;
 
   @override
   void initState() {
@@ -40,8 +43,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
     try {
+      final user = await _firestoreService.getUserById(uid);
       final settings = await _firestoreService.getUserSettings(uid);
       setState(() {
+        _isSkilledPerson =
+            UserRoles.normalizeRole(user?.role) == UserRoles.skilledPerson;
         _pushNotifications = settings['pushNotifications'] as bool? ?? true;
         _emailNotifications = settings['emailNotifications'] as bool? ?? true;
         _chatNotifications = settings['chatNotifications'] as bool? ?? true;
@@ -49,6 +55,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _profileVisible = settings['profileVisible'] as bool? ?? true;
         _showEmail = settings['showEmail'] as bool? ?? false;
         _showPhone = settings['showPhone'] as bool? ?? false;
+        _enableShopDeliveryWorkflow =
+            settings['enableShopDeliveryWorkflow'] as bool? ?? true;
         _isLoading = false;
       });
     } catch (e) {
@@ -69,6 +77,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'profileVisible': _profileVisible,
         'showEmail': _showEmail,
         'showPhone': _showPhone,
+        'enableShopDeliveryWorkflow': _enableShopDeliveryWorkflow,
       });
       if (mounted) {
         AppDialog.success(context, 'Settings saved!');
@@ -111,7 +120,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           else
             TextButton(
               onPressed: _saveSettings,
-              child: const Text('Save', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: const Text('Save',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
             ),
         ],
       ),
@@ -152,8 +163,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _buildSwitch(
                   icon: Icons.visibility,
                   title: 'Profile Visible',
-                  subtitle:
-                      'Make your profile discoverable to other users',
+                  subtitle: 'Make your profile discoverable to other users',
                   value: _profileVisible,
                   onChanged: (v) => setState(() => _profileVisible = v),
                 ),
@@ -171,6 +181,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   value: _showPhone,
                   onChanged: (v) => setState(() => _showPhone = v),
                 ),
+                if (_isSkilledPerson) ...[
+                  const _SectionHeader(title: 'Shop Delivery'),
+                  _buildSwitch(
+                    icon: Icons.local_shipping_outlined,
+                    title: 'Enable Shop Delivery Workflow',
+                    subtitle:
+                        'Allow delivery partner flow for your shop orders.',
+                    value: _enableShopDeliveryWorkflow,
+                    onChanged: (v) =>
+                        setState(() => _enableShopDeliveryWorkflow = v),
+                  ),
+                ],
                 const _SectionHeader(title: 'Account'),
                 ListTile(
                   leading: Container(
@@ -193,7 +215,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       color: const Color(0xFF4285F4).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.g_mobiledata, color: Color(0xFF4285F4), size: 28),
+                    child: const Icon(Icons.g_mobiledata,
+                        color: Color(0xFF4285F4), size: 28),
                   ),
                   title: const Text('Link Google Account'),
                   subtitle: const Text('Sign in with Google on this account'),
@@ -240,7 +263,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        AppDialog.error(context, 'Could not link Google account', detail: e.toString());
+        AppDialog.error(context, 'Could not link Google account',
+            detail: e.toString());
       }
     }
   }
@@ -280,14 +304,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               try {
                 await FirebaseAuth.instance
                     .sendPasswordResetEmail(email: email);
-                if (!ctx.mounted) return;
+                if (!mounted || !ctx.mounted) return;
                 Navigator.pop(ctx);
-                // ignore: use_build_context_synchronously
-                AppDialog.success(context, 'Password reset email sent! Check your inbox.');
+                AppDialog.success(
+                    context, 'Password reset email sent! Check your inbox.');
               } catch (e) {
-                if (!ctx.mounted) return;
-                // ignore: use_build_context_synchronously
-                AppDialog.error(context, 'Error sending reset email', detail: e.toString());
+                if (!mounted || !ctx.mounted) return;
+                AppDialog.error(context, 'Error sending reset email',
+                    detail: e.toString());
               }
             },
             style: ElevatedButton.styleFrom(

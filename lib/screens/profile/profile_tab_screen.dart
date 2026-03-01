@@ -10,7 +10,8 @@ import '../../models/customer_profile.dart';
 import '../../models/company_profile.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../services/firestore_service.dart';
-import '../../utils/web_image_loader.dart';
+import '../../widgets/universal_avatar.dart';
+import '../../screens/avatar/avatar_builder_screen.dart';
 import '../../utils/user_roles.dart';
 import 'profile_screen.dart';
 import 'edit_skilled_profile_screen.dart';
@@ -330,16 +331,11 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                 ],
                               ),
                               padding: const EdgeInsets.all(3.5),
-                              child: CircleAvatar(
+                              child: UniversalAvatar(
+                                avatarConfig: _currentUser?.avatarConfig,
+                                photoUrl: _profilePhotoUrl,
+                                fallbackName: _currentUser?.name,
                                 radius: 52,
-                                backgroundColor: Colors.white,
-                                child: WebImageLoader.loadAvatar(
-                                  imageUrl: _profilePhotoUrl,
-                                  radius: 50,
-                                  fallbackText: _currentUser?.name,
-                                  backgroundColor: const Color(0xFFF3E5F5),
-                                  alignment: Alignment.center,
-                                ),
                               ),
                             ),
                           ),
@@ -625,6 +621,27 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                         builder: (_) => editScreen),
                                   );
                                   // Stream auto-updates
+                                },
+                              ),
+                              const SizedBox(width: 16),
+                              _headerAction(
+                                icon: Icons.face_retouching_natural,
+                                label: 'Avatar',
+                                onTap: () async {
+                                  if (_currentUser == null) return;
+                                  final config = await Navigator.push<dynamic>(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => AvatarBuilderScreen(
+                                        initialConfig: _currentUser!.avatarConfig,
+                                      ),
+                                    ),
+                                  );
+                                  if (config != null) {
+                                    await FirestoreService().saveAvatarConfig(
+                                        _currentUser!.uid,
+                                        config as Map<String, dynamic>);
+                                  }
                                 },
                               ),
                             ],

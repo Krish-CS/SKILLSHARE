@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -25,6 +24,7 @@ import '../shop/add_product_screen.dart';
 import '../chat/chat_detail_screen.dart';
 import '../portfolio/portfolio_screen.dart';
 import '../../widgets/banner_display.dart';
+import '../../widgets/universal_avatar.dart';
 import 'banner_editor_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -36,8 +36,7 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen>
-    with TickerProviderStateMixin {
+class _ProfileScreenState extends State<ProfileScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final ChatService _chatService = ChatService();
 
@@ -49,10 +48,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   String? _userRole;
   bool _isLoading = true;
   StreamSubscription? _profileSub;
-
-  // Animated gradient controller for profile backgrounds
-  late AnimationController _gradAnimCtrl;
-  late Animation<double> _gradAnim;
 
   // Check if user is viewing their own profile
   bool get isOwnProfile =>
@@ -71,6 +66,31 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool get _isCurrentUserCompany => _currentViewerRole == UserRoles.company;
 
   bool get _isCurrentUserCustomer => _currentViewerRole == UserRoles.customer;
+
+  String _displayNameUpper(String? name, {String fallback = 'USER'}) {
+    final value = (name ?? '').trim();
+    if (value.isEmpty) return fallback.toUpperCase();
+    return value.toUpperCase();
+  }
+
+  Map<String, dynamic>? _normalizedBannerData(
+    Map<String, dynamic>? bannerData, {
+    required String? fallbackName,
+  }) {
+    if (bannerData == null) return null;
+    final normalized = Map<String, dynamic>.from(bannerData);
+    final type = (normalized['type'] as String?)?.trim().toLowerCase();
+    if (type != 'text') return normalized;
+
+    final currentText = (normalized['text'] as String?)?.trim() ?? '';
+    final rawName = (fallbackName ?? '').trim();
+    if (currentText.isEmpty ||
+        (rawName.isNotEmpty &&
+            currentText.toLowerCase() == rawName.toLowerCase())) {
+      normalized['text'] = _displayNameUpper(fallbackName);
+    }
+    return normalized;
+  }
 
   void _showReportDialog() {
     final reasonController = TextEditingController();
@@ -383,17 +403,11 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void initState() {
     super.initState();
-    _gradAnimCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 8),
-    )..repeat();
-    _gradAnim = CurvedAnimation(parent: _gradAnimCtrl, curve: Curves.linear);
     _loadProfile().then((_) => _subscribeToProfileStream());
   }
 
   @override
   void dispose() {
-    _gradAnimCtrl.dispose();
     _profileSub?.cancel();
     super.dispose();
   }
@@ -448,7 +462,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         if (isOwnProfile &&
             _customerProfile?.profilePicture != null &&
             _customerProfile!.profilePicture!.isNotEmpty &&
-            (_userData?.profilePhoto == null || _userData!.profilePhoto!.isEmpty)) {
+            (_userData?.profilePhoto == null ||
+                _userData!.profilePhoto!.isEmpty)) {
           try {
             await _firestoreService.updateUserProfilePhoto(
                 widget.userId, _customerProfile!.profilePicture!);
@@ -752,12 +767,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: AnimatedBuilder(
-        animation: _gradAnim,
-        builder: (context, child) => Container(
-          decoration: _animatedBodyGradient(coverColors),
-          child: child,
-        ),
+      body: Container(
+        decoration: _bodyGradient(coverColors),
         child: CustomScrollView(
           clipBehavior: Clip.none,
           slivers: [
@@ -843,15 +854,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 ],
                               ),
                               padding: const EdgeInsets.all(avatarBorder),
-                              child: CircleAvatar(
+                              child: UniversalAvatar(
+                                avatarConfig: _userData?.avatarConfig,
+                                photoUrl: _profile!.profilePicture,
+                                fallbackName: _userData?.name,
                                 radius: avatarRadius,
-                                backgroundColor: Colors.white,
-                                child: WebImageLoader.loadAvatar(
-                                  imageUrl: _profile!.profilePicture,
-                                  radius: avatarRadius - 1,
-                                  fallbackText: _userData?.name,
-                                  backgroundColor: Colors.grey[100],
-                                ),
                               ),
                             ),
                           ),
@@ -955,20 +962,17 @@ class _ProfileScreenState extends State<ProfileScreen>
         onPressed: onTap,
       );
 
-  /// Animated body gradient that shifts direction & brightness over time
-  BoxDecoration _animatedBodyGradient(List<Color> coverColors) {
-    final a = _gradAnim.value * 2 * math.pi;
+  /// Stable background gradient for profile body (no animation).
+  BoxDecoration _bodyGradient(List<Color> coverColors) {
     return BoxDecoration(
       gradient: LinearGradient(
         colors: [
-          Color.lerp(coverColors.first.withValues(alpha: 0.06),
-              coverColors.last.withValues(alpha: 0.10), _gradAnim.value)!,
+          coverColors.first.withValues(alpha: 0.07),
           const Color(0xFFF6F7FB),
-          Color.lerp(coverColors.last.withValues(alpha: 0.04),
-              coverColors.first.withValues(alpha: 0.08), _gradAnim.value)!,
+          coverColors.last.withValues(alpha: 0.05),
         ],
-        begin: Alignment(math.cos(a) * 0.5, -1),
-        end: Alignment(math.sin(a) * 0.5, 1),
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
       ),
     );
   }
@@ -988,12 +992,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
-      body: AnimatedBuilder(
-        animation: _gradAnim,
-        builder: (context, child) => Container(
-          decoration: _animatedBodyGradient(coverColors),
-          child: child,
-        ),
+      body: Container(
+        decoration: _bodyGradient(coverColors),
         child: CustomScrollView(
           clipBehavior: Clip.none,
           slivers: [
@@ -1065,10 +1065,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                     children: [
                       FlexibleSpaceBar(
                         background: BannerDisplay(
-                          bannerData: _profile?.bannerData ??
+                          enableAnimations: false,
+                          bannerData: _normalizedBannerData(
+                                _profile?.bannerData,
+                                fallbackName: _userData?.name,
+                              ) ??
                               {
                                 'type': 'text',
-                                'text': _userData?.name ?? '',
+                                'text': _displayNameUpper(_userData?.name,
+                                    fallback: 'User'),
                                 'fontKey': 'default',
                                 'textColor': 0xFFFFFFFF,
                                 'fontSize': 28.0,
@@ -1125,15 +1130,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 ],
                               ),
                               padding: const EdgeInsets.all(avatarBorder),
-                              child: CircleAvatar(
+                              child: UniversalAvatar(
+                                avatarConfig: _userData?.avatarConfig,
+                                avatarKey: _customerProfile?.avatarKey,
+                                photoUrl: imageUrl,
+                                fallbackName: _userData?.name,
                                 radius: avatarRadius,
-                                backgroundColor: Colors.white,
-                                child: WebImageLoader.loadAvatar(
-                                  imageUrl: imageUrl,
-                                  radius: avatarRadius - 1,
-                                  fallbackText: _userData?.name,
-                                  backgroundColor: const Color(0xFFF3E5F5),
-                                ),
                               ),
                             ),
                           ),
@@ -1157,7 +1159,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       child: SizedBox(
                         width: 2 * (avatarRadius + avatarBorder),
                         child: Text(
-                          (_userData?.name ?? 'User').toUpperCase(),
+                          _displayNameUpper(_userData?.name, fallback: 'User'),
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                               fontSize: 20,
@@ -1223,10 +1225,14 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Widget _buildCoverBanner(List<Color> colors, double height) {
     return BannerDisplay(
-      bannerData: _profile?.bannerData ??
+      enableAnimations: false,
+      bannerData: _normalizedBannerData(
+            _profile?.bannerData,
+            fallbackName: _userData?.name,
+          ) ??
           {
             'type': 'text',
-            'text': _userData?.name ?? '',
+            'text': _displayNameUpper(_userData?.name, fallback: 'User'),
             'fontKey': 'default',
             'textColor': 0xFFFFFFFF,
             'fontSize': 28.0,
@@ -1277,7 +1283,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             child: SizedBox(
               width: avatarDiameter,
               child: Text(
-                (_userData?.name ?? 'User').toUpperCase(),
+                _displayNameUpper(_userData?.name, fallback: 'User'),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 20,
@@ -1323,10 +1329,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
           const SizedBox(height: 12),
 
-          // ── Location + Verified badge ──
-          if (_profile!.city != null ||
-              _profile!.address != null ||
-              _profile!.isVerified)
+          // ── Location ──
+          if (_profile!.city != null || _profile!.address != null)
             Row(
               children: [
                 if (_profile!.city != null || _profile!.address != null) ...[
@@ -1338,32 +1342,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     style:
                         const TextStyle(color: Color(0xFF9E9E9E), fontSize: 13),
                   ),
-                  const SizedBox(width: 10),
                 ],
-                if (_profile!.isVerified)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.verified_rounded,
-                            size: 12, color: Colors.white),
-                        SizedBox(width: 4),
-                        Text('Verified Expert',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
               ],
             ),
 
@@ -1596,7 +1575,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           ),
           const SizedBox(height: 12),
-          // Visibility + Verification badges
+          // Visibility badge
           Row(
             children: [
               _infoBadge(
@@ -1608,16 +1587,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                     : 'Private',
                 color: _profile!.visibility == AppConstants.visibilityPublic
                     ? const Color(0xFF4CAF50)
-                    : Colors.orange,
-              ),
-              const SizedBox(width: 8),
-              _infoBadge(
-                icon: _profile!.isVerified
-                    ? Icons.verified_rounded
-                    : Icons.pending_rounded,
-                label: _profile!.isVerified ? 'Verified' : 'Pending',
-                color: _profile!.isVerified
-                    ? const Color(0xFF2196F3)
                     : Colors.orange,
               ),
             ],
@@ -2070,11 +2039,11 @@ class _ProfileScreenState extends State<ProfileScreen>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          WebImageLoader.loadAvatar(
-            imageUrl: review.reviewerPhoto,
+          UniversalAvatar(
+            photoUrl: review.reviewerPhoto,
+            fallbackName: review.reviewerName,
             radius: 22,
-            fallbackText: review.reviewerName,
-            backgroundColor: Colors.grey[200],
+            animate: false,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -2165,12 +2134,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: AnimatedBuilder(
-        animation: _gradAnim,
-        builder: (context, child) => Container(
-          decoration: _animatedBodyGradient(coverColors),
-          child: child,
-        ),
+      body: Container(
+        decoration: _bodyGradient(coverColors),
         child: CustomScrollView(
           clipBehavior: Clip.none,
           slivers: [
@@ -2243,10 +2208,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                       FlexibleSpaceBar(
                         collapseMode: CollapseMode.pin,
                         background: BannerDisplay(
-                          bannerData: _customerProfile?.bannerData ??
+                          enableAnimations: false,
+                          bannerData: _normalizedBannerData(
+                                _customerProfile?.bannerData,
+                                fallbackName: _userData?.name,
+                              ) ??
                               {
                                 'type': 'text',
-                                'text': _userData?.name ?? '',
+                                'text': _displayNameUpper(_userData?.name,
+                                    fallback: 'Customer'),
                                 'fontKey': 'default',
                                 'textColor': 0xFFFFFFFF,
                                 'fontSize': 28.0,
@@ -2303,15 +2273,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 ],
                               ),
                               padding: const EdgeInsets.all(avatarBorder),
-                              child: CircleAvatar(
+                              child: UniversalAvatar(
+                                avatarConfig: _userData?.avatarConfig,
+                                photoUrl: imageUrl,
+                                fallbackName: _userData?.name,
                                 radius: avatarRadius,
-                                backgroundColor: Colors.white,
-                                child: WebImageLoader.loadAvatar(
-                                  imageUrl: imageUrl,
-                                  radius: avatarRadius - 1,
-                                  fallbackText: _userData?.name,
-                                  backgroundColor: const Color(0xFFF3E5F5),
-                                ),
                               ),
                             ),
                           ),
@@ -2338,7 +2304,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                           SizedBox(
                             width: 2 * (avatarRadius + avatarBorder),
                             child: Text(
-                              (_userData?.name ?? 'Customer').toUpperCase(),
+                              _displayNameUpper(_userData?.name,
+                                  fallback: 'Customer'),
                               textAlign: TextAlign.center,
                               style: const TextStyle(
                                   fontSize: 20,
@@ -2738,10 +2705,17 @@ class _ProfileScreenState extends State<ProfileScreen>
                           children: [
                             Positioned.fill(
                               child: BannerDisplay(
-                                bannerData: profile.bannerData ??
+                                enableAnimations: false,
+                                bannerData: _normalizedBannerData(
+                                      profile.bannerData,
+                                      fallbackName: profile.companyName,
+                                    ) ??
                                     {
                                       'type': 'text',
-                                      'text': _userData?.name ?? '',
+                                      'text': _displayNameUpper(
+                                        profile.companyName,
+                                        fallback: 'Company',
+                                      ),
                                       'fontKey': 'default',
                                       'textColor': 0xFFFFFFFF,
                                       'fontSize': 28.0,
@@ -2795,15 +2769,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 ],
                               ),
                               padding: const EdgeInsets.all(avatarBorder),
-                              child: CircleAvatar(
+                              child: UniversalAvatar(
+                                avatarConfig: _userData?.avatarConfig,
+                                photoUrl: imageUrl,
+                                fallbackName: profile.companyName,
                                 radius: avatarRadius,
-                                backgroundColor: Colors.white,
-                                child: WebImageLoader.loadAvatar(
-                                  imageUrl: imageUrl,
-                                  radius: avatarRadius - 1,
-                                  fallbackText: profile.companyName,
-                                  backgroundColor: const Color(0xFFE3F2FD),
-                                ),
                               ),
                             ),
                           ),
@@ -2830,10 +2800,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                           SizedBox(
                             width: 2 * (avatarRadius + avatarBorder),
                             child: Text(
-                              (profile.companyName.isNotEmpty
-                                      ? profile.companyName
-                                      : 'Company')
-                                  .toUpperCase(),
+                              _displayNameUpper(
+                                profile.companyName,
+                                fallback: 'Company',
+                              ),
                               textAlign: TextAlign.center,
                               style: const TextStyle(
                                   fontSize: 20,

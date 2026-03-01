@@ -8,6 +8,7 @@ import '../../services/chat_service.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/app_helpers.dart';
 import '../../utils/web_image_loader.dart';
+import '../../widgets/universal_avatar.dart';
 import '../../widgets/app_popup.dart';
 import '../profile/profile_screen.dart';
 import '../chat/chat_detail_screen.dart';
@@ -778,23 +779,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     builder: (_) => ProfileScreen(userId: _seller!.uid))),
             child: Row(
               children: [
-                CircleAvatar(
+                UniversalAvatar(
+                  avatarConfig: _seller!.avatarConfig,
+                  photoUrl: _seller!.profilePhoto,
+                  fallbackName: _seller!.name,
                   radius: 22,
-                  backgroundColor:
-                      AppTheme.primaryPurple.withValues(alpha: 0.15),
-                  backgroundImage:
-                      WebImageLoader.getImageProvider(_seller!.profilePhoto),
-                  child: (_seller!.profilePhoto == null ||
-                          _seller!.profilePhoto!.isEmpty)
-                      ? Text(
-                          _seller!.name.isNotEmpty
-                              ? _seller!.name[0].toUpperCase()
-                              : 'S',
-                          style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.primaryPurple))
-                      : null,
+                  animate: false,
                 ),
                 const SizedBox(width: 12),
                 Expanded(

@@ -6,7 +6,7 @@ import '../services/chat_service.dart';
 import '../services/firestore_service.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/chat/chat_detail_screen.dart';
-import '../utils/web_image_loader.dart';
+import 'universal_avatar.dart';
 import 'app_popup.dart';
 
 class ExpertCard extends StatefulWidget {
@@ -54,17 +54,12 @@ class _ExpertCardState extends State<ExpertCard> {
                         width: 2,
                       ),
                     ),
-                    child: CircleAvatar(
+                    child: UniversalAvatar(
+                      avatarConfig: widget.profile.avatarConfig,
+                      photoUrl: widget.profile.profilePicture,
+                      fallbackName: widget.profile.name,
                       radius: 36,
-                      backgroundColor: Colors.grey[300],
-                      backgroundImage: (widget.profile.profilePicture != null &&
-                              widget.profile.profilePicture!.isNotEmpty)
-                          ? WebImageLoader.getImageProvider(widget.profile.profilePicture)
-                          : null,
-                      child: (widget.profile.profilePicture == null ||
-                              widget.profile.profilePicture!.isEmpty)
-                          ? const Icon(Icons.person, size: 36, color: Colors.grey)
-                          : null,
+                      animate: false,
                     ),
                   ),
                   if (widget.profile.isVerified)
