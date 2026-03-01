@@ -9,9 +9,12 @@ import '../../services/chat_service.dart';
 import '../../models/skilled_user_profile.dart';
 import '../../models/customer_profile.dart';
 import '../../models/company_profile.dart';
+import '../../models/product_model.dart';
 import '../../models/review_model.dart';
 import '../../models/service_model.dart';
+import '../../models/service_request_model.dart';
 import '../../models/user_model.dart';
+import '../../models/order_model.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../utils/app_constants.dart';
 import '../../utils/app_dialog.dart';
@@ -23,6 +26,7 @@ import 'company_setup_screen.dart';
 import '../shop/add_product_screen.dart';
 import '../chat/chat_detail_screen.dart';
 import '../portfolio/portfolio_screen.dart';
+import '../shop/shop_storefront_screen.dart';
 import '../../widgets/banner_display.dart';
 import '../../widgets/universal_avatar.dart';
 import 'banner_editor_screen.dart';
@@ -66,6 +70,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool get _isCurrentUserCompany => _currentViewerRole == UserRoles.company;
 
   bool get _isCurrentUserCustomer => _currentViewerRole == UserRoles.customer;
+
+  bool _isCompanyVerifiedForHiring(CompanyProfile? profile) {
+    if (profile == null) return false;
+    final status = profile.verificationStatus.toLowerCase().trim();
+    return profile.isVerified ||
+        status == AppConstants.verificationApproved ||
+        status == 'verified';
+  }
 
   String _displayNameUpper(String? name, {String fallback = 'USER'}) {
     final value = (name ?? '').trim();
@@ -234,12 +246,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _promptCompanyVerificationRequired() async {
+    final viewerId = FirebaseAuth.instance.currentUser?.uid;
+    if (viewerId == null) return;
+
+    final shouldOpen = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Company Verification Required'),
+        content: const Text(
+          'Only verified companies can send hire requests. '
+          'Complete verification to unlock hiring.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Verify Now'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldOpen != true || !mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => CompanySetupScreen(userId: viewerId)),
+    );
+  }
+
   Future<void> _showHireRequestDialog() async {
     if (!_isCurrentUserCompany) return;
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    final isVerifiedCompany =
+        await _firestoreService.canCompanyHireSkilledPersons(currentUser.uid);
+    if (!isVerifiedCompany) {
+      if (!mounted) return;
+      await _promptCompanyVerificationRequired();
+      return;
+    }
 
     final titleController = TextEditingController();
     final descController = TextEditingController();
-    final currentUser = FirebaseAuth.instance.currentUser;
     String selectedHireType = 'full_time';
 
     const hireTypes = [
@@ -256,6 +309,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       },
     ];
 
+    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -374,7 +428,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       },
     );
 
-    if (confirmed != true || currentUser == null) {
+    if (confirmed != true) {
       titleController.dispose();
       descController.dispose();
       return;
@@ -878,6 +932,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             if (!isOwnProfile)
               SliverToBoxAdapter(
                 child: _buildActionButtons(coverColors),
+              ),
+            if (!isOwnProfile && _isCurrentUserCompany)
+              SliverToBoxAdapter(
+                child: _buildCompanyHiringInsightsSection(),
               ),
 
             // ── Own-profile controls ──
@@ -1477,11 +1535,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           if (_isCurrentUserCompany)
             Expanded(
-              child: _gradientButton(
-                label: 'Hire',
-                icon: Icons.handshake_rounded,
-                colors: secondaryActionColors,
-                onTap: _showHireRequestDialog,
+              child: Builder(
+                builder: (context) {
+                  final viewerId = FirebaseAuth.instance.currentUser?.uid;
+                  if (viewerId == null || viewerId.isEmpty) {
+                    return _gradientButton(
+                      label: 'Verify to Hire',
+                      icon: Icons.verified_user_rounded,
+                      colors: const [Color(0xFFB0BEC5), Color(0xFF90A4AE)],
+                      onTap: _promptCompanyVerificationRequired,
+                    );
+                  }
+
+                  return StreamBuilder<CompanyProfile?>(
+                    stream: _firestoreService.companyProfileStream(viewerId),
+                    builder: (context, snapshot) {
+                      final canHire =
+                          _isCompanyVerifiedForHiring(snapshot.data);
+                      return _gradientButton(
+                        label: canHire ? 'Hire' : 'Verify to Hire',
+                        icon: canHire
+                            ? Icons.handshake_rounded
+                            : Icons.verified_user_rounded,
+                        colors: canHire
+                            ? secondaryActionColors
+                            : const [Color(0xFFB0BEC5), Color(0xFF90A4AE)],
+                        onTap: canHire
+                            ? _showHireRequestDialog
+                            : _promptCompanyVerificationRequired,
+                      );
+                    },
+                  );
+                },
               ),
             ),
         ],
@@ -1522,6 +1607,333 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     fontSize: 14)),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _openSellerShopStorefront() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ShopStorefrontScreen(
+          sellerId: widget.userId,
+          initialShopName: _userData?.name,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompanyHiringInsightsSection() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: StreamBuilder<List<ProductModel>>(
+        stream: _firestoreService.streamUserProducts(widget.userId),
+        builder: (context, productSnapshot) {
+          final products = productSnapshot.data ?? const <ProductModel>[];
+          final availableProducts = products.where((p) => p.isAvailable).length;
+          final totalProducts = products.length;
+          final hasShop = totalProducts > 0;
+
+          return StreamBuilder<List<OrderModel>>(
+            stream: _firestoreService.streamSellerOrders(widget.userId),
+            builder: (context, orderSnapshot) {
+              final orders = orderSnapshot.data ?? const <OrderModel>[];
+              final deliveredOrders = orders
+                  .where((o) => o.status.toLowerCase().trim() == 'delivered')
+                  .toList();
+              final deliveredCount = deliveredOrders.length;
+              final totalUnitsSold = deliveredOrders.fold<int>(
+                0,
+                (sum, o) => sum + o.quantity,
+              );
+              final totalSales = deliveredOrders.fold<double>(
+                0,
+                (sum, o) => sum + o.totalPrice,
+              );
+
+              return StreamBuilder<List<ServiceRequestModel>>(
+                stream: _firestoreService.streamSkilledRequests(widget.userId),
+                builder: (context, requestSnapshot) {
+                  final requests =
+                      requestSnapshot.data ?? const <ServiceRequestModel>[];
+                  final completedProjects = requests
+                      .where((r) =>
+                          r.status.toLowerCase().trim() ==
+                          AppConstants.requestStatusCompleted)
+                      .toList();
+                  final activeProjects = requests
+                      .where((r) =>
+                          r.status.toLowerCase().trim() ==
+                          AppConstants.requestStatusAccepted)
+                      .toList();
+                  final hireProjects = requests
+                      .where((r) =>
+                          r.serviceId.toLowerCase().trim() == 'direct_hire')
+                      .toList();
+                  final portfolioCount = _profile?.portfolioImages.length ?? 0;
+                  final topSkills = _profile?.skills.length ?? 0;
+                  final profileViews = _profile?.profileViews ?? 0;
+
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE6E9F2)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.insights_rounded,
+                                color: Color(0xFF3949AB)),
+                            SizedBox(width: 8),
+                            Text(
+                              'Hiring Insights',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF1A1A2E),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            _insightChip(
+                              value: '$totalProducts',
+                              label: 'Products',
+                              icon: Icons.inventory_2_rounded,
+                              color: const Color(0xFF1976D2),
+                            ),
+                            _insightChip(
+                              value: '$availableProducts',
+                              label: 'Available',
+                              icon: Icons.check_circle_rounded,
+                              color: const Color(0xFF2E7D32),
+                            ),
+                            _insightChip(
+                              value: '$deliveredCount',
+                              label: 'Delivered',
+                              icon: Icons.local_shipping_rounded,
+                              color: const Color(0xFF6A1B9A),
+                            ),
+                            _insightChip(
+                              value: '$totalUnitsSold',
+                              label: 'Units Sold',
+                              icon: Icons.shopping_bag_rounded,
+                              color: const Color(0xFFEF6C00),
+                            ),
+                            _insightChip(
+                              value: '${completedProjects.length}',
+                              label: 'Completed Projects',
+                              icon: Icons.assignment_turned_in_rounded,
+                              color: const Color(0xFF00897B),
+                            ),
+                            _insightChip(
+                              value: '${activeProjects.length}',
+                              label: 'Active Projects',
+                              icon: Icons.work_history_rounded,
+                              color: const Color(0xFF1E88E5),
+                            ),
+                            _insightChip(
+                              value: '${hireProjects.length}',
+                              label: 'Hires Completed',
+                              icon: Icons.handshake_rounded,
+                              color: const Color(0xFF3949AB),
+                            ),
+                            _insightChip(
+                              value: '$portfolioCount',
+                              label: 'Portfolio Items',
+                              icon: Icons.collections_rounded,
+                              color: const Color(0xFF8E24AA),
+                            ),
+                            _insightChip(
+                              value: '$topSkills',
+                              label: 'Skills',
+                              icon: Icons.workspace_premium_rounded,
+                              color: const Color(0xFFF57C00),
+                            ),
+                            _insightChip(
+                              value: '$profileViews',
+                              label: 'Profile Views',
+                              icon: Icons.visibility_rounded,
+                              color: const Color(0xFF546E7A),
+                            ),
+                            _insightChip(
+                              value: _profile?.rating.toStringAsFixed(1) ??
+                                  '0.0',
+                              label: 'Rating',
+                              icon: Icons.star_rounded,
+                              color: const Color(0xFFF9A825),
+                            ),
+                            _insightChip(
+                              value: (_profile?.reviewCount ?? 0).toString(),
+                              label: 'Reviews',
+                              icon: Icons.rate_review_rounded,
+                              color: const Color(0xFF5E35B1),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Estimated sales: Rs ${totalSales.toStringAsFixed(0)}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF616161),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (completedProjects.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Recent completed projects',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF2E2E2E),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          ...completedProjects.take(3).map(
+                                (r) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: Text(
+                                    '- ${r.title}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF616161),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                        ],
+                        if (_reviews.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Recent customer feedback',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF2E2E2E),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          ..._reviews.take(2).map(
+                                (review) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 6),
+                                  child: Text(
+                                    '"${review.comment}" - ${review.reviewerName}',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF616161),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                        ],
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            if (hasShop)
+                              OutlinedButton.icon(
+                                onPressed: _openSellerShopStorefront,
+                                icon: const Icon(Icons.storefront_rounded),
+                                label: const Text('View Shop Products'),
+                              ),
+                            OutlinedButton.icon(
+                              onPressed: _openPortfolioViewer,
+                              icon: const Icon(Icons.collections_bookmark),
+                              label: const Text('View Portfolio'),
+                            ),
+                          ],
+                        ),
+                        if (!hasShop)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Text(
+                              'No shop products published yet.',
+                              style: TextStyle(
+                                color: Color(0xFF757575),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _insightChip({
+    required String value,
+    required String label,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      width: 148,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A1A2E),
+                  ),
+                ),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF757575),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
