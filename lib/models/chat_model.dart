@@ -8,6 +8,8 @@ class ChatModel {
   final String lastMessageType; // text, image, etc.
   final DateTime lastMessageTime;
   final Map<String, int> unreadCount; // userId -> count
+  final bool isWorkChat;
+  final String? workRequestId;
   final DateTime createdAt;
 
   ChatModel({
@@ -18,6 +20,8 @@ class ChatModel {
     this.lastMessageType = 'text',
     required this.lastMessageTime,
     required this.unreadCount,
+    this.isWorkChat = false,
+    this.workRequestId,
     required this.createdAt,
   });
 
@@ -30,6 +34,8 @@ class ChatModel {
       lastMessageType: map['lastMessageType'] ?? 'text',
       lastMessageTime: (map['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime.now(),
       unreadCount: Map<String, int>.from(map['unreadCount'] ?? {}),
+      isWorkChat: map['isWorkChat'] == true,
+      workRequestId: (map['workRequestId'] as String?)?.trim(),
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
@@ -42,6 +48,9 @@ class ChatModel {
       'lastMessageType': lastMessageType,
       'lastMessageTime': Timestamp.fromDate(lastMessageTime),
       'unreadCount': unreadCount,
+      'isWorkChat': isWorkChat,
+      if (workRequestId != null && workRequestId!.isNotEmpty)
+        'workRequestId': workRequestId,
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }

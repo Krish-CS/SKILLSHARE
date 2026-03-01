@@ -370,7 +370,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      prefixIcon: const Icon(Icons.attach_money),
+                      prefixIcon: const Icon(Icons.currency_rupee),
                     ),
                     keyboardType: TextInputType.number,
                     validator: (value) {
@@ -394,7 +394,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      prefixIcon: const Icon(Icons.attach_money),
+                      prefixIcon: const Icon(Icons.currency_rupee),
                     ),
                     keyboardType: TextInputType.number,
                     validator: (value) {

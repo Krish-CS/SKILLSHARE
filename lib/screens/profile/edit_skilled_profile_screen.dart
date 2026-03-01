@@ -160,14 +160,14 @@ class _EditSkilledProfileScreenState extends State<EditSkilledProfileScreen> {
                     Expanded(child: TextFormField(
                       controller: minPriceController,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Min Price', prefixText: ' '),
+                      decoration: const InputDecoration(labelText: 'Min Price', prefixText: '₹ '),
                       validator: (v) { if (v == null || v.isEmpty) return 'Required'; if (double.tryParse(v) == null) return 'Invalid'; return null; },
                     )),
                     const SizedBox(width: 12),
                     Expanded(child: TextFormField(
                       controller: maxPriceController,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Max Price', prefixText: ' '),
+                      decoration: const InputDecoration(labelText: 'Max Price', prefixText: '₹ '),
                       validator: (v) { if (v == null || v.isEmpty) return 'Required'; if (double.tryParse(v) == null) return 'Invalid'; return null; },
                     )),
                   ]),

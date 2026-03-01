@@ -274,7 +274,7 @@ class _DeliveryCard extends StatelessWidget {
             // Details
             _InfoRow(Icons.person_outline, 'Buyer',
                 order.buyerName ?? order.buyerId),
-            _InfoRow(Icons.attach_money, 'Amount',
+            _InfoRow(Icons.currency_rupee, 'Amount',
                 '₹${order.totalPrice.toStringAsFixed(2)}'),
             _InfoRow(Icons.calendar_today_outlined, 'Ordered',
                 AppHelpers.formatDateTime(order.createdAt)),

@@ -189,7 +189,7 @@ class JobCard extends StatelessWidget {
                   if (job.budgetMin != null && job.budgetMax != null)
                     Row(
                       children: [
-                        const Icon(Icons.attach_money, 
+                        const Icon(Icons.currency_rupee, 
                           size: 16, color: Color(0xFF4CAF50)),
                         Text(
                           '${AppHelpers.formatCurrency(job.budgetMin!)} - ${AppHelpers.formatCurrency(job.budgetMax!)}',

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -13,6 +14,7 @@ import '../../services/chat_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/presence_service.dart';
+import '../../utils/app_constants.dart';
 import '../../utils/app_helpers.dart';
 import '../../utils/app_dialog.dart';
 import '../../utils/web_image_loader.dart';
@@ -53,6 +55,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   String? _currentUserId;
   String? _currentUserRole;
   String? _otherUserRole;
+  bool _isWorkChat = false;
   StreamSubscription<UserModel?>? _otherUserSub;
   bool _isLoading = false;
   bool _isSending = false;
@@ -101,6 +104,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   void initState() {
     super.initState();
     _currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    _isWorkChat = widget.chatId.startsWith('work_');
     _messageStream =
         _chatService.getMessages(widget.chatId).asBroadcastStream();
     _tabController = TabController(length: 2, vsync: this);
@@ -163,6 +167,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       }
     });
 
+    _loadChatContext();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadConversationRoles());
   }
 
@@ -188,11 +193,39 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       _currentUserRole == UserRoles.skilledPerson &&
       _otherUserRole == UserRoles.company;
 
-  bool get _hasDirectHireContext => _allWorkRequests.any(
-        (r) =>
-            r.serviceId.toLowerCase().trim() == 'direct_hire' ||
-            (r.hireType != null && r.hireType!.trim().isNotEmpty),
-      );
+  bool get _isCompanySkilledHiringChat =>
+      _isWorkChat &&
+      (_isCompanyToSkilledConversation || _isSkilledToCompanyConversation);
+
+  bool get _canSendOfferLetterInThisChat =>
+      _isWorkChat && _isCompanyToSkilledConversation;
+
+  bool get _canShareProfileInThisChat =>
+      _isWorkChat && _isSkilledToCompanyConversation;
+
+  String? _senderRoleForMessage(MessageModel message) {
+    if (message.senderId == _currentUserId) return _currentUserRole;
+    if (message.senderId == widget.otherUserId) return _otherUserRole;
+    return null;
+  }
+
+  Future<void> _loadChatContext() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection(AppConstants.chatsCollection)
+          .doc(widget.chatId)
+          .get();
+      final data = doc.data() ?? <String, dynamic>{};
+      final detectedWorkChat =
+          _isWorkChat || data['isWorkChat'] == true || widget.chatId.startsWith('work_');
+      if (!mounted) return;
+      if (detectedWorkChat != _isWorkChat) {
+        setState(() => _isWorkChat = detectedWorkChat);
+      }
+    } catch (_) {
+      // Keep fallback detection by chat id when metadata read fails.
+    }
+  }
 
   void _loadConversationRoles() {
     final auth = Provider.of<app_auth.AuthProvider>(context, listen: false);
@@ -217,10 +250,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   Future<void> _showOfferLetterDialog() async {
     if (_currentUserId == null) return;
 
-    final roleAllowed =
-        _isCompanyToSkilledConversation || (_currentUserRole == UserRoles.company && _hasDirectHireContext);
-    if (!roleAllowed) {
-      AppDialog.info(context, 'Offer letter can be sent only in company-to-skilled hiring chats.');
+    if (!_canSendOfferLetterInThisChat) {
+      AppDialog.info(context,
+          'Offer letter can be sent only in an accepted company-to-skilled hiring chat.');
       return;
     }
 
@@ -488,10 +520,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   Future<void> _shareFullProfileInChat() async {
     if (_currentUserId == null) return;
 
-    final roleAllowed =
-        _isSkilledToCompanyConversation || (_currentUserRole == UserRoles.skilledPerson && _hasDirectHireContext);
-    if (!roleAllowed) {
-      AppDialog.info(context, 'This option is available only for skilled-person hiring chats.');
+    if (!_canShareProfileInThisChat) {
+      AppDialog.info(context,
+          'Profile sharing is available only in an accepted skilled-to-company hiring chat.');
       return;
     }
 
@@ -950,6 +981,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         requests: _pendingRequests,
         currentUserId: _currentUserId!,
         otherUserName: widget.otherUserName,
+        parentContext: context,
         firestoreService: _firestoreService,
         chatService: _chatService,
         otherUserId: widget.otherUserId,
@@ -1117,6 +1149,38 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         ),
       ),
     );
+  }
+
+  Future<void> _openAcceptedWorkChat(
+    ServiceRequestModel request, {
+    bool closeCurrentSheet = false,
+  }) async {
+    try {
+      final workChatId = await _firestoreService.ensureWorkChatForRequest(
+        requestId: request.id,
+      );
+      if (!mounted) return;
+
+      if (closeCurrentSheet && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatDetailScreen(
+            chatId: workChatId,
+            otherUserId: widget.otherUserId,
+            otherUserName: widget.otherUserName,
+            otherUserPhoto: widget.otherUserPhoto,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppPopup.show(context,
+          message: 'Failed to open work chat: $e', type: PopupType.error);
+    }
   }
 
   Widget _monitoringSectionLabel(String label, Color color, IconData icon) {
@@ -1365,6 +1429,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           );
                           if (mounted) {
                             AppDialog.success(context, 'Work request accepted!');
+                            await _openAcceptedWorkChat(
+                              r,
+                              closeCurrentSheet: true,
+                            );
                           }
                         } catch (e) {
                           if (mounted) {
@@ -1767,7 +1835,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   Widget build(BuildContext context) {
     final isCustomer = _currentUserRole == UserRoles.customer;
     final isCompany = _currentUserRole == UserRoles.company;
-    final canAskForWork = (isCustomer || isCompany) && _currentUserId != null;
+    final canAskForWork =
+        !_isWorkChat && (isCustomer || isCompany) && _currentUserId != null;
     final hasPending = _pendingRequests.isNotEmpty;
 
     return DefaultTabController(
@@ -1855,7 +1924,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           ),
           actions: [
             // Work Requests List icon — visible to all participants
-            if (_currentUserId != null)
+            if (_currentUserId != null && !_isWorkChat)
               GestureDetector(
                 onTap: () => _showTaskMonitoringSheet(context),
                 child: Stack(
@@ -1936,6 +2005,36 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   ],
                 ),
               ),
+            if (_canSendOfferLetterInThisChat)
+              IconButton(
+                tooltip: 'Send Offer Letter',
+                onPressed: _showOfferLetterDialog,
+                icon: const Icon(Icons.description_rounded, color: Colors.white),
+              ),
+            if (_canShareProfileInThisChat)
+              IconButton(
+                tooltip: 'Share My Profile',
+                onPressed: _shareFullProfileInChat,
+                icon: const Icon(Icons.badge_rounded, color: Colors.white),
+              ),
+            if (_isCompanySkilledHiringChat)
+              IconButton(
+                tooltip: _currentUserRole == UserRoles.company
+                    ? 'View Skilled Profile'
+                    : 'View Company Profile',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ProfileScreen(userId: widget.otherUserId),
+                  ),
+                ),
+                icon: Icon(
+                  _currentUserRole == UserRoles.company
+                      ? Icons.person_search_rounded
+                      : Icons.apartment_rounded,
+                  color: Colors.white,
+                ),
+              ),
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, color: Colors.white),
               onSelected: (value) {
@@ -1947,9 +2046,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               itemBuilder: (ctx) {
                 final items = <PopupMenuEntry<String>>[];
 
-                if (_isCompanyToSkilledConversation ||
-                    (_currentUserRole == UserRoles.company &&
-                        _hasDirectHireContext)) {
+                if (_canSendOfferLetterInThisChat) {
                   items.add(
                     const PopupMenuItem(
                       value: 'offer_letter',
@@ -1965,9 +2062,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   );
                 }
 
-                if (_isSkilledToCompanyConversation ||
-                    (_currentUserRole == UserRoles.skilledPerson &&
-                        _hasDirectHireContext)) {
+                if (_canShareProfileInThisChat) {
                   items.add(
                     const PopupMenuItem(
                       value: 'share_profile',
@@ -2156,11 +2251,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             ),
           ),
 
-        // ── Hiring quick-action bar (visible when in a hiring chat) ──
-        if ((_isCompanyToSkilledConversation || _isSkilledToCompanyConversation || _hasDirectHireContext) &&
-            _currentUserRole != null)
-          _buildHiringActionsBar(),
-
         // Input bar
         Container(
           padding: const EdgeInsets.all(8),
@@ -2296,6 +2386,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     final isDeleted = message.isDeleted;
     final isEdited = message.editedAt != null && !isDeleted;
     final isHighlighted = _editingMessage?.id == message.id;
+    final senderRole = _senderRoleForMessage(message);
+    final isCompanyMessage = senderRole == UserRoles.company;
     final isStructuredType =
         message.type == 'offer_letter' || message.type == 'profile_share';
 
@@ -2322,6 +2414,28 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             crossAxisAlignment:
                 isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
+              if (isCompanyMessage)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3949AB).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: const Color(0xFF3949AB).withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: const Text(
+                    'COMPANY',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF3949AB),
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -2535,138 +2649,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           ),
         ),
       ],
-    );
-  }
-
-  // ── Hiring quick-action bar ────────────────────────────────────────────────
-
-  Widget _buildHiringActionsBar() {
-    final isCompany = _currentUserRole == UserRoles.company;
-    final isSkilled = _currentUserRole == UserRoles.skilledPerson;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isCompany
-              ? [
-                  const Color(0xFF1A237E).withValues(alpha: 0.08),
-                  const Color(0xFF3949AB).withValues(alpha: 0.05),
-                ]
-              : [
-                  const Color(0xFF004D40).withValues(alpha: 0.08),
-                  const Color(0xFF00796B).withValues(alpha: 0.05),
-                ],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-        border: Border(
-          top: BorderSide(
-            color: isCompany
-                ? const Color(0xFF3949AB).withValues(alpha: 0.2)
-                : const Color(0xFF00796B).withValues(alpha: 0.2),
-            width: 1,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            isCompany ? Icons.business_center_rounded : Icons.badge_rounded,
-            size: 15,
-            color: isCompany
-                ? const Color(0xFF3949AB)
-                : const Color(0xFF00796B),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            'Hiring Chat',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: isCompany
-                  ? const Color(0xFF3949AB)
-                  : const Color(0xFF00796B),
-            ),
-          ),
-          const Spacer(),
-          if (isCompany) ...[
-            // Company: Send Offer Letter button
-            _hiringActionButton(
-              icon: Icons.description_rounded,
-              label: 'Send Offer Letter',
-              color: const Color(0xFF3949AB),
-              onTap: _showOfferLetterDialog,
-            ),
-            const SizedBox(width: 8),
-            // Company: View skilled person's profile
-            _hiringActionButton(
-              icon: Icons.person_search_rounded,
-              label: 'View Profile',
-              color: const Color(0xFF5C6BC0),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ProfileScreen(userId: widget.otherUserId),
-                ),
-              ),
-            ),
-          ] else if (isSkilled) ...[
-            // Skilled: Share full profile
-            _hiringActionButton(
-              icon: Icons.share_rounded,
-              label: 'Share My Profile',
-              color: const Color(0xFF00796B),
-              onTap: _shareFullProfileInChat,
-            ),
-            const SizedBox(width: 8),
-            // Skilled: View company profile
-            _hiringActionButton(
-              icon: Icons.apartment_rounded,
-              label: 'View Company',
-              color: const Color(0xFF26A69A),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ProfileScreen(userId: widget.otherUserId),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _hiringActionButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withValues(alpha: 0.35)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: color),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.w600, color: color),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -3201,7 +3183,7 @@ class _WorkPaymentAmountDialogState extends State<_WorkPaymentAmountDialog> {
                   const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
                 labelText: 'Amount',
-                prefixText: 'Rs. ',
+                prefixText: '₹ ',
                 errorText: _error,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -3234,6 +3216,7 @@ class _PendingRequestsSheet extends StatefulWidget {
   final List<ServiceRequestModel> requests;
   final String currentUserId;
   final String otherUserName;
+  final BuildContext parentContext;
   final String otherUserId;
   final String chatId;
   final FirestoreService firestoreService;
@@ -3243,6 +3226,7 @@ class _PendingRequestsSheet extends StatefulWidget {
     required this.requests,
     required this.currentUserId,
     required this.otherUserName,
+    required this.parentContext,
     required this.otherUserId,
     required this.chatId,
     required this.firestoreService,
@@ -3319,6 +3303,7 @@ class _PendingRequestsSheetState extends State<_PendingRequestsSheet> {
                 request: widget.requests[i],
                 currentUserId: widget.currentUserId,
                 otherUserName: widget.otherUserName,
+                parentContext: widget.parentContext,
                 chatId: widget.chatId,
                 otherUserId: widget.otherUserId,
                 firestoreService: widget.firestoreService,
@@ -3344,6 +3329,7 @@ class _PendingDetailCard extends StatefulWidget {
   final ServiceRequestModel request;
   final String currentUserId;
   final String otherUserName;
+  final BuildContext parentContext;
   final String chatId;
   final String otherUserId;
   final FirestoreService firestoreService;
@@ -3354,6 +3340,7 @@ class _PendingDetailCard extends StatefulWidget {
     required this.request,
     required this.currentUserId,
     required this.otherUserName,
+    required this.parentContext,
     required this.chatId,
     required this.otherUserId,
     required this.firestoreService,
@@ -3485,12 +3472,31 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
         skilledUserId: widget.currentUserId,
         approve: approve,
       );
-      if (mounted) {
-        if (approve) {
-          AppDialog.success(context, 'Work request accepted.');
-        } else {
-          AppDialog.info(context, 'Work request rejected.');
+      if (!mounted) return;
+
+      if (approve) {
+        final workChatId = await widget.firestoreService.ensureWorkChatForRequest(
+          requestId: widget.request.id,
+        );
+        if (!mounted) return;
+
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
         }
+
+        if (widget.parentContext.mounted) {
+          Navigator.of(widget.parentContext).push(
+            MaterialPageRoute(
+              builder: (_) => ChatDetailScreen(
+                chatId: workChatId,
+                otherUserId: widget.otherUserId,
+                otherUserName: widget.otherUserName,
+              ),
+            ),
+          );
+        }
+      } else {
+        AppDialog.info(context, 'Work request rejected.');
         widget.onActionDone();
       }
     } catch (e) {

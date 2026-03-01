@@ -2,11 +2,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
 import '../../models/chat_model.dart';
 import '../../services/chat_service.dart';
 import '../../services/presence_service.dart';
 import '../../utils/app_helpers.dart';
 import '../../utils/app_constants.dart';
+import '../../utils/user_roles.dart';
+import '../../providers/auth_provider.dart' as app_auth;
 import '../../widgets/universal_avatar.dart';
 import 'chat_detail_screen.dart';
 
@@ -71,6 +74,9 @@ class _ChatsScreenState extends State<ChatsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = Provider.of<app_auth.AuthProvider>(context, listen: true);
+    final currentUserRole = UserRoles.normalizeRole(auth.userRole);
+
     if (_currentUserId == null) {
       return Scaffold(
         appBar: AppBar(
@@ -226,12 +232,9 @@ class _ChatsScreenState extends State<ChatsScreen> {
                   );
                 }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: chats.length,
-                  itemBuilder: (context, index) {
-                    return _buildChatItem(chats[index]);
-                  },
+                return _buildGroupedChatList(
+                  chats: chats,
+                  currentUserRole: currentUserRole,
                 );
               },
             ),
@@ -241,6 +244,122 @@ class _ChatsScreenState extends State<ChatsScreen> {
     );
   }
 
+  Widget _buildGroupedChatList({
+    required List<ChatModel> chats,
+    required String? currentUserRole,
+  }) {
+    final workChats = chats.where(_isHiringChat).toList();
+    final regularChats = chats.where((chat) => !_isHiringChat(chat)).toList();
+
+    final companyChats = <ChatModel>[];
+    final customerChats = <ChatModel>[];
+    final otherChats = <ChatModel>[];
+
+    for (final chat in regularChats) {
+      final otherRole = _otherUserRoleForChat(chat);
+      if (otherRole == UserRoles.company) {
+        companyChats.add(chat);
+      } else if (otherRole == UserRoles.customer) {
+        customerChats.add(chat);
+      } else {
+        otherChats.add(chat);
+      }
+    }
+
+    final sectionWidgets = <Widget>[];
+
+    if (workChats.isNotEmpty) {
+      sectionWidgets.add(_buildSectionHeader(
+        title: 'Hiring Chats',
+        icon: Icons.work_history_outlined,
+        color: const Color(0xFF1565C0),
+      ));
+      sectionWidgets.addAll(workChats.map(_buildChatItem));
+    }
+
+    final showCompanySectionFirst = currentUserRole == UserRoles.skilledPerson;
+    final orderedRegularSections = showCompanySectionFirst
+        ? [
+            ('Company Chats', Icons.apartment_rounded, const Color(0xFF3949AB),
+                companyChats),
+            ('Customer Chats', Icons.person_outline_rounded,
+                const Color(0xFF2E7D32), customerChats),
+          ]
+        : [
+            ('Customer Chats', Icons.person_outline_rounded,
+                const Color(0xFF2E7D32), customerChats),
+            ('Company Chats', Icons.apartment_rounded, const Color(0xFF3949AB),
+                companyChats),
+          ];
+
+    for (final section in orderedRegularSections) {
+      final chatsInSection = section.$4;
+      if (chatsInSection.isEmpty) continue;
+      sectionWidgets.add(_buildSectionHeader(
+        title: section.$1,
+        icon: section.$2,
+        color: section.$3,
+      ));
+      sectionWidgets.addAll(chatsInSection.map(_buildChatItem));
+    }
+
+    if (otherChats.isNotEmpty) {
+      sectionWidgets.add(_buildSectionHeader(
+        title: 'Other Chats',
+        icon: Icons.chat_bubble_outline_rounded,
+        color: const Color(0xFF546E7A),
+      ));
+      sectionWidgets.addAll(otherChats.map(_buildChatItem));
+    }
+
+    if (sectionWidgets.isEmpty) {
+      return _buildEmptyState();
+    }
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      children: sectionWidgets,
+    );
+  }
+
+  Widget _buildSectionHeader({
+    required String title,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 6),
+          Text(
+            title,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String? _otherUserRoleForChat(ChatModel chat) {
+    final otherUserId = chat.participants.firstWhere(
+      (id) => id != _currentUserId,
+      orElse: () => '',
+    );
+    if (otherUserId.isEmpty) return null;
+    final details = chat.participantDetails[otherUserId];
+    final rawRole = (details is Map) ? details['role']?.toString() : null;
+    return UserRoles.normalizeRole(rawRole);
+  }
+
+  bool _isHiringChat(ChatModel chat) =>
+      chat.isWorkChat || chat.id.startsWith('work_');
+
   Widget _buildChatItem(ChatModel chat) {
     final otherUserId = chat.participants.firstWhere(
       (id) => id != _currentUserId,
@@ -249,6 +368,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
     final otherUserDetails = chat.participantDetails[otherUserId];
     final name = otherUserDetails?['name'] ?? 'Unknown';
     final photo = otherUserDetails?['photo'];
+    final otherRole = _otherUserRoleForChat(chat);
     final unreadCount = chat.unreadCount[_currentUserId] ?? 0;
     final pendingWork = _pendingWorkCounts[chat.id] ?? 0;
 
@@ -382,16 +502,43 @@ class _ChatsScreenState extends State<ChatsScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
-                        child: Text(
-                          AppHelpers.capitalize(name),
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: unreadCount > 0
-                                ? FontWeight.bold
-                                : FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                AppHelpers.capitalize(name),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: unreadCount > 0
+                                      ? FontWeight.bold
+                                      : FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (_isHiringChat(chat))
+                              _roleTag(
+                                label: 'HIRING',
+                                bgColor: const Color(0xFF1565C0)
+                                    .withValues(alpha: 0.12),
+                                fgColor: const Color(0xFF1565C0),
+                              ),
+                            if (otherRole == UserRoles.company)
+                              _roleTag(
+                                label: 'COMPANY',
+                                bgColor: const Color(0xFF3949AB)
+                                    .withValues(alpha: 0.12),
+                                fgColor: const Color(0xFF3949AB),
+                              ),
+                            if (otherRole == UserRoles.customer)
+                              _roleTag(
+                                label: 'CUSTOMER',
+                                bgColor: const Color(0xFF2E7D32)
+                                    .withValues(alpha: 0.12),
+                                fgColor: const Color(0xFF2E7D32),
+                              ),
+                          ],
                         ),
                       ),
                       Text(
@@ -464,6 +611,30 @@ class _ChatsScreenState extends State<ChatsScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _roleTag({
+    required String label,
+    required Color bgColor,
+    required Color fgColor,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(left: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: fgColor,
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.3,
         ),
       ),
     );
