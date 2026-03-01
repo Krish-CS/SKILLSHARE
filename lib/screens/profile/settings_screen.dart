@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/auth_service.dart';
@@ -14,6 +15,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final FirestoreService _firestoreService = FirestoreService();
+  StreamSubscription<Map<String, dynamic>>? _settingsSub;
   bool _isLoading = true;
   bool _isSaving = false;
 
@@ -27,16 +29,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _profileVisible = true;
   bool _showEmail = false;
   bool _showPhone = false;
-  bool _enableShopDeliveryWorkflow = true;
+  bool _enableShopDeliveryWorkflow = false;
   bool _isSkilledPerson = false;
 
   @override
   void initState() {
     super.initState();
-    _loadSettings();
+    _initializeSettings();
   }
 
-  Future<void> _loadSettings() async {
+  @override
+  void dispose() {
+    _settingsSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _initializeSettings() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
       setState(() => _isLoading = false);
@@ -44,23 +52,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     try {
       final user = await _firestoreService.getUserById(uid);
-      final settings = await _firestoreService.getUserSettings(uid);
       setState(() {
         _isSkilledPerson =
             UserRoles.normalizeRole(user?.role) == UserRoles.skilledPerson;
-        _pushNotifications = settings['pushNotifications'] as bool? ?? true;
-        _emailNotifications = settings['emailNotifications'] as bool? ?? true;
-        _chatNotifications = settings['chatNotifications'] as bool? ?? true;
-        _jobNotifications = settings['jobNotifications'] as bool? ?? true;
-        _profileVisible = settings['profileVisible'] as bool? ?? true;
-        _showEmail = settings['showEmail'] as bool? ?? false;
-        _showPhone = settings['showPhone'] as bool? ?? false;
-        _enableShopDeliveryWorkflow =
-            settings['enableShopDeliveryWorkflow'] as bool? ?? true;
-        _isLoading = false;
+      });
+      _settingsSub?.cancel();
+      _settingsSub =
+          _firestoreService.userSettingsStream(uid).listen((settings) {
+        if (!mounted) return;
+        setState(() {
+          _pushNotifications = settings['pushNotifications'] as bool? ?? true;
+          _emailNotifications = settings['emailNotifications'] as bool? ?? true;
+          _chatNotifications = settings['chatNotifications'] as bool? ?? true;
+          _jobNotifications = settings['jobNotifications'] as bool? ?? true;
+          _profileVisible = settings['profileVisible'] as bool? ?? true;
+          _showEmail = settings['showEmail'] as bool? ?? false;
+          _showPhone = settings['showPhone'] as bool? ?? false;
+          _enableShopDeliveryWorkflow =
+              settings['enableShopDeliveryWorkflow'] as bool? ?? false;
+          _isLoading = false;
+        });
+      }, onError: (_) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _saveSettingField(String key, bool value) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      setState(() => _isSaving = true);
+      await _firestoreService.updateUserSettingField(
+        uid,
+        key: key,
+        value: value,
+      );
+    } catch (e) {
+      if (mounted) {
+        AppDialog.error(context, 'Error saving setting', detail: e.toString());
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -136,28 +173,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: 'Push Notifications',
                   subtitle: 'Receive push notifications on this device',
                   value: _pushNotifications,
-                  onChanged: (v) => setState(() => _pushNotifications = v),
+                  onChanged: (v) {
+                    setState(() => _pushNotifications = v);
+                    _saveSettingField('pushNotifications', v);
+                  },
                 ),
                 _buildSwitch(
                   icon: Icons.email,
                   title: 'Email Notifications',
                   subtitle: 'Receive updates via email',
                   value: _emailNotifications,
-                  onChanged: (v) => setState(() => _emailNotifications = v),
+                  onChanged: (v) {
+                    setState(() => _emailNotifications = v);
+                    _saveSettingField('emailNotifications', v);
+                  },
                 ),
                 _buildSwitch(
                   icon: Icons.chat,
                   title: 'Chat Notifications',
                   subtitle: 'Notify when you receive new messages',
                   value: _chatNotifications,
-                  onChanged: (v) => setState(() => _chatNotifications = v),
+                  onChanged: (v) {
+                    setState(() => _chatNotifications = v);
+                    _saveSettingField('chatNotifications', v);
+                  },
                 ),
                 _buildSwitch(
                   icon: Icons.work,
                   title: 'Job Notifications',
                   subtitle: 'Notify about new job postings & applications',
                   value: _jobNotifications,
-                  onChanged: (v) => setState(() => _jobNotifications = v),
+                  onChanged: (v) {
+                    setState(() => _jobNotifications = v);
+                    _saveSettingField('jobNotifications', v);
+                  },
                 ),
                 const _SectionHeader(title: 'Privacy'),
                 _buildSwitch(
@@ -165,21 +214,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: 'Profile Visible',
                   subtitle: 'Make your profile discoverable to other users',
                   value: _profileVisible,
-                  onChanged: (v) => setState(() => _profileVisible = v),
+                  onChanged: (v) {
+                    setState(() => _profileVisible = v);
+                    _saveSettingField('profileVisible', v);
+                  },
                 ),
                 _buildSwitch(
                   icon: Icons.alternate_email,
                   title: 'Show Email',
                   subtitle: 'Display email address on your public profile',
                   value: _showEmail,
-                  onChanged: (v) => setState(() => _showEmail = v),
+                  onChanged: (v) {
+                    setState(() => _showEmail = v);
+                    _saveSettingField('showEmail', v);
+                  },
                 ),
                 _buildSwitch(
                   icon: Icons.phone,
                   title: 'Show Phone Number',
                   subtitle: 'Display phone number on your public profile',
                   value: _showPhone,
-                  onChanged: (v) => setState(() => _showPhone = v),
+                  onChanged: (v) {
+                    setState(() => _showPhone = v);
+                    _saveSettingField('showPhone', v);
+                  },
                 ),
                 if (_isSkilledPerson) ...[
                   const _SectionHeader(title: 'Shop Delivery'),
@@ -189,8 +247,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     subtitle:
                         'Allow delivery partner flow for your shop orders.',
                     value: _enableShopDeliveryWorkflow,
-                    onChanged: (v) =>
-                        setState(() => _enableShopDeliveryWorkflow = v),
+                    onChanged: (v) {
+                      setState(() => _enableShopDeliveryWorkflow = v);
+                      _saveSettingField('enableShopDeliveryWorkflow', v);
+                    },
                   ),
                 ],
                 const _SectionHeader(title: 'Account'),

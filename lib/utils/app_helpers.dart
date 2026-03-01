@@ -93,14 +93,13 @@ class AppHelpers {
     if (text.length <= maxLength) return text;
     return '${text.substring(0, maxLength)}...';
   }
-}
 
-/// Capitalize the first letter of every word in a string.
-/// e.g. "john doe" → "John Doe"
-extension StringCapitalize on String {
-  String capitalizeWords() {
-    if (isEmpty) return this;
-    return split(' ')
+  /// Capitalize the first letter of every word.
+  /// e.g. "john doe" → "John Doe"
+  static String capitalize(String? text) {
+    if (text == null || text.isEmpty) return text ?? '';
+    return text
+        .split(' ')
         .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
         .join(' ');
   }

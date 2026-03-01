@@ -330,7 +330,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '$greeting, ${(currentUser?.name ?? 'there').split(' ').first.capitalizeWords()}!',
+                          '$greeting, ${AppHelpers.capitalize((currentUser?.name ?? 'there').split(' ').first)}!',
                           style: const TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
@@ -1171,7 +1171,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      (profile.name ?? 'Professional').capitalizeWords(),
+                      AppHelpers.capitalize(profile.name ?? 'Professional'),
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,

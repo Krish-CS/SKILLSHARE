@@ -407,7 +407,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text((profile.name ?? 'Unnamed').capitalizeWords(),
+                        child: Text(AppHelpers.capitalize(profile.name ?? 'Unnamed'),
                             style: const TextStyle(
                                 fontWeight: FontWeight.bold, fontSize: 13),
                             maxLines: 1,
@@ -466,7 +466,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
         title: Row(
           children: [
             Expanded(
-              child: Text((profile.name ?? 'Unnamed').capitalizeWords(),
+              child: Text(AppHelpers.capitalize(profile.name ?? 'Unnamed'),
                   style: const TextStyle(fontWeight: FontWeight.bold)),
             ),
             if (profile.isVerified)

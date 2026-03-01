@@ -630,7 +630,7 @@ class _MyShopScreenState extends State<MyShopScreen>
       BuildContext context, String userId) async {
     final userSettings = await _firestoreService.getUserSettings(userId);
     final isDeliveryWorkflowEnabled =
-        userSettings['enableShopDeliveryWorkflow'] as bool? ?? true;
+        userSettings['enableShopDeliveryWorkflow'] as bool? ?? false;
 
     if (!isDeliveryWorkflowEnabled) {
       if (!context.mounted) return;

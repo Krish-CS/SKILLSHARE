@@ -90,7 +90,7 @@ class _ExpertCardState extends State<ExpertCard> {
                   children: [
                     // User name
                     Text(
-                      (widget.profile.name ?? 'Professional').capitalizeWords(),
+                      AppHelpers.capitalize(widget.profile.name ?? 'Professional'),
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -258,7 +258,7 @@ class _ExpertCardState extends State<ExpertCard> {
           builder: (_) => ChatDetailScreen(
             chatId: chatId,
             otherUserId: widget.profile.userId,
-            otherUserName: (otherUser?.name ?? 'User').capitalizeWords(),
+            otherUserName: AppHelpers.capitalize(otherUser?.name ?? 'User'),
             otherUserPhoto: widget.profile.profilePicture,
           ),
         ),

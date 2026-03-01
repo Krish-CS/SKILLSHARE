@@ -1235,7 +1235,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          widget.otherUserName.capitalizeWords(),
+                          AppHelpers.capitalize(widget.otherUserName),
                           style: const TextStyle(
                               color: Colors.white, fontSize: 17),
                           maxLines: 1,

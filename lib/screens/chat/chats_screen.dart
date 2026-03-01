@@ -383,7 +383,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          name.capitalizeWords(),
+                          AppHelpers.capitalize(name),
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: unreadCount > 0
