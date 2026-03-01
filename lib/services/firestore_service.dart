@@ -2010,6 +2010,16 @@ class FirestoreService {
     });
   }
 
+  /// Fetch a single job by its document id (one-time read).
+  Future<JobModel?> getJobById(String jobId) async {
+    final doc = await _firestore
+        .collection(AppConstants.jobsCollection)
+        .doc(jobId)
+        .get();
+    if (!doc.exists || doc.data() == null) return null;
+    return JobModel.fromMap(doc.data()!, doc.id);
+  }
+
   /// Realtime stream for a single job document.
   Stream<JobModel?> streamJob(String jobId) {
     return _firestore

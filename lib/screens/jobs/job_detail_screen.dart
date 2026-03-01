@@ -88,6 +88,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     // Stream the current user's data live
     final userId = FirebaseAuth.instance.currentUser?.uid;
     if (userId != null) {
+      bool profilesLoadedOnce = false;
       _currentUserSub = _firestoreService
           .streamUserModel(userId)
           .listen((user) {
@@ -96,6 +97,11 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
           _currentUser = user;
           _hasApplied = _job.applicants.contains(userId);
         });
+        // First time we know who the user is — reload profiles if employer
+        if (!profilesLoadedOnce && _isEmployer) {
+          profilesLoadedOnce = true;
+          _loadApplicantProfiles();
+        }
       });
     }
   }

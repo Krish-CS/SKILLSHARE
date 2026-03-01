@@ -1,96 +1,273 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../models/job_model.dart';
 import '../../models/user_model.dart';
 import '../../models/skilled_user_profile.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/app_dialog.dart';
+import '../../utils/app_helpers.dart';
 import '../../widgets/universal_avatar.dart';
 import '../profile/profile_screen.dart';
-import 'job_detail_screen.dart';
 
-class CompanyApplicantsTab extends StatefulWidget {
-  final String companyId;
+// 
+// Level 1: list of posted jobs
+// 
+
+class CompanyApplicantsTab extends StatelessWidget {
   final List<JobModel> jobs;
+  final bool isLoading;
 
   const CompanyApplicantsTab({
     super.key,
-    required this.companyId,
     required this.jobs,
+    this.isLoading = false,
   });
 
   @override
-  State<CompanyApplicantsTab> createState() => _CompanyApplicantsTabState();
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (jobs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.work_off_outlined, size: 72, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text(
+              'No posted jobs yet',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Post a job to start receiving applications.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: jobs.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final job = jobs[index];
+        return _JobSummaryCard(job: job);
+      },
+    );
+  }
 }
 
-class _CompanyApplicantsTabState extends State<CompanyApplicantsTab> {
+class _JobSummaryCard extends StatelessWidget {
+  final JobModel job;
+  const _JobSummaryCard({required this.job});
+
+  Color get _statusColor {
+    switch (job.status) {
+      case 'open':
+        return Colors.green;
+      case 'in_progress':
+        return Colors.orange;
+      case 'completed':
+        return const Color(0xFF1565C0);
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = job.applicants.length;
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => JobApplicantsScreen(job: job),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2196F3).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.work_outline,
+                    color: Color(0xFF2196F3), size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      job.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _statusColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            job.status.replaceAll('_', ' ').toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: _statusColor,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Deadline: ${AppHelpers.formatDate(job.deadline)}',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: count > 0
+                          ? const Color(0xFF4CAF50).withValues(alpha: 0.12)
+                          : Colors.grey.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '$count ${count == 1 ? "applicant" : "applicants"}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: count > 0
+                            ? Colors.green[700]
+                            : Colors.grey[600],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Icon(Icons.chevron_right,
+                      color: Colors.grey, size: 20),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// 
+// Level 2: applicants for one specific job  (no Edit / Share / menu)
+// 
+
+class JobApplicantsScreen extends StatefulWidget {
+  final JobModel job;
+  const JobApplicantsScreen({super.key, required this.job});
+
+  @override
+  State<JobApplicantsScreen> createState() => _JobApplicantsScreenState();
+}
+
+class _JobApplicantsScreenState extends State<JobApplicantsScreen> {
   final FirestoreService _firestoreService = FirestoreService();
+  late JobModel _job;
   bool _isLoading = true;
-  final Map<String, List<_ApplicantEntry>> _jobApplicants = {};
   String? _processingId;
+  List<_ApplicantEntry> _entries = [];
 
   @override
   void initState() {
     super.initState();
+    _job = widget.job;
     _loadApplicants();
-  }
-
-  @override
-  void didUpdateWidget(CompanyApplicantsTab old) {
-    super.didUpdateWidget(old);
-    // Reload when job list changes (new job posted or applicant count changes)
-    if (old.jobs != widget.jobs) {
-      _loadApplicants();
-    }
   }
 
   Future<void> _loadApplicants() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
-    final map = <String, List<_ApplicantEntry>>{};
+    // Re-fetch the job so applicants list is always up-to-date
+    final freshJob = await _firestoreService.getJobById(_job.id);
+    if (freshJob != null && mounted) {
+      _job = freshJob;
+    }
 
-    for (final job in widget.jobs) {
-      final entries = <_ApplicantEntry>[];
-      for (final applicantId in job.applicants) {
-        final results = await Future.wait([
-          _firestoreService.getUserById(applicantId),
-          _firestoreService.getSkilledUserProfile(applicantId),
-        ]);
-        final user = results[0] as UserModel?;
-        var profile = results[1] as SkilledUserProfile?;
+    final entries = <_ApplicantEntry>[];
+    for (final applicantId in _job.applicants) {
+      final results = await Future.wait([
+        _firestoreService.getUserById(applicantId),
+        _firestoreService.getSkilledUserProfile(applicantId),
+      ]);
+      final user = results[0] as UserModel?;
+      var profile = results[1] as SkilledUserProfile?;
 
-        // Fallback: create minimal profile from UserModel so we always show them
-        if (profile == null && user != null) {
-          profile = SkilledUserProfile(
-            userId: applicantId,
-            name: user.name,
-            bio: '',
-            skills: const [],
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
-        }
-
-        entries.add(_ApplicantEntry(job: job, profile: profile, user: user));
+      // Fallback: show applicant even without a skilled profile doc
+      if (profile == null && user != null) {
+        profile = SkilledUserProfile(
+          userId: applicantId,
+          name: user.name,
+          bio: '',
+          skills: const [],
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
       }
-      map[job.id] = entries;
+
+      if (profile != null || user != null) {
+        entries.add(_ApplicantEntry(profile: profile, user: user));
+      }
     }
 
     if (!mounted) return;
     setState(() {
-      _jobApplicants.clear();
-      _jobApplicants.addAll(map);
+      _entries = entries;
       _isLoading = false;
     });
   }
 
-  Future<void> _accept(JobModel job, String applicantId) async {
+  Future<void> _accept(String applicantId) async {
     setState(() => _processingId = applicantId);
     try {
       await _firestoreService.acceptJobApplicant(
-        jobId: job.id,
+        jobId: _job.id,
         applicantId: applicantId,
-        companyId: widget.companyId,
+        companyId: _job.companyId,
       );
       if (mounted) AppDialog.success(context, 'Applicant accepted!');
     } catch (e) {
@@ -101,13 +278,13 @@ class _CompanyApplicantsTabState extends State<CompanyApplicantsTab> {
     }
   }
 
-  Future<void> _reject(JobModel job, String applicantId) async {
+  Future<void> _reject(String applicantId) async {
     setState(() => _processingId = applicantId);
     try {
       await _firestoreService.rejectJobApplicant(
-        jobId: job.id,
+        jobId: _job.id,
         applicantId: applicantId,
-        companyId: widget.companyId,
+        companyId: _job.companyId,
       );
       if (mounted) AppDialog.success(context, 'Applicant rejected.');
     } catch (e) {
@@ -120,158 +297,100 @@ class _CompanyApplicantsTabState extends State<CompanyApplicantsTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final jobsWithApplicants =
-        widget.jobs.where((j) => j.applicants.isNotEmpty).toList();
-
-    if (jobsWithApplicants.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.people_outline, size: 72, color: Colors.grey[300]),
-            const SizedBox(height: 16),
-            Text(
-              'No applications yet',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'When skilled users apply for your jobs, they appear here.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-            ),
-          ],
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          _job.title,
+          style: const TextStyle(
+              color: Colors.white, fontWeight: FontWeight.bold),
+          overflow: TextOverflow.ellipsis,
         ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadApplicants,
-      color: const Color(0xFF2196F3),
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: jobsWithApplicants.length,
-        itemBuilder: (context, index) {
-          final job = jobsWithApplicants[index];
-          final entries = _jobApplicants[job.id] ?? [];
-          return _buildJobSection(job, entries);
-        },
-      ),
-    );
-  }
-
-  Widget _buildJobSection(JobModel job, List<_ApplicantEntry> entries) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Job header — tap to open job detail
-        InkWell(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => JobDetailScreen(job: job)),
-          ),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF2196F3), Color(0xFF00BCD4)],
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-              ),
-              borderRadius: BorderRadius.circular(12),
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF2196F3), Color(0xFF00BCD4)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            child: Row(
-              children: [
-                const Icon(Icons.work_outline,
-                    color: Colors.white, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
+          ),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
+        // No actions: no Edit, Share, or kebab menu
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _entries.isEmpty
+              ? Center(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
+                      Icon(Icons.people_outline,
+                          size: 72, color: Colors.grey[300]),
+                      const SizedBox(height: 16),
                       Text(
-                        job.title,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        'No applications yet',
+                        style: TextStyle(
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          fontSize: 15,
+                          color: Colors.grey[600],
                         ),
                       ),
+                      const SizedBox(height: 8),
                       Text(
-                        '${job.applicants.length} applicant${job.applicants.length == 1 ? '' : 's'}  •  ${job.status.toUpperCase()}',
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 12),
+                        'Skilled users who apply for this job appear here.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 14, color: Colors.grey[500]),
                       ),
                     ],
                   ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadApplicants,
+                  color: const Color(0xFF2196F3),
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _entries.length,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: 10),
+                    itemBuilder: (context, index) =>
+                        _buildApplicantCard(_entries[index]),
+                  ),
                 ),
-                const Icon(Icons.chevron_right, color: Colors.white70),
-              ],
-            ),
-          ),
-        ),
-
-        // Applicant cards
-        if (entries.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8, left: 4),
-            child: Text(
-              'Loading applicant details…',
-              style: TextStyle(color: Colors.grey[500], fontSize: 13),
-            ),
-          )
-        else
-          ...entries.map((e) => _buildApplicantCard(job, e)),
-
-        const SizedBox(height: 16),
-      ],
     );
   }
 
-  Widget _buildApplicantCard(JobModel job, _ApplicantEntry entry) {
-    final status = job.applicationStatus[entry.userId] ?? 'pending';
+  Widget _buildApplicantCard(_ApplicantEntry entry) {
+    final status = _job.applicationStatus[entry.userId] ?? 'pending';
     final isAccepted = status == 'accepted';
     final isRejected = status == 'rejected';
     final isPending = !isAccepted && !isRejected;
     final isProcessing = _processingId == entry.userId;
-
-    // Disable accept/reject if another applicant is already selected
-    final anotherSelected = job.selectedApplicant != null &&
-        job.selectedApplicant!.isNotEmpty &&
-        job.selectedApplicant != entry.userId;
+    final anotherSelected = _job.selectedApplicant != null &&
+        _job.selectedApplicant!.isNotEmpty &&
+        _job.selectedApplicant != entry.userId;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 1,
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         child: Row(
           children: [
             InkWell(
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                    builder: (_) =>
-                        ProfileScreen(userId: entry.userId)),
+                    builder: (_) => ProfileScreen(userId: entry.userId)),
               ),
+              borderRadius: BorderRadius.circular(26),
               child: UniversalAvatar(
                 avatarConfig: entry.user?.avatarConfig,
                 photoUrl: entry.profile?.profilePicture,
                 fallbackName: entry.displayName,
-                radius: 24,
+                radius: 26,
                 animate: false,
               ),
             ),
@@ -281,8 +400,7 @@ class _CompanyApplicantsTabState extends State<CompanyApplicantsTab> {
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (_) =>
-                          ProfileScreen(userId: entry.userId)),
+                      builder: (_) => ProfileScreen(userId: entry.userId)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -306,7 +424,7 @@ class _CompanyApplicantsTabState extends State<CompanyApplicantsTab> {
                         ],
                       ],
                     ),
-                    if (entry.profile?.category != null)
+                    if ((entry.profile?.category ?? '').isNotEmpty)
                       Text(
                         entry.profile!.category!,
                         style: TextStyle(
@@ -363,50 +481,54 @@ class _CompanyApplicantsTabState extends State<CompanyApplicantsTab> {
             if (isPending && !anotherSelected)
               isProcessing
                   ? const Padding(
-                      padding: EdgeInsets.all(8.0),
+                      padding: EdgeInsets.all(8),
                       child: SizedBox(
                         width: 22,
                         height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child:
+                            CircularProgressIndicator(strokeWidth: 2),
                       ),
                     )
                   : Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         SizedBox(
-                          height: 30,
+                          height: 32,
                           child: TextButton(
-                            onPressed: () => _reject(job, entry.userId),
+                            onPressed: () => _reject(entry.userId),
                             style: TextButton.styleFrom(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 8),
+                                  horizontal: 10),
                               minimumSize: Size.zero,
                             ),
                             child: const Text(
                               'Reject',
-                              style: TextStyle(
-                                  color: Colors.red, fontSize: 12),
+                              style:
+                                  TextStyle(color: Colors.red, fontSize: 12),
                             ),
                           ),
                         ),
                         SizedBox(
-                          height: 30,
+                          height: 32,
                           child: ElevatedButton(
-                            onPressed: () => _accept(job, entry.userId),
+                            onPressed: () => _accept(entry.userId),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF4CAF50),
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 10),
+                                  horizontal: 12),
                               minimumSize: Size.zero,
-                              textStyle:
-                                  const TextStyle(fontSize: 12),
+                              textStyle: const TextStyle(fontSize: 12),
                             ),
                             child: const Text('Accept'),
                           ),
                         ),
                       ],
-                    ),
+                    )
+            else if (isAccepted)
+              const Icon(Icons.check_circle, color: Colors.green, size: 28)
+            else if (isRejected)
+              const Icon(Icons.cancel, color: Colors.red, size: 28),
           ],
         ),
       ),
@@ -414,20 +536,21 @@ class _CompanyApplicantsTabState extends State<CompanyApplicantsTab> {
   }
 }
 
+// 
+// Helper data class
+// 
+
 class _ApplicantEntry {
-  final JobModel job;
   final SkilledUserProfile? profile;
   final UserModel? user;
 
-  _ApplicantEntry({required this.job, this.profile, this.user});
+  _ApplicantEntry({this.profile, this.user});
 
-  String get userId =>
-      user?.uid ?? profile?.userId ?? '';
+  String get userId => user?.uid ?? profile?.userId ?? '';
 
-  String get displayName =>
-      user?.name.trim().isNotEmpty == true
-          ? user!.name.trim()
-          : profile?.name?.trim().isNotEmpty == true
-              ? profile!.name!.trim()
-              : 'Unknown';
+  String get displayName {
+    if (user?.name.trim().isNotEmpty == true) return user!.name.trim();
+    if (profile?.name?.trim().isNotEmpty == true) return profile!.name!.trim();
+    return 'Unknown';
+  }
 }

@@ -1894,9 +1894,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               final lastSeen = presence?.lastSeen;
 
               String subtitle;
-              if (_workLocked) {
-                subtitle = 'Work in progress';
-              } else if (isOnline) {
+              if (isOnline) {
                 subtitle = 'Online';
               } else if (lastSeen != null) {
                 subtitle = 'Last seen ${AppHelpers.getRelativeTime(lastSeen)}';
@@ -1951,7 +1949,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           subtitle,
                           style: TextStyle(
                             fontSize: 11,
-                            color: isOnline && !_workLocked
+                            color: isOnline
                                 ? Colors.cyanAccent[100]
                                 : Colors.white70,
                           ),
@@ -2179,20 +2177,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           ],
           // Only show tab bar when work is accepted
           bottom: _workLocked
-              ? TabBar(
-                  controller: _tabController,
-                  indicatorColor: Colors.white,
-                  labelColor: Colors.white,
-                  unselectedLabelColor: Colors.white60,
-                  tabs: const [
-                    Tab(
-                        icon: Icon(Icons.chat_bubble_outline, size: 18),
-                        text: 'Chat'),
-                    Tab(
-                        icon:
-                            Icon(Icons.assignment_turned_in_outlined, size: 18),
-                        text: 'Work Project'),
-                  ],
+              ? PreferredSize(
+                  preferredSize: const Size.fromHeight(56),
+                  child: _buildGradientTabStrip(),
                 )
               : null,
           flexibleSpace: _buildChatAppBarBackground(),
@@ -2213,6 +2200,47 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               )
             : _buildChatBody(),
       ),
+    );
+  }
+
+  Widget _buildGradientTabStrip() {
+    return AnimatedBuilder(
+      animation: _tabController,
+      builder: (context, _) {
+        final activeIndex = _tabController.index;
+        final stripColors = activeIndex == 0
+            ? const [Color(0xFF005C97), Color(0xFF1E88E5)]
+            : const [Color(0xFF6A1B9A), Color(0xFF8E24AA)];
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: stripColors,
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            border: Border(
+              top: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
+              bottom: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
+            ),
+          ),
+          child: TabBar(
+            controller: _tabController,
+            indicatorColor: Colors.white,
+            indicatorWeight: 3,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            tabs: const [
+              Tab(icon: Icon(Icons.chat_bubble_outline, size: 18), text: 'Chat'),
+              Tab(
+                  icon: Icon(Icons.assignment_turned_in_outlined, size: 18),
+                  text: 'Work Project'),
+            ],
+          ),
+        );
+      },
     );
   }
 

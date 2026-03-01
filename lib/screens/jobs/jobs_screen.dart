@@ -288,8 +288,8 @@ class _JobsScreenState extends State<JobsScreen> {
           children: [
             _buildJobsBody(),
             CompanyApplicantsTab(
-              companyId: FirebaseAuth.instance.currentUser?.uid ?? '',
               jobs: _allJobs,
+              isLoading: _isLoading,
             ),
           ],
         ),

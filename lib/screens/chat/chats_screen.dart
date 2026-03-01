@@ -21,6 +21,8 @@ class ChatsScreen extends StatefulWidget {
 class _ChatsScreenState extends State<ChatsScreen> {
   final ChatService _chatService = ChatService();
   final TextEditingController _searchController = TextEditingController();
+  final Map<String, String?> _roleCache = {};
+  final Set<String> _roleLoading = {};
 
   String _searchQuery = '';
   String? _currentUserId;
@@ -240,6 +242,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
     required List<ChatModel> chats,
   }) {
     final visibleChats = _collapseChatsByParticipant(chats);
+    _warmRoleCacheForChats(visibleChats);
 
     final companyChats = <ChatModel>[];
     final customerChats = <ChatModel>[];
@@ -313,11 +316,14 @@ class _ChatsScreenState extends State<ChatsScreen> {
   }
 
   String? _otherUserRoleForChat(ChatModel chat) {
-    final otherUserId = chat.participants.firstWhere(
-      (id) => id != _currentUserId,
-      orElse: () => '',
-    );
+    final otherUserId = _otherUserId(chat);
     if (otherUserId.isEmpty) return null;
+    final cached = _roleCache[otherUserId];
+    if (cached != null && cached.trim().isNotEmpty) {
+      final normalizedCached = UserRoles.normalizeRole(cached);
+      if (normalizedCached != null) return normalizedCached;
+    }
+
     final details = chat.participantDetails[otherUserId];
     final rawRole = (details is Map) ? details['role']?.toString() : null;
     if (rawRole?.trim().toLowerCase() == 'delivery') {
@@ -337,10 +343,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
     final byOtherUser = <String, ChatModel>{};
 
     for (final chat in chats) {
-      final otherUserId = chat.participants.firstWhere(
-        (id) => id != _currentUserId,
-        orElse: () => '',
-      );
+      final otherUserId = _otherUserId(chat);
       if (otherUserId.isEmpty) continue;
 
       final existing = byOtherUser[otherUserId];
@@ -374,6 +377,44 @@ class _ChatsScreenState extends State<ChatsScreen> {
   bool _isHiringChat(ChatModel chat) =>
       chat.isWorkChat || chat.id.startsWith('work_');
 
+  String _otherUserId(ChatModel chat) {
+    return chat.participants.firstWhere(
+      (id) => id != _currentUserId,
+      orElse: () => '',
+    );
+  }
+
+  void _warmRoleCacheForChats(List<ChatModel> chats) {
+    for (final chat in chats) {
+      final otherUserId = _otherUserId(chat);
+      if (otherUserId.isEmpty) continue;
+      if (_roleCache.containsKey(otherUserId) || _roleLoading.contains(otherUserId)) {
+        continue;
+      }
+      _loadRoleForUser(otherUserId);
+    }
+  }
+
+  Future<void> _loadRoleForUser(String userId) async {
+    if (_roleLoading.contains(userId)) return;
+    _roleLoading.add(userId);
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection(AppConstants.usersCollection)
+          .doc(userId)
+          .get();
+      final role = (userDoc.data()?['role'] as String?)?.trim();
+      if (!mounted) return;
+      setState(() {
+        _roleCache[userId] = role;
+      });
+    } catch (_) {
+      // Keep fallback classification when role lookup fails.
+    } finally {
+      _roleLoading.remove(userId);
+    }
+  }
+
   Widget _buildChatItem(ChatModel chat) {
     final otherUserId = chat.participants.firstWhere(
       (id) => id != _currentUserId,
@@ -382,7 +423,6 @@ class _ChatsScreenState extends State<ChatsScreen> {
     final otherUserDetails = chat.participantDetails[otherUserId];
     final name = otherUserDetails?['name'] ?? 'Unknown';
     final photo = otherUserDetails?['photo'];
-    final otherRole = _resolvedOtherRoleForChat(chat);
     final unreadCount = chat.unreadCount[_currentUserId] ?? 0;
     final pendingWork = _pendingWorkCounts[chat.id] ?? 0;
 
@@ -516,43 +556,16 @@ class _ChatsScreenState extends State<ChatsScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                AppHelpers.capitalize(name),
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: unreadCount > 0
-                                      ? FontWeight.bold
-                                      : FontWeight.w600,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (otherRole == UserRoles.company)
-                              _roleTag(
-                                label: 'COMPANY',
-                                bgColor: const Color(0xFF3949AB)
-                                    .withValues(alpha: 0.12),
-                                fgColor: const Color(0xFF3949AB),
-                              ),
-                            if (otherRole == UserRoles.customer)
-                              _roleTag(
-                                label: 'CUSTOMER',
-                                bgColor: const Color(0xFF2E7D32)
-                                    .withValues(alpha: 0.12),
-                                fgColor: const Color(0xFF2E7D32),
-                              ),
-                            if (otherRole == UserRoles.deliveryPartner)
-                              _roleTag(
-                                label: 'DELIVERY',
-                                bgColor: const Color(0xFFEF6C00)
-                                    .withValues(alpha: 0.12),
-                                fgColor: const Color(0xFFEF6C00),
-                              ),
-                          ],
+                        child: Text(
+                          AppHelpers.capitalize(name),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: unreadCount > 0
+                                ? FontWeight.bold
+                                : FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       Text(
@@ -625,30 +638,6 @@ class _ChatsScreenState extends State<ChatsScreen> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _roleTag({
-    required String label,
-    required Color bgColor,
-    required Color fgColor,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(left: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: fgColor,
-          fontSize: 9,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.3,
         ),
       ),
     );
