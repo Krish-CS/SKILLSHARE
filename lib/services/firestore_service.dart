@@ -89,6 +89,23 @@ class FirestoreService {
         aadhaarNumber.length == 12;
   }
 
+  bool _isCompanyProfileVerified(CompanyProfile? profile) {
+    if (profile == null) return false;
+    final status = profile.verificationStatus.toLowerCase().trim();
+    final statusApproved =
+        status == AppConstants.verificationApproved || status == 'verified';
+    return profile.isVerified || statusApproved;
+  }
+
+  Future<bool> canCompanyHireSkilledPersons(String companyUserId) async {
+    final profile = await getCompanyProfile(companyUserId);
+    return _isCompanyProfileVerified(profile);
+  }
+
+  Stream<bool> companyHireEligibilityStream(String companyUserId) {
+    return companyProfileStream(companyUserId).map(_isCompanyProfileVerified);
+  }
+
   // ===== Users =====
 
   Future<UserModel?> getUserById(String userId) async {
@@ -1222,6 +1239,20 @@ class FirestoreService {
     }
   }
 
+  Stream<List<ProductModel>> streamUserProducts(String userId) {
+    return _firestore
+        .collection(AppConstants.productsCollection)
+        .where('userId', isEqualTo: userId)
+        .snapshots()
+        .map((snapshot) {
+      final products = snapshot.docs
+          .map((doc) => ProductModel.fromMap(doc.data(), doc.id))
+          .toList();
+      products.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return products;
+    });
+  }
+
   Future<List<ProductModel>> getAllProducts({int limit = 50}) async {
     try {
       final snapshot = await _firestore
@@ -2055,7 +2086,8 @@ class FirestoreService {
 
   // ===== Reviews =====
 
-  Future<void> createReview(ReviewModel review) async {
+  Future<void> createReview(ReviewModel review,
+      {String? reviewerRole, String? reviewerCompanyName}) async {
     if (review.reviewerId == review.skilledUserId) {
       throw Exception('You cannot review your own profile.');
     }
@@ -2070,12 +2102,30 @@ class FirestoreService {
       throw Exception('You have already reviewed this skilled person.');
     }
 
+    // Build the review with role info (prefer fields already on the model)
+    final effectiveRole = review.reviewerRole ?? reviewerRole;
+    final effectiveCompanyName =
+        review.reviewerCompanyName ?? reviewerCompanyName;
+    final reviewWithRole = ReviewModel(
+      id: review.id,
+      skilledUserId: review.skilledUserId,
+      reviewerId: review.reviewerId,
+      reviewerName: review.reviewerName,
+      reviewerPhoto: review.reviewerPhoto,
+      rating: review.rating,
+      comment: review.comment,
+      images: review.images,
+      createdAt: review.createdAt,
+      reviewerRole: effectiveRole,
+      reviewerCompanyName: effectiveCompanyName,
+    );
+
     final batch = _firestore.batch();
 
     // Add review
     final reviewRef =
         _firestore.collection(AppConstants.reviewsCollection).doc();
-    batch.set(reviewRef, review.toMap());
+    batch.set(reviewRef, reviewWithRole.toMap());
 
     // Update skilled user rating
     final profileRef = _firestore
@@ -2113,8 +2163,96 @@ class FirestoreService {
         .map((doc) => ReviewModel.fromMap(doc.data(), doc.id))
         .toList();
 
-    reviews.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    // Sort: company reviews first, then by date descending
+    reviews.sort((a, b) {
+      if (a.isCompanyReview && !b.isCompanyReview) return -1;
+      if (!a.isCompanyReview && b.isCompanyReview) return 1;
+      return b.createdAt.compareTo(a.createdAt);
+    });
     return reviews.take(limit).toList();
+  }
+
+  // ===== Company Endorsements =====
+
+  String _endorsementDocId(String companyId, String skilledUserId) =>
+      '${companyId}__$skilledUserId';
+
+  /// Toggle a company's endorsement of a skilled user.
+  /// Returns `true` if the endorsement was added, `false` if removed.
+  Future<bool> toggleCompanyEndorsement({
+    required String companyId,
+    required String skilledUserId,
+  }) async {
+    final docId = _endorsementDocId(companyId, skilledUserId);
+    final endorsementRef = _firestore
+        .collection(AppConstants.companyEndorsementsCollection)
+        .doc(docId);
+    final profileRef = _firestore
+        .collection(AppConstants.skilledUsersCollection)
+        .doc(skilledUserId);
+
+    final existing = await endorsementRef.get();
+    final batch = _firestore.batch();
+
+    if (existing.exists) {
+      // Remove endorsement
+      batch.delete(endorsementRef);
+      batch.update(profileRef, {
+        'companyEndorsementCount': FieldValue.increment(-1),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      await batch.commit();
+      return false;
+    } else {
+      // Add endorsement
+      batch.set(endorsementRef, {
+        'companyId': companyId,
+        'skilledUserId': skilledUserId,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      batch.update(profileRef, {
+        'companyEndorsementCount': FieldValue.increment(1),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      await batch.commit();
+      return true;
+    }
+  }
+
+  /// Check if a company has endorsed a skilled user.
+  Future<bool> hasCompanyEndorsed({
+    required String companyId,
+    required String skilledUserId,
+  }) async {
+    final docId = _endorsementDocId(companyId, skilledUserId);
+    final doc = await _firestore
+        .collection(AppConstants.companyEndorsementsCollection)
+        .doc(docId)
+        .get();
+    return doc.exists;
+  }
+
+  /// Stream the live endorsement state (endorsed or not) for a company-user pair.
+  Stream<bool> streamCompanyEndorsementState({
+    required String companyId,
+    required String skilledUserId,
+  }) {
+    final docId = _endorsementDocId(companyId, skilledUserId);
+    return _firestore
+        .collection(AppConstants.companyEndorsementsCollection)
+        .doc(docId)
+        .snapshots()
+        .map((snap) => snap.exists);
+  }
+
+  /// Stream the live company endorsement count of a skilled user.
+  Stream<int> streamCompanyEndorsementCount(String skilledUserId) {
+    return _firestore
+        .collection(AppConstants.skilledUsersCollection)
+        .doc(skilledUserId)
+        .snapshots()
+        .map((snap) =>
+            snap.exists ? ((snap.data()?['companyEndorsementCount'] ?? 0) as int) : 0);
   }
 
   // ===== Service Requests =====
@@ -2186,6 +2324,12 @@ class FirestoreService {
     final requesterRole = (requester?.role ?? '').toLowerCase().trim();
     if (requesterRole != AppConstants.roleCompany) {
       throw Exception('Only company accounts can send direct hire requests.');
+    }
+
+    final isCompanyVerified = await canCompanyHireSkilledPersons(requesterId);
+    if (!isCompanyVerified) {
+      throw Exception(
+          'Company verification is required before sending hire requests.');
     }
 
     final normalizedTitle = title.trim();
@@ -2321,6 +2465,21 @@ class FirestoreService {
       final requests = snapshot.docs
           .map((doc) => ServiceRequestModel.fromMap(doc.data(), doc.id))
           .where(_isWorkRequestLike) // type filter in memory
+          .toList();
+      requests.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      return requests;
+    });
+  }
+
+  Stream<List<ServiceRequestModel>> streamSkilledRequests(String skilledUserId) {
+    return _firestore
+        .collection(AppConstants.requestsCollection)
+        .where('skilledUserId', isEqualTo: skilledUserId)
+        .snapshots()
+        .map((snapshot) {
+      final requests = snapshot.docs
+          .map((doc) => ServiceRequestModel.fromMap(doc.data(), doc.id))
+          .where(_isWorkRequestLike)
           .toList();
       requests.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       return requests;

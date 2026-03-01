@@ -24,6 +24,8 @@ class SkilledUserProfile {
   final bool isVerified;
   final DateTime? verifiedAt;
   final String? rejectionReason;
+  /// Number of companies that have endorsed (liked) this professional.
+  final int companyEndorsementCount;
 
   /// Banner customisation data (image or styled text).
   final Map<String, dynamic>? bannerData;
@@ -56,6 +58,7 @@ class SkilledUserProfile {
     this.isVerified = false,
     this.verifiedAt,
     this.rejectionReason,
+    this.companyEndorsementCount = 0,
     this.bannerData,
     this.avatarConfig,
     required this.createdAt,
@@ -105,6 +108,7 @@ class SkilledUserProfile {
       isVerified: map['isVerified'] ?? false,
       verifiedAt: (map['verifiedAt'] as Timestamp?)?.toDate(),
       rejectionReason: map['rejectionReason'],
+      companyEndorsementCount: map['companyEndorsementCount'] ?? 0,
       bannerData: map['bannerData'] is Map
           ? Map<String, dynamic>.from(map['bannerData'] as Map)
           : null,
@@ -141,6 +145,7 @@ class SkilledUserProfile {
       'isVerified': isVerified,
       'verifiedAt': verifiedAt != null ? Timestamp.fromDate(verifiedAt!) : null,
       'rejectionReason': rejectionReason,
+      'companyEndorsementCount': companyEndorsementCount,
       if (bannerData != null) 'bannerData': bannerData,
       if (avatarConfig != null) 'avatarConfig': avatarConfig,
       'createdAt': Timestamp.fromDate(createdAt),
@@ -171,6 +176,7 @@ class SkilledUserProfile {
     bool? isVerified,
     DateTime? verifiedAt,
     String? rejectionReason,
+    int? companyEndorsementCount,
     Map<String, dynamic>? bannerData,
     Map<String, dynamic>? avatarConfig,
     bool clearBanner = false,
@@ -199,6 +205,7 @@ class SkilledUserProfile {
       isVerified: isVerified ?? this.isVerified,
       verifiedAt: verifiedAt ?? this.verifiedAt,
       rejectionReason: rejectionReason ?? this.rejectionReason,
+      companyEndorsementCount: companyEndorsementCount ?? this.companyEndorsementCount,
       bannerData: clearBanner ? null : (bannerData ?? this.bannerData),
       avatarConfig: avatarConfig ?? this.avatarConfig,
       createdAt: createdAt,

@@ -53,6 +53,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   StreamSubscription? _profileSub;
 
+  // Company endorsement state
+  int _companyEndorsementCount = 0;
+  bool _hasCurrentCompanyEndorsed = false;
+  StreamSubscription? _endorsementCountSub;
+  StreamSubscription? _endorsementStateSub;
+
   // Check if user is viewing their own profile
   bool get isOwnProfile =>
       FirebaseAuth.instance.currentUser?.uid == widget.userId;
@@ -457,13 +463,70 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _loadProfile().then((_) => _subscribeToProfileStream());
+    _loadProfile().then((_) {
+      _subscribeToProfileStream();
+      _subscribeToEndorsementStreams();
+    });
   }
 
   @override
   void dispose() {
     _profileSub?.cancel();
+    _endorsementCountSub?.cancel();
+    _endorsementStateSub?.cancel();
     super.dispose();
+  }
+
+  void _subscribeToEndorsementStreams() {
+    // Only relevant when a company is viewing a skilled person's profile
+    if (isOwnProfile) return;
+    if (_userRole != AppConstants.roleSkilledUser &&
+        _userRole != 'skilled_person') {
+      return;
+    }
+
+    final viewerId = FirebaseAuth.instance.currentUser?.uid;
+    final viewerRole = _currentViewerRole;
+
+    // Always stream the endorsement count for the skilled profile
+    _endorsementCountSub?.cancel();
+    _endorsementCountSub = _firestoreService
+        .streamCompanyEndorsementCount(widget.userId)
+        .listen((count) {
+      if (mounted) setState(() => _companyEndorsementCount = count);
+    });
+
+    // Only stream the viewer's own endorsement state when viewer is a company
+    if (viewerRole == UserRoles.company && viewerId != null) {
+      _endorsementStateSub?.cancel();
+      _endorsementStateSub = _firestoreService
+          .streamCompanyEndorsementState(
+              companyId: viewerId, skilledUserId: widget.userId)
+          .listen((hasEndorsed) {
+        if (mounted) setState(() => _hasCurrentCompanyEndorsed = hasEndorsed);
+      });
+    }
+  }
+
+  Future<void> _toggleEndorsement() async {
+    final viewerId = FirebaseAuth.instance.currentUser?.uid;
+    if (viewerId == null) return;
+    try {
+      final added = await _firestoreService.toggleCompanyEndorsement(
+          companyId: viewerId, skilledUserId: widget.userId);
+      // Optimistic update reflected via stream, but also update locally instantly
+      if (mounted) {
+        setState(() {
+          _hasCurrentCompanyEndorsed = added;
+          _companyEndorsementCount += added ? 1 : -1;
+          if (_companyEndorsementCount < 0) _companyEndorsementCount = 0;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      AppDialog.error(context, 'Could not update endorsement',
+          detail: e.toString());
+    }
   }
 
   void _subscribeToProfileStream() {
@@ -684,6 +747,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
           : 'User';
       final reviewerPhoto = reviewerData?.profilePhoto;
 
+      // Determine reviewer role and company name for enterprise endorsement badge
+      final viewerRole = _currentViewerRole; // 'company', 'customer', etc.
+      String? companyDisplayName;
+      if (viewerRole == UserRoles.company) {
+        try {
+          final companyData =
+              await _firestoreService.getCompanyProfile(currentUser.uid);
+          companyDisplayName =
+              (companyData?.companyName.trim().isNotEmpty == true)
+                  ? companyData!.companyName
+                  : reviewerName;
+        } catch (_) {}
+      }
+
       await _firestoreService.createReview(
         ReviewModel(
           id: '',
@@ -694,6 +771,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           rating: rating,
           comment: normalizedComment,
           createdAt: DateTime.now(),
+          reviewerRole: viewerRole,
+          reviewerCompanyName: companyDisplayName,
         ),
       );
 
@@ -1435,6 +1514,108 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
 
           const SizedBox(height: 4),
+
+          // ── Company endorsement banner ──
+          if (_companyEndorsementCount > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFFF8E1), Color(0xFFFFF3CD)],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                      color: const Color(0xFFFFB300).withValues(alpha: 0.6)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.business_center_rounded,
+                        color: Color(0xFFE65100), size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      '$_companyEndorsementCount ${_companyEndorsementCount == 1 ? 'Company Endorses' : 'Companies Endorse'} This Professional',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFE65100),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // ── Company endorsement button (visible to company viewers only) ──
+          if (_isCurrentUserCompany && !isOwnProfile)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: GestureDetector(
+                onTap: _toggleEndorsement,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 18, vertical: 9),
+                  decoration: BoxDecoration(
+                    gradient: _hasCurrentCompanyEndorsed
+                        ? const LinearGradient(colors: [
+                            Color(0xFFE53935),
+                            Color(0xFFE91E63)
+                          ])
+                        : const LinearGradient(colors: [
+                            Color(0xFFF5F5F5),
+                            Color(0xFFEEEEEE)
+                          ]),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                        color: _hasCurrentCompanyEndorsed
+                            ? Colors.transparent
+                            : const Color(0xFFBDBDBD)),
+                    boxShadow: _hasCurrentCompanyEndorsed
+                        ? [
+                            BoxShadow(
+                              color: const Color(0xFFE91E63)
+                                  .withValues(alpha: 0.35),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            )
+                          ]
+                        : [],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _hasCurrentCompanyEndorsed
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
+                        size: 18,
+                        color: _hasCurrentCompanyEndorsed
+                            ? Colors.white
+                            : const Color(0xFF9E9E9E),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _hasCurrentCompanyEndorsed
+                            ? 'Endorsed'
+                            : 'Endorse Professional',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: _hasCurrentCompanyEndorsed
+                              ? Colors.white
+                              : const Color(0xFF757575),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
         ],
       ),
     );
@@ -2416,69 +2597,190 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             )
           else
-            Column(
-              children:
-                  _reviews.take(5).map((r) => _buildReviewCard(r)).toList(),
-            ),
+            Builder(builder: (context) {
+              final companyReviews =
+                  _reviews.where((r) => r.isCompanyReview).take(5).toList();
+              final otherReviews =
+                  _reviews.where((r) => !r.isCompanyReview).take(5).toList();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (companyReviews.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(left: 2, bottom: 6),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(colors: [
+                                Color(0xFFFF8F00),
+                                Color(0xFFE65100),
+                              ]),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.business_center_rounded,
+                                    size: 12, color: Colors.white),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Company Endorsements',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ...companyReviews.map((r) => _buildReviewCard(r)),
+                    if (otherReviews.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(
+                            top: 6, left: 2, bottom: 6),
+                        child: Text(
+                          'Customer Reviews',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[600]),
+                        ),
+                      ),
+                  ],
+                  ...otherReviews.map((r) => _buildReviewCard(r)),
+                ],
+              );
+            }),
         ],
       ),
     );
   }
 
   Widget _buildReviewCard(ReviewModel review) {
+    final isCompany = review.isCompanyReview;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isCompany ? const Color(0xFFFFFDE7) : Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: isCompany
+            ? Border.all(
+                color: const Color(0xFFFFB300).withValues(alpha: 0.7), width: 1.5)
+            : null,
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
+              color: isCompany
+                  ? const Color(0xFFFFB300).withValues(alpha: 0.12)
+                  : Colors.black.withValues(alpha: 0.04),
               blurRadius: 10,
               offset: const Offset(0, 3)),
         ],
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          UniversalAvatar(
-            photoUrl: review.reviewerPhoto,
-            fallbackName: review.reviewerName,
-            radius: 22,
-            animate: false,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        review.reviewerName,
-                        style: const TextStyle(
+          if (isCompany)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [
+                        Color(0xFFFF8F00),
+                        Color(0xFFE65100),
+                      ]),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.business_center_rounded,
+                            size: 11, color: Colors.white),
+                        SizedBox(width: 4),
+                        Text(
+                          'COMPANY ENDORSEMENT',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
                             fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              UniversalAvatar(
+                photoUrl: review.reviewerPhoto,
+                fallbackName: review.reviewerName,
+                radius: 22,
+                animate: false,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                review.reviewerName,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: Color(0xFF1A1A2E)),
+                              ),
+                              if (isCompany &&
+                                  review.reviewerCompanyName != null &&
+                                  review.reviewerCompanyName!.isNotEmpty)
+                                Text(
+                                  review.reviewerCompanyName!,
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Color(0xFFE65100),
+                                      fontWeight: FontWeight.w600),
+                                ),
+                            ],
+                          ),
+                        ),
+                        RatingBarIndicator(
+                          rating: review.rating,
+                          itemBuilder: (_, __) =>
+                              const Icon(Icons.star_rounded, color: Colors.amber),
+                          itemCount: 5,
+                          itemSize: 14,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(review.comment,
+                        style: TextStyle(
                             fontSize: 13,
-                            color: Color(0xFF1A1A2E)),
-                      ),
-                    ),
-                    RatingBarIndicator(
-                      rating: review.rating,
-                      itemBuilder: (_, __) =>
-                          const Icon(Icons.star_rounded, color: Colors.amber),
-                      itemCount: 5,
-                      itemSize: 14,
-                    ),
+                            color: Colors.grey[600],
+                            height: 1.4)),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(review.comment,
-                    style: TextStyle(
-                        fontSize: 13, color: Colors.grey[600], height: 1.4)),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),

@@ -1,9 +1,9 @@
 # SkillShare Project Context (for AI continuity)
 
-> **Last updated:** 2026-02-28
+> **Last updated:** 2026-03-01
 > **Flutter:** 3.27.1 | **Target:** Web (Chrome)
 > **Backend:** Firebase/Firestore, Cloudinary for images
-> **Latest commit:** `4e16120` on `origin/main`
+> **Latest commit:** `05c5024` on `origin/main`
 
 ---
 

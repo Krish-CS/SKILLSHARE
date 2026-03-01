@@ -48,6 +48,7 @@ class AppConstants {
   static const String blockedUsersCollection = 'blocked_users';
   static const String supportTicketsCollection = 'support_tickets';
   static const String deliveryAssignmentsCollection = 'delivery_assignments';
+  static const String companyEndorsementsCollection = 'company_endorsements';
 
   // Storage Paths
   static const String profilePhotosPath = 'profile_photos';

@@ -111,7 +111,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
     final userProvider = Provider.of<UserProvider>(context);
     final authProvider = Provider.of<AuthProvider>(context);
     final currentUserId = authProvider.currentUser?.uid;
-    final filtered = _filter(userProvider.verifiedUsers, currentUserId: currentUserId);
+    final filtered =
+        _filter(userProvider.verifiedUsers, currentUserId: currentUserId);
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -216,8 +217,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
                           (cat == 'All' && _selectedCategory == null) ||
                               _selectedCategory == cat;
                       return GestureDetector(
-                        onTap: () => setState(() => _selectedCategory =
-                            cat == 'All' ? null : cat),
+                        onTap: () => setState(() =>
+                            _selectedCategory = cat == 'All' ? null : cat),
                         child: Container(
                           margin: const EdgeInsets.only(right: 8),
                           padding: const EdgeInsets.symmetric(
@@ -293,8 +294,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
           // Results Count
           Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             child: Row(
               children: [
                 Text(
@@ -354,16 +354,29 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   Widget _buildGrid(List<SkilledUserProfile> users) {
-    return GridView.builder(
-      padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.75,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-      ),
-      itemCount: users.length,
-      itemBuilder: (_, i) => _buildGridCard(users[i]),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final maxTileWidth = width >= 1400
+            ? 220.0
+            : width >= 1000
+                ? 210.0
+                : width >= 700
+                    ? 190.0
+                    : 170.0;
+
+        return GridView.builder(
+          padding: const EdgeInsets.all(12),
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: maxTileWidth,
+            childAspectRatio: 0.80,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+          ),
+          itemCount: users.length,
+          itemBuilder: (_, i) => _buildGridCard(users[i]),
+        );
+      },
     );
   }
 
@@ -377,39 +390,40 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   Widget _buildGridCard(SkilledUserProfile profile) {
     return GestureDetector(
-      onTap: () => Navigator.push(context,
-          MaterialPageRoute(builder: (_) => ProfileScreen(userId: profile.userId))),
+      onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => ProfileScreen(userId: profile.userId))),
       child: Card(
         elevation: 2,
+        clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(16)),
-                child: WebImageLoader.loadImage(
-                  imageUrl: profile.profilePicture,
-                  fit: BoxFit.cover,
-                  errorWidget: Container(
-                    color: Colors.grey[200],
-                    child: const Icon(Icons.person, size: 48, color: Colors.grey),
-                  ),
+            AspectRatio(
+              aspectRatio: 1,
+              child: WebImageLoader.loadImage(
+                imageUrl: profile.profilePicture,
+                fit: BoxFit.cover,
+                errorWidget: Container(
+                  color: Colors.grey[200],
+                  child: const Icon(Icons.person, size: 42, color: Colors.grey),
                 ),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 9),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
                       Expanded(
-                        child: Text(AppHelpers.capitalize(profile.name ?? 'Unnamed'),
+                        child: Text(
+                            AppHelpers.capitalize(profile.name ?? 'Unnamed'),
                             style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 13),
+                                fontWeight: FontWeight.bold, fontSize: 12),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis),
                       ),
@@ -421,20 +435,20 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   if (profile.category != null)
                     Text(profile.category!,
                         style:
-                            TextStyle(fontSize: 11, color: Colors.grey[600]),
+                            TextStyle(fontSize: 10.5, color: Colors.grey[600]),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3),
                   Row(
                     children: [
-                      const Icon(Icons.star, size: 13, color: Colors.amber),
+                      const Icon(Icons.star, size: 12, color: Colors.amber),
                       const SizedBox(width: 2),
                       Text(profile.rating.toStringAsFixed(1),
-                          style: const TextStyle(fontSize: 12)),
-                      const SizedBox(width: 6),
+                          style: const TextStyle(fontSize: 11.5)),
+                      const SizedBox(width: 4),
                       Text('(${profile.reviewCount})',
                           style: TextStyle(
-                              fontSize: 11, color: Colors.grey[500])),
+                              fontSize: 10.5, color: Colors.grey[500])),
                     ],
                   ),
                 ],
@@ -484,7 +498,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
               children: [
                 const Icon(Icons.star, size: 14, color: Colors.amber),
                 const SizedBox(width: 2),
-                Text('${profile.rating.toStringAsFixed(1)} (${profile.reviewCount} reviews)'),
+                Text(
+                    '${profile.rating.toStringAsFixed(1)} (${profile.reviewCount} reviews)'),
                 const SizedBox(width: 8),
                 Icon(Icons.work, size: 14, color: Colors.grey[500]),
                 const SizedBox(width: 2),

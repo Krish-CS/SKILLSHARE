@@ -10,6 +10,10 @@ class ReviewModel {
   final String comment;
   final List<String> images;
   final DateTime createdAt;
+  /// Role of the reviewer: 'company', 'customer', 'skilled_person', etc.
+  final String? reviewerRole;
+  /// Company display name — shown on highlighted endorsement badge.
+  final String? reviewerCompanyName;
 
   ReviewModel({
     required this.id,
@@ -21,7 +25,11 @@ class ReviewModel {
     required this.comment,
     this.images = const [],
     required this.createdAt,
+    this.reviewerRole,
+    this.reviewerCompanyName,
   });
+
+  bool get isCompanyReview => reviewerRole == 'company';
 
   factory ReviewModel.fromMap(Map<String, dynamic> map, String id) {
     return ReviewModel(
@@ -34,6 +42,8 @@ class ReviewModel {
       comment: map['comment'] ?? '',
       images: List<String>.from(map['images'] ?? []),
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      reviewerRole: map['reviewerRole'],
+      reviewerCompanyName: map['reviewerCompanyName'],
     );
   }
 
@@ -47,6 +57,8 @@ class ReviewModel {
       'comment': comment,
       'images': images,
       'createdAt': Timestamp.fromDate(createdAt),
+      if (reviewerRole != null) 'reviewerRole': reviewerRole,
+      if (reviewerCompanyName != null) 'reviewerCompanyName': reviewerCompanyName,
     };
   }
 }
