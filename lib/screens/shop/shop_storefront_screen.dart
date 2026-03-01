@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../models/product_model.dart';
 import '../../models/skilled_user_profile.dart';
 import '../../models/user_model.dart';
 import '../../services/firestore_service.dart';
+import '../../utils/app_helpers.dart';
 import '../../utils/app_theme.dart';
 import '../../widgets/product_card.dart';
 import '../../widgets/universal_avatar.dart';
@@ -25,30 +27,46 @@ class ShopStorefrontScreen extends StatefulWidget {
 
 class _ShopStorefrontScreenState extends State<ShopStorefrontScreen> {
   final FirestoreService _firestoreService = FirestoreService();
+
   bool _isLoading = true;
   String? _error;
+
   UserModel? _seller;
   SkilledUserProfile? _profile;
   List<ProductModel> _products = [];
-  String _shopName = 'Shop';
+  Map<String, dynamic> _shopSettings = const {};
+
+  StreamSubscription? _sellerSub;
+  StreamSubscription? _profileSub;
+  StreamSubscription? _productsSub;
+  StreamSubscription? _shopSettingsSub;
 
   @override
   void initState() {
     super.initState();
-    _shopName = widget.initialShopName?.trim().isNotEmpty == true
-        ? widget.initialShopName!.trim()
-        : 'Shop';
-    _load();
+    _init();
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _sellerSub?.cancel();
+    _profileSub?.cancel();
+    _productsSub?.cancel();
+    _shopSettingsSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _init() async {
     setState(() {
       _isLoading = true;
       _error = null;
     });
+
+    // One-time Aadhaar verification gate
     try {
-      final isVerified =
-          await _firestoreService.isSkilledUserAadhaarVerified(widget.sellerId);
+      final isVerified = await _firestoreService
+          .isSkilledUserAadhaarVerified(widget.sellerId);
+      if (!mounted) return;
       if (!isVerified) {
         setState(() {
           _error = 'This shop is not publicly available.';
@@ -56,41 +74,72 @@ class _ShopStorefrontScreenState extends State<ShopStorefrontScreen> {
         });
         return;
       }
-
-      final results = await Future.wait([
-        _firestoreService.getUserById(widget.sellerId),
-        _firestoreService.getSkilledUserProfile(widget.sellerId),
-        _firestoreService.getShopSettings(widget.sellerId),
-        _firestoreService.getUserProducts(widget.sellerId),
-      ]);
-
-      final seller = results[0] as UserModel?;
-      final profile = results[1] as SkilledUserProfile?;
-      final shopSettings = results[2] as Map<String, dynamic>;
-      final allProducts = results[3] as List<ProductModel>;
-
-      final configuredShopName = (shopSettings['shopName'] as String?)?.trim();
-      final resolvedShopName =
-          (configuredShopName != null && configuredShopName.isNotEmpty)
-              ? configuredShopName
-              : ((seller?.name.trim().isNotEmpty == true)
-                  ? '${seller!.name.trim()} Shop'
-                  : 'Shop');
-
-      setState(() {
-        _seller = seller;
-        _profile = profile;
-        _products = allProducts.where((p) => p.isAvailable).toList()
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        _shopName = resolvedShopName;
-        _isLoading = false;
-      });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = 'Failed to load shop: $e';
         _isLoading = false;
       });
+      return;
     }
+
+    // Live streams — all viewers see changes the moment they happen
+    _sellerSub = _firestoreService
+        .streamUserModel(widget.sellerId)
+        .listen((seller) {
+      if (mounted) setState(() => _seller = seller);
+    }, onError: (_) {});
+
+    _profileSub = _firestoreService
+        .skilledUserProfileStream(widget.sellerId)
+        .listen((profile) {
+      if (mounted) setState(() => _profile = profile);
+    }, onError: (_) {});
+
+    _shopSettingsSub = _firestoreService
+        .streamShopSettings(widget.sellerId)
+        .listen((settings) {
+      if (mounted) setState(() => _shopSettings = settings);
+    }, onError: (_) {});
+
+    _productsSub = _firestoreService
+        .streamUserProducts(widget.sellerId)
+        .listen((all) {
+      if (mounted) {
+        setState(() {
+          _products = all.where((p) => p.isAvailable).toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          _isLoading = false;
+        });
+      }
+    }, onError: (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to load products: $e';
+          _isLoading = false;
+        });
+      }
+    });
+  }
+
+  /// Resolved shop name with first-letter capitalisation.
+  /// Priority: configured shopName → "[SellerName] Shop"
+  String get _resolvedShopName {
+    final configured = (_shopSettings['shopName'] as String?)?.trim() ?? '';
+    if (configured.isNotEmpty) {
+      return AppHelpers.capitalize(configured);
+    }
+    final sellerName = (_seller?.name.trim().isNotEmpty == true)
+        ? _seller!.name.trim()
+        : (_profile?.name?.trim().isNotEmpty == true
+            ? _profile!.name!.trim()
+            : '');
+    if (sellerName.isNotEmpty) {
+      return '${AppHelpers.capitalize(sellerName)} Shop';
+    }
+    return widget.initialShopName?.trim().isNotEmpty == true
+        ? AppHelpers.capitalize(widget.initialShopName!.trim())
+        : 'Shop';
   }
 
   Future<void> _openProduct(ProductModel product) async {
@@ -98,15 +147,16 @@ class _ShopStorefrontScreenState extends State<ShopStorefrontScreen> {
       context,
       MaterialPageRoute(builder: (_) => ProductDetailScreen(product: product)),
     );
-    _load();
+    // No manual reload needed — products stream auto-refreshes
   }
 
   @override
   Widget build(BuildContext context) {
+    final shopName = _resolvedShopName;
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
-        title: Text(_shopName, style: const TextStyle(color: Colors.white)),
+        title: Text(shopName, style: const TextStyle(color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
         flexibleSpace: Container(
           decoration: const BoxDecoration(
@@ -127,12 +177,10 @@ class _ShopStorefrontScreenState extends State<ShopStorefrontScreen> {
                     child: Text(_error!, textAlign: TextAlign.center),
                   ),
                 )
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView(
+              : ListView(
                     padding: const EdgeInsets.all(12),
                     children: [
-                      _buildShopHeader(),
+                      _buildShopHeader(shopName),
                       const SizedBox(height: 12),
                       Text(
                         '${_products.length} product${_products.length == 1 ? '' : 's'}',
@@ -153,35 +201,46 @@ class _ShopStorefrontScreenState extends State<ShopStorefrontScreen> {
                               const Text('No products available in this shop.'),
                         )
                       else
-                        GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            childAspectRatio: 0.50,
-                            crossAxisSpacing: 10,
-                            mainAxisSpacing: 10,
-                          ),
-                          itemCount: _products.length,
-                          itemBuilder: (context, index) {
-                            final product = _products[index];
-                            return ProductCard(
-                              product: product,
-                              onTap: () => _openProduct(product),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final width = constraints.maxWidth;
+                            final columns = width >= 900
+                                ? 4
+                                : width >= 600
+                                    ? 3
+                                    : 2;
+                            return GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: columns,
+                                childAspectRatio: 0.72,
+                                crossAxisSpacing: 10,
+                                mainAxisSpacing: 10,
+                              ),
+                              itemCount: _products.length,
+                              itemBuilder: (context, index) {
+                                final product = _products[index];
+                                return ProductCard(
+                                  product: product,
+                                  onTap: () => _openProduct(product),
+                                );
+                              },
                             );
                           },
                         ),
                     ],
                   ),
-                ),
     );
   }
 
-  Widget _buildShopHeader() {
+  Widget _buildShopHeader(String shopName) {
     final sellerName = (_seller?.name.trim().isNotEmpty == true)
         ? _seller!.name.trim()
-        : 'Skilled Person';
+        : (_profile?.name?.trim().isNotEmpty == true
+            ? _profile!.name!.trim()
+            : 'Skilled Person');
     final bio = (_profile?.bio ?? '').trim();
     final skills = _profile?.skills ?? const <String>[];
 
@@ -216,7 +275,7 @@ class _ShopStorefrontScreenState extends State<ShopStorefrontScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _shopName,
+                      shopName,
                       style: const TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 16,

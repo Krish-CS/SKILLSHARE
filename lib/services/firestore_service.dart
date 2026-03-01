@@ -2746,6 +2746,30 @@ class FirestoreService {
     return defaults;
   }
 
+  /// Real-time stream of shop settings from the skilled user's document.
+  /// Emits the merged settings map (with defaults) whenever it changes.
+  Stream<Map<String, dynamic>> streamShopSettings(String userId) {
+    const defaults = <String, dynamic>{
+      'enableDeliveryIfAvailable': true,
+      'maxDeliveryQuantity': 10,
+    };
+    return _firestore
+        .collection(AppConstants.skilledUsersCollection)
+        .doc(userId)
+        .snapshots()
+        .map((doc) {
+      if (!doc.exists) return defaults;
+      final settings = doc.data()?['shopSettings'];
+      if (settings is Map) {
+        return {
+          ...defaults,
+          ...Map<String, dynamic>.from(settings),
+        };
+      }
+      return defaults;
+    });
+  }
+
   Future<void> updateShopSettings(
     String userId,
     Map<String, dynamic> settings,

@@ -553,14 +553,14 @@ class _JobsScreenState extends State<JobsScreen> {
               child: Container(
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF6A11CB), Color(0xFFe43396)],
+                    colors: [Color(0xFF2196F3), Color(0xFF00BCD4)],
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
                   ),
                   borderRadius: BorderRadius.circular(30),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF6A11CB).withValues(alpha: 0.35),
+                      color: const Color(0xFF2196F3).withValues(alpha: 0.35),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
