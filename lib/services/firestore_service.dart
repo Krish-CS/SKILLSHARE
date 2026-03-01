@@ -2041,6 +2041,8 @@ class FirestoreService {
   }) async {
     final jobRef =
         _firestore.collection(AppConstants.jobsCollection).doc(jobId);
+
+    // ── 1. Transactional acceptance ─────────────────────────────────────────
     await _firestore.runTransaction((transaction) async {
       final jobSnap = await transaction.get(jobRef);
       if (!jobSnap.exists) throw Exception('Job not found.');
@@ -2063,6 +2065,158 @@ class FirestoreService {
         'updatedAt': FieldValue.serverTimestamp(),
         'applicationStatus.$applicantId': 'accepted',
       });
+    });
+
+    // ── 2. Re-read job for title ────────────────────────────────────────────
+    final jobDoc = await jobRef.get();
+    final jobTitle =
+        (jobDoc.data()?['title'] as String?)?.trim() ?? 'a job';
+
+    // ── 3. Notify the skilled person ────────────────────────────────────────
+    await _firestore.collection('notifications').add({
+      'toUserId': applicantId,
+      'fromUserId': companyId,
+      'type': 'jobAccepted',
+      'title': 'Job Offer Received!',
+      'body':
+          'Your application for "$jobTitle" has been accepted. '
+          'Open the Jobs → My Jobs tab and check your chat for the offer letter.',
+      'jobId': jobId,
+      'jobTitle': jobTitle,
+      'createdAt': FieldValue.serverTimestamp(),
+      'seen': false,
+    });
+
+    // ── 4. Ensure a chat exists between company and applicant ───────────────
+    final sorted = [companyId, applicantId]..sort();
+    final chatId = '${sorted[0]}__${sorted[1]}';
+    final chatRef =
+        _firestore.collection(AppConstants.chatsCollection).doc(chatId);
+
+    final companyDoc = await _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(companyId)
+        .get();
+    final companyName =
+        (companyDoc.data()?['name'] as String?)?.trim() ??
+        (companyDoc.data()?['companyName'] as String?)?.trim() ??
+        'The company';
+
+    await chatRef.set({
+      'participants': sorted,
+      'participantDetails': {
+        companyId: {'name': companyName},
+        applicantId: {},
+      },
+      'lastMessage': '📄 Offer Letter – $jobTitle',
+      'lastMessageType': 'offer_letter',
+      'lastMessageTime': FieldValue.serverTimestamp(),
+      'unreadCount': {companyId: 0, applicantId: 1},
+      'updatedAt': FieldValue.serverTimestamp(),
+      'createdAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    // ── 5. Send offer-letter message ────────────────────────────────────────
+    final offerText =
+        '🎉 Offer Letter\n\n'
+        'Dear candidate,\n\n'
+        'We are pleased to offer you the position of "$jobTitle". '
+        'Please review the details and confirm your availability.\n\n'
+        'Congratulations and welcome aboard!\n\n'
+        '— $companyName';
+
+    final msgRef = chatRef
+        .collection(AppConstants.messagesCollection)
+        .doc();
+    final batch = _firestore.batch();
+    batch.set(msgRef, {
+      'chatId': chatId,
+      'senderId': companyId,
+      'text': offerText,
+      'type': 'offer_letter',
+      'jobId': jobId,
+      'jobTitle': jobTitle,
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    batch.update(chatRef, {
+      'lastMessage': '📄 Offer Letter – $jobTitle',
+      'lastMessageType': 'offer_letter',
+      'lastMessageTime': FieldValue.serverTimestamp(),
+      'unreadCount.$applicantId': FieldValue.increment(1),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
+  }
+
+  /// Returns a human-readable conflict description if the applicant's
+  /// existing accepted jobs clash with [newJobId], or null if safe to accept.
+  Future<String?> checkJobConflicts(
+      String applicantId, String newJobId) async {
+    final newDoc = await _firestore
+        .collection(AppConstants.jobsCollection)
+        .doc(newJobId)
+        .get();
+    if (!newDoc.exists || newDoc.data() == null) return null;
+    final newJob = JobModel.fromMap(newDoc.data()!, newDoc.id);
+
+    // Fetch all jobs already accepted for this applicant
+    final snapshot = await _firestore
+        .collection(AppConstants.jobsCollection)
+        .where('applicationStatus.$applicantId', isEqualTo: 'accepted')
+        .get();
+
+    final existing = snapshot.docs
+        .map((d) => JobModel.fromMap(d.data(), d.id))
+        .where((j) => j.id != newJobId && j.status != 'cancelled')
+        .toList();
+
+    if (existing.isEmpty) return null;
+
+    for (final e in existing) {
+      // Full-time + full-time = definite conflict regardless of shift
+      if (newJob.jobType == 'full-time' && e.jobType == 'full-time') {
+        return 'This applicant already has a full-time position at '
+            '"${e.title}". Accepting this full-time role would create a '
+            'direct schedule conflict.';
+      }
+
+      // Shift-time overlap check
+      final nShift = newJob.shiftMinutes;
+      final eShift = e.shiftMinutes;
+      if (nShift != null && eShift != null) {
+        final overlapStart = nShift.$1 > eShift.$1 ? nShift.$1 : eShift.$1;
+        final overlapEnd   = nShift.$2 < eShift.$2 ? nShift.$2 : eShift.$2;
+        if (overlapStart < overlapEnd) {
+          // Check if same work-day overlap
+          final nDays = newJob.workDays;
+          final eDays = e.workDays;
+          final sameDay = nDays.isEmpty ||
+              eDays.isEmpty ||
+              nDays.any((d) => eDays.contains(d));
+          if (sameDay) {
+            return 'Shift conflict: applicant already works '
+                '${e.shiftLabel} at "${e.title}" on overlapping days. '
+                'Both roles require presence at the same time.';
+          }
+        }
+      }
+    }
+    return null; // no conflict
+  }
+
+  /// Stream of all jobs this [userId] has applied to.
+  Stream<List<JobModel>> streamAppliedJobs(String userId) {
+    return _firestore
+        .collection(AppConstants.jobsCollection)
+        .where('applicants', arrayContains: userId)
+        .snapshots()
+        .map((s) {
+      final list = s.docs
+          .map((d) => JobModel.fromMap(d.data(), d.id))
+          .toList();
+      list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      return list;
     });
   }
 

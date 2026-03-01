@@ -30,9 +30,11 @@ class _JobsScreenState extends State<JobsScreen> {
   StreamSubscription<List<JobModel>>? _jobsSub;
   StreamSubscription<UserModel?>? _userSub;
   StreamSubscription<CompanyProfile?>? _companySub;
+  StreamSubscription<List<JobModel>>? _appliedJobsSub;
 
   List<JobModel> _allJobs = [];
   List<JobModel> _filteredJobs = [];
+  List<JobModel> _appliedJobs = [];
   UserModel? _currentUser;
   CompanyProfile? _companyProfile;
   bool _isLoading = true;
@@ -61,6 +63,7 @@ class _JobsScreenState extends State<JobsScreen> {
     _jobsSub?.cancel();
     _userSub?.cancel();
     _companySub?.cancel();
+    _appliedJobsSub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -119,6 +122,19 @@ class _JobsScreenState extends State<JobsScreen> {
         if (mounted && _isLoading) setState(() => _isLoading = false);
       },
     );
+
+    // For skilled persons: also stream the jobs they have applied to
+    if (!isCompany && currentUid != null) {
+      _appliedJobsSub?.cancel();
+      _appliedJobsSub = _firestoreService
+          .streamAppliedJobs(currentUid)
+          .listen((jobs) {
+        if (mounted) setState(() => _appliedJobs = jobs);
+      });
+    } else {
+      _appliedJobsSub?.cancel();
+      _appliedJobsSub = null;
+    }
   }
 
   void _applyFilters() {
@@ -297,31 +313,335 @@ class _JobsScreenState extends State<JobsScreen> {
     );
   }
 
-  // ─── Default (non-company) scaffold ───────────────────────────────────────
-
   Widget _buildDefaultScaffold() {
     final authProvider = Provider.of<app_auth.AuthProvider>(context);
     final userRole = authProvider.userRole ?? UserRoles.customer;
-    final screenTitle = userRole == UserRoles.skilledPerson
-        ? 'Find Jobs'
-        : 'Hire & Jobs';
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(screenTitle, style: const TextStyle(color: Colors.white)),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF2196F3), Color(0xFF00BCD4)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+    final isSkilledPerson = userRole == UserRoles.skilledPerson;
+
+    if (!isSkilledPerson) {
+      // Non-company, non-skilled (customer): plain view
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Hire & Jobs',
+              style: TextStyle(color: Colors.white)),
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF2196F3), Color(0xFF00BCD4)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
+          elevation: 0,
+        ),
+        body: _buildJobsBody(),
+      );
+    }
+
+    // ── Skilled Person: tabbed view ──────────────────────────────────────────
+    final acceptedCount =
+        _appliedJobs.where((j) => j.applicationStatus[FirebaseAuth.instance.currentUser?.uid ?? ''] == 'accepted').length;
+
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Jobs', style: TextStyle(color: Colors.white)),
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF2196F3), Color(0xFF00BCD4)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
+          elevation: 0,
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(46),
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.14)),
+                ),
+              ),
+              child: TabBar(
+                indicatorColor: Colors.white,
+                indicatorWeight: 3,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white70,
+                tabs: [
+                  const Tab(
+                      icon: Icon(Icons.search, size: 18),
+                      text: 'Browse Jobs'),
+                  Tab(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.work_history_outlined, size: 18),
+                        const SizedBox(width: 6),
+                        const Text('My Jobs'),
+                        if (acceptedCount > 0) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '$acceptedCount',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF2196F3),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-        elevation: 0,
+        body: TabBarView(
+          children: [
+            _buildJobsBody(),
+            _buildMyJobsTab(),
+          ],
+        ),
       ),
-      body: _buildJobsBody(),
     );
   }
+
+  Widget _buildMyJobsTab() {
+    final userId = FirebaseAuth.instance.currentUser?.uid ?? '';
+
+    if (_appliedJobs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.work_off_outlined, size: 72, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text(
+              'No applications yet',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Jobs you apply to will appear here.',
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Group by status
+    final accepted =
+        _appliedJobs.where((j) => j.applicationStatus[userId] == 'accepted').toList();
+    final pending = _appliedJobs
+        .where((j) =>
+            j.applicationStatus[userId] == 'pending' ||
+            j.applicationStatus[userId] == null)
+        .toList();
+    final rejected =
+        _appliedJobs.where((j) => j.applicationStatus[userId] == 'rejected').toList();
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        if (accepted.isNotEmpty) ...[
+          _sectionHeader(Icons.check_circle, 'Accepted / Offer Received',
+              Colors.green, accepted.length),
+          const SizedBox(height: 8),
+          ...accepted.map((j) => _appliedJobCard(j, userId, 'accepted')),
+          const SizedBox(height: 16),
+        ],
+        if (pending.isNotEmpty) ...[
+          _sectionHeader(
+              Icons.hourglass_top, 'Pending Review', Colors.orange, pending.length),
+          const SizedBox(height: 8),
+          ...pending.map((j) => _appliedJobCard(j, userId, 'pending')),
+          const SizedBox(height: 16),
+        ],
+        if (rejected.isNotEmpty) ...[
+          _sectionHeader(
+              Icons.cancel_outlined, 'Not Selected', Colors.red, rejected.length),
+          const SizedBox(height: 8),
+          ...rejected.map((j) => _appliedJobCard(j, userId, 'rejected')),
+        ],
+      ],
+    );
+  }
+
+  Widget _sectionHeader(
+      IconData icon, String title, Color color, int count) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 6),
+        Text(title,
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: color)),
+        const SizedBox(width: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            '$count',
+            style: TextStyle(
+                fontSize: 11, fontWeight: FontWeight.bold, color: color),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _appliedJobCard(JobModel job, String userId, String status) {
+    final Color statusColor = status == 'accepted'
+        ? Colors.green
+        : status == 'rejected'
+            ? Colors.red
+            : Colors.orange;
+    final String statusText = status == 'accepted'
+        ? 'Accepted'
+        : status == 'rejected'
+            ? 'Not Selected'
+            : 'Pending';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => JobDetailScreen(job: job)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Slim accent bar
+            Container(
+              height: 4,
+              color: statusColor,
+            ),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          job.title,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: statusColor.withValues(alpha: 0.4)),
+                        ),
+                        child: Text(statusText,
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: statusColor)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      _infoChip(Icons.category_outlined,
+                          job.jobType.replaceAll('-', ' ')),
+                      _infoChip(Icons.location_on_outlined, job.location),
+                      if (job.shiftType != null)
+                        _infoChip(Icons.schedule, job.shiftLabel),
+                    ],
+                  ),
+                  if (status == 'accepted') ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: Colors.green.withValues(alpha: 0.3)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.mark_email_unread_outlined,
+                              size: 16, color: Colors.green),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'An offer letter has been sent to your chat. '
+                              'Please check your messages.',
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.green),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoChip(IconData icon, String label) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.grey[100],
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: Colors.grey[600]),
+            const SizedBox(width: 4),
+            Text(label,
+                style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+          ],
+        ),
+      );
+
 
   // ─── Shared jobs list body ────────────────────────────────────────────────
 

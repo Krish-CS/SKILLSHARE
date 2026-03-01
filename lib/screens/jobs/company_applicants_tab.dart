@@ -262,14 +262,93 @@ class _JobApplicantsScreenState extends State<JobApplicantsScreen> {
   }
 
   Future<void> _accept(String applicantId) async {
+    // ── 1. Check for scheduling conflicts ───────────────────────────────────
     setState(() => _processingId = applicantId);
+    String? conflictMsg;
+    try {
+      conflictMsg = await _firestoreService.checkJobConflicts(
+          applicantId, _job.id);
+    } catch (_) {
+      // Non-fatal: proceed without conflict info if check fails
+    }
+
+    if (conflictMsg != null && mounted) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.warning_amber_rounded,
+                    color: Colors.orange, size: 22),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text('Schedule Conflict',
+                    style: TextStyle(fontSize: 16)),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(conflictMsg!,
+                  style: const TextStyle(fontSize: 14, height: 1.5)),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.07),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Text(
+                  'You can still proceed — the applicant will be notified '
+                  'and can choose to accept or decline your offer.',
+                  style: TextStyle(fontSize: 12, color: Colors.blue),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Proceed Anyway'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true || !mounted) {
+        setState(() => _processingId = null);
+        return;
+      }
+    }
+
+    // ── 2. Accept ────────────────────────────────────────────────────────────
     try {
       await _firestoreService.acceptJobApplicant(
         jobId: _job.id,
         applicantId: applicantId,
         companyId: _job.companyId,
       );
-      if (mounted) AppDialog.success(context, 'Applicant accepted!');
+      if (mounted) {
+        AppDialog.success(context,
+            'Applicant accepted! Offer letter sent via chat.');
+      }
     } catch (e) {
       if (mounted) AppDialog.error(context, 'Failed', detail: e.toString());
     } finally {

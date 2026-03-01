@@ -2500,24 +2500,23 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
     return Column(
       children: [
-        // Header showing count
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+        // Slim count row
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Row(
             children: [
               const Icon(Icons.assignment_turned_in_outlined,
-                  size: 18, color: Color(0xFF388E3C)),
-              const SizedBox(width: 8),
+                  size: 16, color: Color(0xFF388E3C)),
+              const SizedBox(width: 6),
               Text(
                 '${_acceptedRequests.length} Active Project${_acceptedRequests.length > 1 ? 's' : ''}',
-                style:
-                    const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ],
           ),
         ),
-        const Divider(height: 1),
+        const Divider(height: 16),
         // List of separate project cards with index
         Expanded(
           child: ListView.separated(

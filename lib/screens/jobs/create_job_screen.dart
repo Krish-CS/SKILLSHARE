@@ -32,6 +32,26 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   DateTime? _selectedDeadline;
   bool _isLoading = false;
 
+  // ── Shift / schedule state ──────────────────────────────────────────────
+  String? _shiftType;       // 'morning' | 'afternoon' | 'evening' | 'night' | 'custom' | 'flexible'
+  TimeOfDay? _shiftStart;   // only for 'custom'
+  TimeOfDay? _shiftEnd;     // only for 'custom'
+  final Set<String> _selectedWorkDays = {};
+
+  static const _shiftOptions = [
+    ('flexible',  'Flexible (any time)'),
+    ('morning',   'Morning  6 AM – 12 PM'),
+    ('afternoon', 'Afternoon  12 PM – 6 PM'),
+    ('evening',   'Evening  6 PM – 10 PM'),
+    ('night',     'Night  10 PM – 6 AM'),
+    ('custom',    'Custom hours'),
+  ];
+
+  static const _days = [
+    ('mon', 'Mon'), ('tue', 'Tue'), ('wed', 'Wed'),
+    ('thu', 'Thu'), ('fri', 'Fri'), ('sat', 'Sat'), ('sun', 'Sun'),
+  ];
+
   bool get _isEditing => widget.existingJob != null;
 
   @override
@@ -50,6 +70,16 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           : null;
       _requiredSkills.addAll(job.requiredSkills);
       _selectedDeadline = job.deadline;
+      _shiftType = job.shiftType;
+      if (job.shiftStart != null) {
+        final p = job.shiftStart!.split(':');
+        _shiftStart = TimeOfDay(hour: int.parse(p[0]), minute: int.parse(p[1]));
+      }
+      if (job.shiftEnd != null) {
+        final p = job.shiftEnd!.split(':');
+        _shiftEnd = TimeOfDay(hour: int.parse(p[0]), minute: int.parse(p[1]));
+      }
+      _selectedWorkDays.addAll(job.workDays);
     }
   }
 
@@ -71,8 +101,16 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     super.dispose();
   }
 
-  Future<void> _selectDeadline() async {
-    final DateTime? picked = await showDatePicker(
+  Future<TimeOfDay?> _pickTime(TimeOfDay initial) =>
+      showTimePicker(context: context, initialTime: initial);
+
+  String _formatTod(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  bool get _needsShift =>
+      _selectedJobType == 'Full-time' || _selectedJobType == 'Part-time';
+
+  Future<void> _selectDeadline() async {    final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: DateTime.now().add(const Duration(days: 30)),
       firstDate: DateTime.now(),
@@ -152,6 +190,14 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
               : null,
           jobType: _selectedJobType!.toLowerCase(),
           status: widget.existingJob!.status,
+          shiftType: _needsShift ? (_shiftType ?? 'flexible') : null,
+          shiftStart: (_needsShift && _shiftType == 'custom' && _shiftStart != null)
+              ? _formatTod(_shiftStart!)
+              : null,
+          shiftEnd: (_needsShift && _shiftType == 'custom' && _shiftEnd != null)
+              ? _formatTod(_shiftEnd!)
+              : null,
+          workDays: _selectedWorkDays.toList(),
           applicants: widget.existingJob!.applicants,
           applicationStatus: widget.existingJob!.applicationStatus,
           selectedApplicant: widget.existingJob!.selectedApplicant,
@@ -180,6 +226,14 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
               : null,
           jobType: _selectedJobType!.toLowerCase(),
           status: 'open',
+          shiftType: _needsShift ? (_shiftType ?? 'flexible') : null,
+          shiftStart: (_needsShift && _shiftType == 'custom' && _shiftStart != null)
+              ? _formatTod(_shiftStart!)
+              : null,
+          shiftEnd: (_needsShift && _shiftType == 'custom' && _shiftEnd != null)
+              ? _formatTod(_shiftEnd!)
+              : null,
+          workDays: _selectedWorkDays.toList(),
           applicationStatus: const {},
           deadline: _selectedDeadline!,
           createdAt: now,
@@ -311,6 +365,135 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
               },
             ),
             const SizedBox(height: 16),
+
+            // ── Shift section (only for Full-time / Part-time) ─────────────
+            if (_needsShift) ...[
+              Card(
+                elevation: 1,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.schedule,
+                              color: Color(0xFF2196F3), size: 18),
+                          SizedBox(width: 8),
+                          Text(
+                            'Work Hours & Schedule',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF2196F3),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Shift type dropdown
+                      DropdownButtonFormField<String>(
+                        value: _shiftType,
+                        decoration: InputDecoration(
+                          labelText: 'Shift',
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                        ),
+                        hint: const Text('Select shift'),
+                        items: _shiftOptions.map((e) {
+                          return DropdownMenuItem(
+                              value: e.$1, child: Text(e.$2));
+                        }).toList(),
+                        onChanged: (v) => setState(() => _shiftType = v),
+                      ),
+
+                      // Custom start/end time pickers
+                      if (_shiftType == 'custom') ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                icon: const Icon(Icons.access_time, size: 16),
+                                label: Text(
+                                  _shiftStart == null
+                                      ? 'Start time'
+                                      : _formatTod(_shiftStart!),
+                                ),
+                                onPressed: () async {
+                                  final t = await _pickTime(
+                                    _shiftStart ?? const TimeOfDay(hour: 9, minute: 0),
+                                  );
+                                  if (t != null) setState(() => _shiftStart = t);
+                                },
+                              ),
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 10),
+                              child: Text('to',
+                                  style: TextStyle(color: Colors.grey)),
+                            ),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                icon: const Icon(Icons.access_time, size: 16),
+                                label: Text(
+                                  _shiftEnd == null
+                                      ? 'End time'
+                                      : _formatTod(_shiftEnd!),
+                                ),
+                                onPressed: () async {
+                                  final t = await _pickTime(
+                                    _shiftEnd ?? const TimeOfDay(hour: 18, minute: 0),
+                                  );
+                                  if (t != null) setState(() => _shiftEnd = t);
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Work Days  (leave empty = all days)',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        children: _days.map((d) {
+                          final selected = _selectedWorkDays.contains(d.$1);
+                          return ChoiceChip(
+                            label: Text(d.$2,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: selected
+                                      ? Colors.white
+                                      : Colors.grey[700],
+                                )),
+                            selected: selected,
+                            selectedColor: const Color(0xFF2196F3),
+                            onSelected: (v) => setState(() {
+                              if (v) {
+                                _selectedWorkDays.add(d.$1);
+                              } else {
+                                _selectedWorkDays.remove(d.$1);
+                              }
+                            }),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
 
             // Description
             TextFormField(
