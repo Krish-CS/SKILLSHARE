@@ -416,9 +416,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(Icons.currency_rupee,
-                            color: Colors.white, size: 18),
-                        const SizedBox(width: 4),
                         Text(
                           '${AppHelpers.formatCurrency(_job.budgetMin!)} - ${AppHelpers.formatCurrency(_job.budgetMax!)}',
                           style: const TextStyle(
