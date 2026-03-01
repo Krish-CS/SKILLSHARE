@@ -125,6 +125,8 @@ class _NotificationCard extends StatelessWidget {
         return item.chatId != null || item.otherUserId != null;
       case NotificationType.order:
         return item.orderData != null;
+      case NotificationType.jobApplication:
+        return item.jobId != null;
     }
   }
 

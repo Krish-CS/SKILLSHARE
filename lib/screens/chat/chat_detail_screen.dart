@@ -72,7 +72,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   // Message stream + reactive read receipt
   late final Stream<List<MessageModel>> _messageStream;
-  StreamSubscription<List<MessageModel>>? _messageReadSubscription;
+  bool _markingRead = false;
 
   // Edit mode
   MessageModel? _editingMessage;
@@ -105,8 +105,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     super.initState();
     _currentUserId = FirebaseAuth.instance.currentUser?.uid;
     _isWorkChat = widget.chatId.startsWith('work_');
-    _messageStream =
-        _chatService.getMessages(widget.chatId).asBroadcastStream();
+    _messageStream = _chatService.getMessages(widget.chatId);
     _tabController = TabController(length: 2, vsync: this);
     _bubbleCtrl = AnimationController(
       vsync: this,
@@ -157,16 +156,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       _chatService.markMessagesAsRead(widget.chatId, _currentUserId!);
     }
 
-    // Reactive read receipt — also marks new incoming messages as read
-    _messageReadSubscription = _messageStream.listen((messages) {
-      final uid = _currentUserId;
-      if (uid == null) return;
-      final hasUnread = messages.any((m) => !m.isRead && m.senderId != uid);
-      if (hasUnread) {
-        _chatService.markMessagesAsRead(widget.chatId, uid);
-      }
-    });
-
     _loadChatContext();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadConversationRoles());
   }
@@ -174,7 +163,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   @override
   void dispose() {
     _workReqSubscription?.cancel();
-    _messageReadSubscription?.cancel();
     _presenceSubscription?.cancel();
     _otherUserSub?.cancel();
     _bubbleCtrl.dispose();
@@ -981,13 +969,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         requests: _pendingRequests,
         currentUserId: _currentUserId!,
         otherUserName: widget.otherUserName,
-        parentContext: context,
         firestoreService: _firestoreService,
         chatService: _chatService,
         otherUserId: widget.otherUserId,
         chatId: widget.chatId,
       ),
-    );
+    ).then((_) {
+      if (!mounted) return;
+      if (_workLocked) {
+        _tabController.animateTo(1);
+      }
+    });
   }
 
   void _showAskWorkDialog(BuildContext context) {
@@ -1151,35 +1143,18 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     );
   }
 
-  Future<void> _openAcceptedWorkChat(
-    ServiceRequestModel request, {
-    bool closeCurrentSheet = false,
-  }) async {
+  Future<void> _markIncomingAsReadIfNeeded(List<MessageModel> messages) async {
+    if (_markingRead) return;
+    final uid = _currentUserId;
+    if (uid == null) return;
+    final hasUnread = messages.any((m) => !m.isRead && m.senderId != uid);
+    if (!hasUnread) return;
+
+    _markingRead = true;
     try {
-      final workChatId = await _firestoreService.ensureWorkChatForRequest(
-        requestId: request.id,
-      );
-      if (!mounted) return;
-
-      if (closeCurrentSheet && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ChatDetailScreen(
-            chatId: workChatId,
-            otherUserId: widget.otherUserId,
-            otherUserName: widget.otherUserName,
-            otherUserPhoto: widget.otherUserPhoto,
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      AppPopup.show(context,
-          message: 'Failed to open work chat: $e', type: PopupType.error);
+      await _chatService.markMessagesAsRead(widget.chatId, uid);
+    } finally {
+      _markingRead = false;
     }
   }
 
@@ -1429,10 +1404,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           );
                           if (mounted) {
                             AppDialog.success(context, 'Work request accepted!');
-                            await _openAcceptedWorkChat(
-                              r,
-                              closeCurrentSheet: true,
-                            );
+                            await Future<void>.delayed(
+                                const Duration(milliseconds: 150));
+                            if (mounted && _workLocked) {
+                              _tabController.animateTo(1);
+                            }
                           }
                         } catch (e) {
                           if (mounted) {
@@ -2167,6 +2143,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               }
 
               final messages = snapshot.data!;
+              unawaited(_markIncomingAsReadIfNeeded(messages));
               return ListView.builder(
                 controller: _scrollController,
                 reverse: true,
@@ -2723,35 +2700,6 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
     }
   }
 
-  Future<void> _openWorkChat() async {
-    if (_openingWorkChat) return;
-    setState(() => _openingWorkChat = true);
-    try {
-      final workChatId = await widget.firestoreService.ensureWorkChatForRequest(
-        requestId: widget.request.id,
-      );
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ChatDetailScreen(
-            chatId: workChatId,
-            otherUserId: widget.otherUserId,
-            otherUserName: widget.otherUserName,
-            otherUserPhoto: widget.otherUserPhoto,
-          ),
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        AppPopup.show(context,
-            message: 'Unable to open work chat: $e', type: PopupType.error);
-      }
-    } finally {
-      if (mounted) setState(() => _openingWorkChat = false);
-    }
-  }
-
   Future<void> _triggerPayment() async {
     if (_paying) return;
 
@@ -2788,6 +2736,35 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
       }
     } finally {
       if (mounted) setState(() => _paying = false);
+    }
+  }
+
+  Future<void> _openWorkChat() async {
+    if (_openingWorkChat) return;
+    setState(() => _openingWorkChat = true);
+    try {
+      final workChatId = await widget.firestoreService.ensureWorkChatForRequest(
+        requestId: widget.request.id,
+      );
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatDetailScreen(
+            chatId: workChatId,
+            otherUserId: widget.otherUserId,
+            otherUserName: widget.otherUserName,
+            otherUserPhoto: widget.otherUserPhoto,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        AppPopup.show(context,
+            message: 'Unable to open work chat: $e', type: PopupType.error);
+      }
+    } finally {
+      if (mounted) setState(() => _openingWorkChat = false);
     }
   }
 
@@ -3216,7 +3193,6 @@ class _PendingRequestsSheet extends StatefulWidget {
   final List<ServiceRequestModel> requests;
   final String currentUserId;
   final String otherUserName;
-  final BuildContext parentContext;
   final String otherUserId;
   final String chatId;
   final FirestoreService firestoreService;
@@ -3226,7 +3202,6 @@ class _PendingRequestsSheet extends StatefulWidget {
     required this.requests,
     required this.currentUserId,
     required this.otherUserName,
-    required this.parentContext,
     required this.otherUserId,
     required this.chatId,
     required this.firestoreService,
@@ -3303,7 +3278,6 @@ class _PendingRequestsSheetState extends State<_PendingRequestsSheet> {
                 request: widget.requests[i],
                 currentUserId: widget.currentUserId,
                 otherUserName: widget.otherUserName,
-                parentContext: widget.parentContext,
                 chatId: widget.chatId,
                 otherUserId: widget.otherUserId,
                 firestoreService: widget.firestoreService,
@@ -3329,7 +3303,6 @@ class _PendingDetailCard extends StatefulWidget {
   final ServiceRequestModel request;
   final String currentUserId;
   final String otherUserName;
-  final BuildContext parentContext;
   final String chatId;
   final String otherUserId;
   final FirestoreService firestoreService;
@@ -3340,7 +3313,6 @@ class _PendingDetailCard extends StatefulWidget {
     required this.request,
     required this.currentUserId,
     required this.otherUserName,
-    required this.parentContext,
     required this.chatId,
     required this.otherUserId,
     required this.firestoreService,
@@ -3475,26 +3447,8 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
       if (!mounted) return;
 
       if (approve) {
-        final workChatId = await widget.firestoreService.ensureWorkChatForRequest(
-          requestId: widget.request.id,
-        );
-        if (!mounted) return;
-
-        if (Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
-        }
-
-        if (widget.parentContext.mounted) {
-          Navigator.of(widget.parentContext).push(
-            MaterialPageRoute(
-              builder: (_) => ChatDetailScreen(
-                chatId: workChatId,
-                otherUserId: widget.otherUserId,
-                otherUserName: widget.otherUserName,
-              ),
-            ),
-          );
-        }
+        AppDialog.success(context, 'Work request accepted.');
+        widget.onActionDone();
       } else {
         AppDialog.info(context, 'Work request rejected.');
         widget.onActionDone();

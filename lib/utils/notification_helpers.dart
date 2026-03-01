@@ -2,15 +2,17 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../models/order_model.dart';
 import '../models/service_request_model.dart';
+import '../models/job_model.dart';
 import '../services/chat_service.dart';
 import '../services/firestore_service.dart';
 import '../screens/chat/chat_detail_screen.dart';
+import '../screens/jobs/job_detail_screen.dart';
 import '../screens/shop/order_tracking_screen.dart';
 import 'app_constants.dart';
 import 'app_helpers.dart';
 
 /// Type of notification - used for click-based navigation.
-enum NotificationType { workRequest, order, chatMessage }
+enum NotificationType { workRequest, order, chatMessage, jobApplication }
 
 /// A single notification item (work-request, order update, or chat message).
 class NotificationItem {
@@ -28,6 +30,7 @@ class NotificationItem {
   final String? otherUserPhoto;
   final String? requestId; // For work-request notifications
   final OrderModel? orderData; // For order notifications
+  final String? jobId; // For job application notifications
 
   const NotificationItem({
     required this.title,
@@ -42,6 +45,7 @@ class NotificationItem {
     this.otherUserPhoto,
     this.requestId,
     this.orderData,
+    this.jobId,
   });
 }
 
@@ -206,6 +210,45 @@ Future<List<NotificationItem>> loadNotificationsForUser(
   for (final doc in reminderSnap.docs) {
     final data = doc.data();
     final type = (data['type'] as String?)?.trim() ?? '';
+    // ── Job application notifications ────────────────────────────────────
+    if (type == 'jobApplication') {
+      final fromUserId = (data['fromUserId'] as String?)?.trim() ?? '';
+      final jobTitle = (data['jobTitle'] as String?)?.trim() ?? '';
+      final body = (data['body'] as String?)?.trim();
+      final notifTitle =
+          (data['title'] as String?)?.trim() ?? 'New job application';
+      final notifJobId = (data['jobId'] as String?)?.trim();
+      final createdAtTs = data['createdAt'] as Timestamp?;
+      final createdAt = createdAtTs?.toDate() ?? DateTime.now();
+
+      String? fromUserName;
+      String? fromUserPhoto;
+      if (fromUserId.isNotEmpty) {
+        final basic = await loadUserBasic(fromUserId);
+        fromUserName = basic['name'];
+        fromUserPhoto = basic['photo'];
+      }
+
+      notifications.add(
+        NotificationItem(
+          title: notifTitle,
+          subtitle: _isMeaningful(body)
+              ? body!
+              : '${_isMeaningful(fromUserName) ? fromUserName : 'Someone'}'
+                  ' applied${jobTitle.isNotEmpty ? ' for "$jobTitle"' : ''}',
+          createdAt: createdAt,
+          icon: Icons.work_history_rounded,
+          color: const Color(0xFF4CAF50),
+          type: NotificationType.jobApplication,
+          otherUserId: fromUserId.isNotEmpty ? fromUserId : null,
+          otherUserName: _isMeaningful(fromUserName) ? fromUserName : null,
+          otherUserPhoto:
+              _isMeaningful(fromUserPhoto) ? fromUserPhoto : null,
+          jobId: notifJobId,
+        ),
+      );
+      continue;
+    }
     if (type != 'work_request_reminder') continue;
 
     final requestId = (data['requestId'] as String?)?.trim();
@@ -458,6 +501,35 @@ Future<void> openNotificationItem(
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => OrderTrackingScreen(order: order)),
+      );
+      return;
+    case NotificationType.jobApplication:
+      final jobId = item.jobId?.trim();
+      if (jobId == null || jobId.isEmpty) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Job details not available.')),
+        );
+        return;
+      }
+      final jobSnap = await FirebaseFirestore.instance
+          .collection(AppConstants.jobsCollection)
+          .doc(jobId)
+          .get();
+      if (!jobSnap.exists) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This job is no longer available.')),
+        );
+        return;
+      }
+      if (!context.mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => JobDetailScreen(
+              job: JobModel.fromMap(jobSnap.data()!, jobSnap.id)),
+        ),
       );
       return;
     case NotificationType.workRequest:

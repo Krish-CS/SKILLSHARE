@@ -2,14 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:provider/provider.dart';
 import '../../models/chat_model.dart';
 import '../../services/chat_service.dart';
 import '../../services/presence_service.dart';
 import '../../utils/app_helpers.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/user_roles.dart';
-import '../../providers/auth_provider.dart' as app_auth;
 import '../../widgets/universal_avatar.dart';
 import 'chat_detail_screen.dart';
 
@@ -74,9 +72,6 @@ class _ChatsScreenState extends State<ChatsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<app_auth.AuthProvider>(context, listen: true);
-    final currentUserRole = UserRoles.normalizeRole(auth.userRole);
-
     if (_currentUserId == null) {
       return Scaffold(
         appBar: AppBar(
@@ -232,10 +227,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                   );
                 }
 
-                return _buildGroupedChatList(
-                  chats: chats,
-                  currentUserRole: currentUserRole,
-                );
+                return _buildGroupedChatList(chats: chats);
               },
             ),
           ),
@@ -246,51 +238,34 @@ class _ChatsScreenState extends State<ChatsScreen> {
 
   Widget _buildGroupedChatList({
     required List<ChatModel> chats,
-    required String? currentUserRole,
   }) {
-    final workChats = chats.where(_isHiringChat).toList();
-    final regularChats = chats.where((chat) => !_isHiringChat(chat)).toList();
+    final visibleChats = _collapseChatsByParticipant(chats);
 
     final companyChats = <ChatModel>[];
     final customerChats = <ChatModel>[];
-    final otherChats = <ChatModel>[];
+    final deliveryChats = <ChatModel>[];
 
-    for (final chat in regularChats) {
-      final otherRole = _otherUserRoleForChat(chat);
+    for (final chat in visibleChats) {
+      final otherRole = _resolvedOtherRoleForChat(chat);
       if (otherRole == UserRoles.company) {
         companyChats.add(chat);
+      } else if (otherRole == UserRoles.deliveryPartner) {
+        deliveryChats.add(chat);
       } else if (otherRole == UserRoles.customer) {
         customerChats.add(chat);
-      } else {
-        otherChats.add(chat);
       }
     }
 
     final sectionWidgets = <Widget>[];
 
-    if (workChats.isNotEmpty) {
-      sectionWidgets.add(_buildSectionHeader(
-        title: 'Hiring Chats',
-        icon: Icons.work_history_outlined,
-        color: const Color(0xFF1565C0),
-      ));
-      sectionWidgets.addAll(workChats.map(_buildChatItem));
-    }
-
-    final showCompanySectionFirst = currentUserRole == UserRoles.skilledPerson;
-    final orderedRegularSections = showCompanySectionFirst
-        ? [
-            ('Company Chats', Icons.apartment_rounded, const Color(0xFF3949AB),
-                companyChats),
-            ('Customer Chats', Icons.person_outline_rounded,
-                const Color(0xFF2E7D32), customerChats),
-          ]
-        : [
-            ('Customer Chats', Icons.person_outline_rounded,
-                const Color(0xFF2E7D32), customerChats),
-            ('Company Chats', Icons.apartment_rounded, const Color(0xFF3949AB),
-                companyChats),
-          ];
+    final orderedRegularSections = [
+      ('Customer Chats', Icons.person_outline_rounded, const Color(0xFF2E7D32),
+          customerChats),
+      ('Company Chats', Icons.apartment_rounded, const Color(0xFF3949AB),
+          companyChats),
+      ('Delivery Chats', Icons.local_shipping_outlined,
+          const Color(0xFFEF6C00), deliveryChats),
+    ];
 
     for (final section in orderedRegularSections) {
       final chatsInSection = section.$4;
@@ -301,15 +276,6 @@ class _ChatsScreenState extends State<ChatsScreen> {
         color: section.$3,
       ));
       sectionWidgets.addAll(chatsInSection.map(_buildChatItem));
-    }
-
-    if (otherChats.isNotEmpty) {
-      sectionWidgets.add(_buildSectionHeader(
-        title: 'Other Chats',
-        icon: Icons.chat_bubble_outline_rounded,
-        color: const Color(0xFF546E7A),
-      ));
-      sectionWidgets.addAll(otherChats.map(_buildChatItem));
     }
 
     if (sectionWidgets.isEmpty) {
@@ -354,7 +320,55 @@ class _ChatsScreenState extends State<ChatsScreen> {
     if (otherUserId.isEmpty) return null;
     final details = chat.participantDetails[otherUserId];
     final rawRole = (details is Map) ? details['role']?.toString() : null;
+    if (rawRole?.trim().toLowerCase() == 'delivery') {
+      return UserRoles.deliveryPartner;
+    }
     return UserRoles.normalizeRole(rawRole);
+  }
+
+  String _resolvedOtherRoleForChat(ChatModel chat) {
+    final role = _otherUserRoleForChat(chat);
+    if (role == UserRoles.company) return UserRoles.company;
+    if (role == UserRoles.deliveryPartner) return UserRoles.deliveryPartner;
+    return UserRoles.customer;
+  }
+
+  List<ChatModel> _collapseChatsByParticipant(List<ChatModel> chats) {
+    final byOtherUser = <String, ChatModel>{};
+
+    for (final chat in chats) {
+      final otherUserId = chat.participants.firstWhere(
+        (id) => id != _currentUserId,
+        orElse: () => '',
+      );
+      if (otherUserId.isEmpty) continue;
+
+      final existing = byOtherUser[otherUserId];
+      if (existing == null) {
+        byOtherUser[otherUserId] = chat;
+        continue;
+      }
+
+      final existingIsWork = _isHiringChat(existing);
+      final nextIsWork = _isHiringChat(chat);
+
+      // Prefer the regular chat over work-chat clones for the same person.
+      if (existingIsWork && !nextIsWork) {
+        byOtherUser[otherUserId] = chat;
+        continue;
+      }
+      if (!existingIsWork && nextIsWork) {
+        continue;
+      }
+
+      if (chat.lastMessageTime.isAfter(existing.lastMessageTime)) {
+        byOtherUser[otherUserId] = chat;
+      }
+    }
+
+    final collapsed = byOtherUser.values.toList()
+      ..sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
+    return collapsed;
   }
 
   bool _isHiringChat(ChatModel chat) =>
@@ -368,7 +382,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
     final otherUserDetails = chat.participantDetails[otherUserId];
     final name = otherUserDetails?['name'] ?? 'Unknown';
     final photo = otherUserDetails?['photo'];
-    final otherRole = _otherUserRoleForChat(chat);
+    final otherRole = _resolvedOtherRoleForChat(chat);
     final unreadCount = chat.unreadCount[_currentUserId] ?? 0;
     final pendingWork = _pendingWorkCounts[chat.id] ?? 0;
 
@@ -517,13 +531,6 @@ class _ChatsScreenState extends State<ChatsScreen> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            if (_isHiringChat(chat))
-                              _roleTag(
-                                label: 'HIRING',
-                                bgColor: const Color(0xFF1565C0)
-                                    .withValues(alpha: 0.12),
-                                fgColor: const Color(0xFF1565C0),
-                              ),
                             if (otherRole == UserRoles.company)
                               _roleTag(
                                 label: 'COMPANY',
@@ -537,6 +544,13 @@ class _ChatsScreenState extends State<ChatsScreen> {
                                 bgColor: const Color(0xFF2E7D32)
                                     .withValues(alpha: 0.12),
                                 fgColor: const Color(0xFF2E7D32),
+                              ),
+                            if (otherRole == UserRoles.deliveryPartner)
+                              _roleTag(
+                                label: 'DELIVERY',
+                                bgColor: const Color(0xFFEF6C00)
+                                    .withValues(alpha: 0.12),
+                                fgColor: const Color(0xFFEF6C00),
                               ),
                           ],
                         ),

@@ -1956,6 +1956,24 @@ class FirestoreService {
       };
 
       transaction.update(jobRef, updates);
+
+      // Notify the company about the new application
+      final companyId = (jobData['companyId'] as String?)?.trim() ?? '';
+      if (companyId.isNotEmpty && companyId != userId) {
+        final notifRef = _firestore.collection('notifications').doc();
+        transaction.set(notifRef, {
+          'toUserId': companyId,
+          'fromUserId': userId,
+          'type': 'jobApplication',
+          'title': 'New job application',
+          'body':
+              '${(userData['name'] as String?)?.trim() ?? 'Someone'} applied for "${(jobData['title'] as String?)?.trim() ?? 'your job'}"',
+          'jobId': jobId,
+          'jobTitle': (jobData['title'] as String?)?.trim() ?? '',
+          'createdAt': FieldValue.serverTimestamp(),
+          'seen': false,
+        });
+      }
     });
   }
 

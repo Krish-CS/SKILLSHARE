@@ -44,6 +44,9 @@ class _NotificationBellState extends State<NotificationBell> {
   StreamSubscription? _sellerOrderSub;
   StreamSubscription? _deliveryOrderSub;
   StreamSubscription? _chatSub;
+  StreamSubscription? _jobNotifSub;
+
+  QuerySnapshot? _lastJobNotifSnap;
 
   DateTime? _lastSeen; // lastNotificationSeenAt for requests/orders
   DateTime? _chatSeenAt; // time user last opened the bell (clears chat badge)
@@ -140,6 +143,16 @@ class _NotificationBellState extends State<NotificationBell> {
       _chatUnread = total;
       _recount();
     });
+
+    _jobNotifSub = _firestore
+        .collection('notifications')
+        .where('toUserId', isEqualTo: widget.userId)
+        .where('type', isEqualTo: 'jobApplication')
+        .snapshots()
+        .listen((snap) {
+      _lastJobNotifSnap = snap;
+      _recount();
+    });
   }
 
   void _recount() {
@@ -180,6 +193,17 @@ class _NotificationBellState extends State<NotificationBell> {
       }
     }
 
+    // Count unseen job application notifications
+    final jobNotifSnap = _lastJobNotifSnap;
+    if (jobNotifSnap != null) {
+      for (final doc in jobNotifSnap.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final ts = data['createdAt'];
+        if (ts is! Timestamp) continue;
+        if (_lastSeen == null || ts.toDate().isAfter(_lastSeen!)) count++;
+      }
+    }
+
     if (!_countCtrl.isClosed) _countCtrl.add(count);
   }
 
@@ -192,6 +216,7 @@ class _NotificationBellState extends State<NotificationBell> {
     _sellerOrderSub?.cancel();
     _deliveryOrderSub?.cancel();
     _chatSub?.cancel();
+    _jobNotifSub?.cancel();
     _countCtrl.close();
     super.dispose();
   }

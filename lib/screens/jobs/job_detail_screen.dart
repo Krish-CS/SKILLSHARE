@@ -43,6 +43,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   List<SkilledUserProfile> _applicantProfiles = [];
   Map<String, UserModel> _applicantUsers =
       {}; // Store UserModel for each applicant
+  final GlobalKey _applicantsKey = GlobalKey();
 
   @override
   void initState() {
@@ -661,8 +662,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                   ],
 
                   // Applicants (visible to employer only)
-                  if (_isEmployer && _applicantProfiles.isNotEmpty) ...[
+                  if (_isEmployer) ...[
                     Row(
+                      key: _applicantsKey,
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
@@ -694,6 +696,40 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
+                    if (_applicantProfiles.isEmpty)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 24, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.people_outline,
+                                size: 40, color: Colors.grey[400]),
+                            const SizedBox(height: 8),
+                            Text(
+                              'No applications yet',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Skilled users who apply will appear here',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  fontSize: 13, color: Colors.grey[500]),
+                            ),
+                          ],
+                        ),
+                      ),
                     ..._applicantProfiles.map((profile) {
                       final applicantUser = _applicantUsers[profile.userId];
                       final status = _applicationState(profile.userId);
@@ -1005,51 +1041,74 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: () {
-                          AppDialog.info(
-                            context,
-                            'Applicant management is available in the Applicants section below. Scroll down to accept or reject applications.',
-                          );
+                          if (_applicantsKey.currentContext != null) {
+                            Scrollable.ensureVisible(
+                              _applicantsKey.currentContext!,
+                              duration: const Duration(milliseconds: 500),
+                              curve: Curves.easeInOut,
+                            );
+                          }
                         },
                         icon: const Icon(Icons.people),
-                        label: Text('${_job.applicants.length} Applicants'),
+                        label: Text('${_job.applicants.length} Applicant${_job.applicants.length == 1 ? '' : 's'}'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2196F3),
+                          foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
                     ),
                   ],
                 )
-              : ElevatedButton(
-                  onPressed:
-                      _canApply ? (_isLoading ? null : _applyForJob) : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2196F3),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    disabledBackgroundColor: Colors.grey[300],
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : Text(
-                          _hasApplied
-                              ? 'Already Applied'
-                              : _job.status != 'open'
+              : _hasApplied
+                  ? ElevatedButton.icon(
+                      onPressed: null,
+                      icon: const Icon(Icons.check_circle_outline,
+                          color: Colors.white),
+                      label: const Text(
+                        'Application Submitted',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF4CAF50),
+                        disabledBackgroundColor: const Color(0xFF4CAF50),
+                        disabledForegroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                    )
+                  : ElevatedButton(
+                      onPressed:
+                          _canApply ? (_isLoading ? null : _applyForJob) : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2196F3),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        disabledBackgroundColor: Colors.grey[300],
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Text(
+                              _job.status != 'open'
                                   ? 'Job Closed'
                                   : 'Apply Now',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                ),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                    ),
         ),
       ),
     );
