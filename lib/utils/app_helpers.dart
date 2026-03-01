@@ -94,3 +94,14 @@ class AppHelpers {
     return '${text.substring(0, maxLength)}...';
   }
 }
+
+/// Capitalize the first letter of every word in a string.
+/// e.g. "john doe" → "John Doe"
+extension StringCapitalize on String {
+  String capitalizeWords() {
+    if (isEmpty) return this;
+    return split(' ')
+        .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+        .join(' ');
+  }
+}

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../models/product_model.dart';
+import '../../models/user_model.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/product_card.dart';
 import '../../widgets/app_popup.dart';
@@ -16,6 +17,7 @@ import '../../widgets/filter_bottom_sheet.dart';
 import 'add_product_screen.dart';
 import 'product_detail_screen.dart';
 import 'cart_screen.dart';
+import 'shop_storefront_screen.dart';
 
 class ShopScreen extends StatefulWidget {
   const ShopScreen({super.key});
@@ -34,6 +36,8 @@ class _ShopScreenState extends State<ShopScreen> {
   List<ProductModel> _allProducts = [];
   List<ProductModel> _filteredProducts = [];
   List<ProductModel> _featuredProducts = [];
+  Map<String, String> _shopNameBySellerId = {};
+  Map<String, UserModel> _sellerById = {};
   bool _isLoading = true;
 
   String _searchQuery = '';
@@ -101,6 +105,7 @@ class _ShopScreenState extends State<ShopScreen> {
       (products) {
         if (!mounted) return;
         _allProducts = products;
+        _loadSellerShopMetadata(products);
         // Featured = top rated, in stock
         _featuredProducts = _allProducts
             .where((p) => p.isAvailable && p.rating >= 4.0 && p.stock > 0)
@@ -121,14 +126,74 @@ class _ShopScreenState extends State<ShopScreen> {
     );
   }
 
+  Future<void> _loadSellerShopMetadata(List<ProductModel> products) async {
+    final sellerIds = products
+        .map((p) => p.userId.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+    if (sellerIds.isEmpty) return;
+
+    final shopMap = Map<String, String>.from(_shopNameBySellerId);
+    final sellerMap = Map<String, UserModel>.from(_sellerById);
+
+    await Future.wait(
+      sellerIds.map((sellerId) async {
+        if (!sellerMap.containsKey(sellerId)) {
+          final user = await _firestoreService.getUserById(sellerId);
+          if (user != null) {
+            sellerMap[sellerId] = user;
+          }
+        }
+
+        final settings = await _firestoreService.getShopSettings(sellerId);
+        final rawShopName = (settings['shopName'] as String?)?.trim() ?? '';
+        if (rawShopName.isNotEmpty) {
+          shopMap[sellerId] = rawShopName;
+        } else {
+          final sellerName = sellerMap[sellerId]?.name.trim() ?? '';
+          if (sellerName.isNotEmpty) {
+            shopMap[sellerId] = '$sellerName Shop';
+          }
+        }
+      }),
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _shopNameBySellerId = shopMap;
+      _sellerById = sellerMap;
+    });
+  }
+
+  String _resolveShopName(ProductModel product) {
+    final sellerId = product.userId.trim();
+    if (sellerId.isEmpty) return 'Shop';
+    return _shopNameBySellerId[sellerId] ?? 'Shop';
+  }
+
+  Future<void> _openShopFromProduct(ProductModel product) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ShopStorefrontScreen(
+          sellerId: product.userId,
+          initialShopName: _resolveShopName(product),
+        ),
+      ),
+    );
+  }
+
   void _applyFilters() {
     setState(() {
       _filteredProducts = _allProducts.where((product) {
         final matchesSearch = _searchQuery.isEmpty ||
             product.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            product.description.toLowerCase().contains(_searchQuery.toLowerCase());
-        final matchesCategory = _selectedCategory == 'All' ||
-            product.category == _selectedCategory;
+            product.description
+                .toLowerCase()
+                .contains(_searchQuery.toLowerCase());
+        final matchesCategory =
+            _selectedCategory == 'All' || product.category == _selectedCategory;
         return matchesSearch && matchesCategory;
       }).toList();
 
@@ -190,8 +255,7 @@ class _ShopScreenState extends State<ShopScreen> {
                   'To open your shop and sell products, complete Aadhaar + fingerprint verification first.'),
               SizedBox(height: 12),
               Text('Go to: Profile → Edit Profile → Verify Identity',
-                  style:
-                      TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             ],
           ),
           actions: [
@@ -281,7 +345,8 @@ class _ShopScreenState extends State<ShopScreen> {
                                   child: const Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.add, color: Colors.white, size: 14),
+                                      Icon(Icons.add,
+                                          color: Colors.white, size: 14),
                                       SizedBox(width: 3),
                                       Text('Sell',
                                           style: TextStyle(
@@ -347,10 +412,8 @@ class _ShopScreenState extends State<ShopScreen> {
                                           borderRadius:
                                               BorderRadius.circular(8),
                                         ),
-                                        child: const Icon(
-                                            Icons.tune_rounded,
-                                            color: Colors.white,
-                                            size: 16),
+                                        child: const Icon(Icons.tune_rounded,
+                                            color: Colors.white, size: 16),
                                       ),
                                     ),
                               border: InputBorder.none,
@@ -386,7 +449,10 @@ class _ShopScreenState extends State<ShopScreen> {
           const SliverToBoxAdapter(child: SizedBox(height: 12)),
 
           // ── Featured / Top Rated horizontal section ──
-          if (!_isLoading && _featuredProducts.isNotEmpty && _searchQuery.isEmpty && _selectedCategory == 'All')
+          if (!_isLoading &&
+              _featuredProducts.isNotEmpty &&
+              _searchQuery.isEmpty &&
+              _selectedCategory == 'All')
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 6),
@@ -419,10 +485,15 @@ class _ShopScreenState extends State<ShopScreen> {
                   mainAxisSpacing: 10,
                 ),
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) => ProductCard(
-                    product: _gridProducts[index],
-                    onTap: () => _navigateToProductDetail(_gridProducts[index]),
-                  ),
+                  (context, index) {
+                    final product = _gridProducts[index];
+                    return ProductCard(
+                      product: product,
+                      shopName: _resolveShopName(product),
+                      onShopTap: () => _openShopFromProduct(product),
+                      onTap: () => _navigateToProductDetail(product),
+                    );
+                  },
                   childCount: _gridProducts.length,
                 ),
               ),
@@ -458,10 +529,14 @@ class _ShopScreenState extends State<ShopScreen> {
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
-                color: isSelected ? AppTheme.primaryPink : Colors.white.withValues(alpha: 0.1),
+                color: isSelected
+                    ? AppTheme.primaryPink
+                    : Colors.white.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isSelected ? AppTheme.primaryPink : Colors.white.withValues(alpha: 0.3),
+                  color: isSelected
+                      ? AppTheme.primaryPink
+                      : Colors.white.withValues(alpha: 0.3),
                 ),
               ),
               child: Text(
@@ -501,13 +576,22 @@ class _ShopScreenState extends State<ShopScreen> {
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: isSelected ? AppTheme.primaryPurple : const Color(0xFFF5F5F5),
+                color: isSelected
+                    ? AppTheme.primaryPurple
+                    : const Color(0xFFF5F5F5),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isSelected ? AppTheme.primaryPurple : Colors.grey[300]!,
+                  color:
+                      isSelected ? AppTheme.primaryPurple : Colors.grey[300]!,
                 ),
                 boxShadow: isSelected
-                    ? [BoxShadow(color: AppTheme.primaryPurple.withValues(alpha: 0.3), blurRadius: 6, offset: const Offset(0, 2))]
+                    ? [
+                        BoxShadow(
+                            color:
+                                AppTheme.primaryPurple.withValues(alpha: 0.3),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2))
+                      ]
                     : [],
               ),
               child: Row(
@@ -522,7 +606,8 @@ class _ShopScreenState extends State<ShopScreen> {
                     style: TextStyle(
                       color: isSelected ? Colors.white : Colors.grey[800],
                       fontSize: 12,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.w500,
                     ),
                   ),
                 ],
@@ -573,9 +658,15 @@ class _ShopScreenState extends State<ShopScreen> {
               scrollDirection: Axis.horizontal,
               itemCount: _featuredProducts.length,
               separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (context, i) =>
-                  _FeaturedCard(product: _featuredProducts[i],
-                    onTap: () => _navigateToProductDetail(_featuredProducts[i])),
+              itemBuilder: (context, i) {
+                final product = _featuredProducts[i];
+                return _FeaturedCard(
+                  product: product,
+                  shopName: _resolveShopName(product),
+                  onShopTap: () => _openShopFromProduct(product),
+                  onTap: () => _navigateToProductDetail(product),
+                );
+              },
             ),
           ),
         ],
@@ -585,11 +676,14 @@ class _ShopScreenState extends State<ShopScreen> {
 
   /// Products for the grid — excludes featured products to avoid repetition
   List<ProductModel> get _gridProducts {
-    if (_searchQuery.isNotEmpty || _selectedCategory != 'All' || _featuredProducts.isEmpty) {
+    if (_searchQuery.isNotEmpty ||
+        _selectedCategory != 'All' ||
+        _featuredProducts.isEmpty) {
       return _filteredProducts;
     }
     final featuredIds = _featuredProducts.map((p) => p.id).toSet();
-    final nonFeatured = _filteredProducts.where((p) => !featuredIds.contains(p.id)).toList();
+    final nonFeatured =
+        _filteredProducts.where((p) => !featuredIds.contains(p.id)).toList();
     return nonFeatured;
   }
 
@@ -607,7 +701,8 @@ class _ShopScreenState extends State<ShopScreen> {
                 fontWeight: FontWeight.w500),
           ),
           if (_selectedCategory != 'All') ...[
-            const Text(' in ', style: TextStyle(fontSize: 13, color: Color(0xFF555555))),
+            const Text(' in ',
+                style: TextStyle(fontSize: 13, color: Color(0xFF555555))),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
@@ -663,7 +758,10 @@ class _ShopScreenState extends State<ShopScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(height: 12, width: double.infinity, color: Colors.white),
+                          Container(
+                              height: 12,
+                              width: double.infinity,
+                              color: Colors.white),
                           const SizedBox(height: 6),
                           Container(height: 10, width: 80, color: Colors.white),
                           const SizedBox(height: 6),
@@ -730,8 +828,15 @@ class _ShopScreenState extends State<ShopScreen> {
 /// Horizontal featured product card (Amazon "deals" style)
 class _FeaturedCard extends StatelessWidget {
   final ProductModel product;
+  final String shopName;
+  final VoidCallback? onShopTap;
   final VoidCallback onTap;
-  const _FeaturedCard({required this.product, required this.onTap});
+  const _FeaturedCard({
+    required this.product,
+    required this.shopName,
+    this.onShopTap,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -798,6 +903,29 @@ class _FeaturedCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                           fontSize: 11, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  InkWell(
+                    onTap: onShopTap,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.storefront_rounded,
+                            size: 10, color: AppTheme.primaryPurple),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(
+                            shopName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 9,
+                              color: AppTheme.primaryPurple,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 4),
                   Text(
                     AppHelpers.formatCurrency(product.price),
@@ -815,8 +943,8 @@ class _FeaturedCard extends StatelessWidget {
                         const SizedBox(width: 2),
                         Text(
                           '${product.rating.toStringAsFixed(1)} (${product.reviewCount})',
-                          style: TextStyle(
-                              fontSize: 9, color: Colors.grey[600]),
+                          style:
+                              TextStyle(fontSize: 9, color: Colors.grey[600]),
                         ),
                       ],
                     ),

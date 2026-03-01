@@ -7,6 +7,7 @@ import '../../utils/app_constants.dart';
 import '../../utils/web_image_loader.dart';
 import '../../widgets/universal_avatar.dart';
 import '../../widgets/filter_bottom_sheet.dart';
+import '../../utils/app_helpers.dart';
 import '../profile/profile_screen.dart';
 
 class ExploreScreen extends StatefulWidget {
@@ -406,7 +407,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(profile.name ?? 'Unnamed',
+                        child: Text((profile.name ?? 'Unnamed').capitalizeWords(),
                             style: const TextStyle(
                                 fontWeight: FontWeight.bold, fontSize: 13),
                             maxLines: 1,
@@ -465,7 +466,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
         title: Row(
           children: [
             Expanded(
-              child: Text(profile.name ?? 'Unnamed',
+              child: Text((profile.name ?? 'Unnamed').capitalizeWords(),
                   style: const TextStyle(fontWeight: FontWeight.bold)),
             ),
             if (profile.isVerified)

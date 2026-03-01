@@ -7,16 +7,24 @@ import '../utils/web_image_loader.dart';
 class ProductCard extends StatelessWidget {
   final ProductModel product;
   final VoidCallback? onTap;
+  final String? shopName;
+  final VoidCallback? onShopTap;
 
-  const ProductCard({super.key, required this.product, this.onTap});
+  const ProductCard({
+    super.key,
+    required this.product,
+    this.onTap,
+    this.shopName,
+    this.onShopTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final String? validImageUrl = product.images
-            .where((url) => url.trim().isNotEmpty)
-            .isEmpty
-        ? null
-        : product.images.firstWhere((url) => url.trim().isNotEmpty);
+    final safeShopName = (shopName ?? '').trim();
+    final String? validImageUrl =
+        product.images.where((url) => url.trim().isNotEmpty).isEmpty
+            ? null
+            : product.images.firstWhere((url) => url.trim().isNotEmpty);
 
     final bool inStock = product.isAvailable && product.stock > 0;
     final bool isTopRated = product.rating >= 4.5 && product.reviewCount > 0;
@@ -138,6 +146,34 @@ class ProductCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
+
+                    // Shop name + quick jump to shop
+                    if (safeShopName.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: InkWell(
+                          onTap: onShopTap,
+                          child: Row(
+                            children: [
+                              const Icon(Icons.storefront_rounded,
+                                  size: 11, color: AppTheme.primaryPurple),
+                              const SizedBox(width: 3),
+                              Expanded(
+                                child: Text(
+                                  safeShopName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: AppTheme.primaryPurple,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
 
                     // Rating row
                     if (product.reviewCount > 0)

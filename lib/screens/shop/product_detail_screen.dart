@@ -13,6 +13,7 @@ import '../../widgets/app_popup.dart';
 import '../profile/profile_screen.dart';
 import '../chat/chat_detail_screen.dart';
 import '../../widgets/gpay_simulation_dialog.dart';
+import 'shop_storefront_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final ProductModel product;
@@ -29,6 +30,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   final PageController _imagePageController = PageController();
   int _currentImageIndex = 0;
   UserModel? _seller;
+  String _shopName = 'Shop';
   List<ProductModel> _sellerProducts = [];
   List<ProductModel> _recommended = [];
   int _qty = 1;
@@ -43,11 +45,40 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   Future<void> _loadSeller() async {
     try {
-      final seller = await _firestoreService.getUserById(widget.product.userId);
-      if (mounted) setState(() => _seller = seller);
+      final results = await Future.wait([
+        _firestoreService.getUserById(widget.product.userId),
+        _firestoreService.getShopSettings(widget.product.userId),
+      ]);
+      final seller = results[0] as UserModel?;
+      final shopSettings = results[1] as Map<String, dynamic>;
+      final configuredShopName = (shopSettings['shopName'] as String?)?.trim();
+      final resolvedShopName =
+          (configuredShopName != null && configuredShopName.isNotEmpty)
+              ? configuredShopName
+              : ((seller?.name.trim().isNotEmpty == true)
+                  ? '${seller!.name.trim()} Shop'
+                  : 'Shop');
+      if (mounted) {
+        setState(() {
+          _seller = seller;
+          _shopName = resolvedShopName;
+        });
+      }
     } catch (e) {
       debugPrint('Error loading seller: $e');
     }
+  }
+
+  Future<void> _openSellerShop() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ShopStorefrontScreen(
+          sellerId: widget.product.userId,
+          initialShopName: _shopName,
+        ),
+      ),
+    );
   }
 
   Future<void> _loadSellerProducts() async {
@@ -132,8 +163,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         if (mounted) {
           Navigator.pop(context, true);
           AppPopup.show(context,
-              message: 'Product deleted successfully',
-              type: PopupType.success);
+              message: 'Product deleted successfully', type: PopupType.success);
         }
       } catch (e) {
         if (mounted) {
@@ -288,15 +318,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Left: Product Image
-                        Expanded(
-                            flex: 5,
-                            child: _buildImageSection(product)),
+                        Expanded(flex: 5, child: _buildImageSection(product)),
                         const SizedBox(width: 24),
                         // Right: Info + Actions
                         Expanded(
                             flex: 4,
-                            child:
-                                _buildInfoAndActions(product, inStock)),
+                            child: _buildInfoAndActions(product, inStock)),
                       ],
                     )
                   : Column(
@@ -377,8 +404,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 child: Row(children: [
                   Icon(Icons.delete, color: Colors.red),
                   SizedBox(width: 8),
-                  Text('Delete Product',
-                      style: TextStyle(color: Colors.red)),
+                  Text('Delete Product', style: TextStyle(color: Colors.red)),
                 ]),
               ),
             ],
@@ -413,8 +439,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         itemBuilder: (_, i) => Hero(
                           tag: 'product_${product.id}_$i',
                           child: WebImageLoader.loadImage(
-                              imageUrl: product.images[i],
-                              fit: BoxFit.contain),
+                              imageUrl: product.images[i], fit: BoxFit.contain),
                         ),
                       ),
                       // Page dots
@@ -578,8 +603,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         Row(
           children: [
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: inStock
                     ? AppTheme.accentGreen.withValues(alpha: 0.1)
@@ -596,8 +620,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   Text(
                     inStock ? 'In Stock' : 'Out of Stock',
                     style: TextStyle(
-                        color:
-                            inStock ? Colors.green[700] : Colors.red,
+                        color: inStock ? Colors.green[700] : Colors.red,
                         fontSize: 12,
                         fontWeight: FontWeight.w600),
                   ),
@@ -609,9 +632,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               Text('${product.stock} left',
                   style: TextStyle(
                       fontSize: 12,
-                      color: product.stock <= 3
-                          ? Colors.red
-                          : Colors.grey[600])),
+                      color:
+                          product.stock <= 3 ? Colors.red : Colors.grey[600])),
             ],
           ],
         ),
@@ -674,8 +696,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
               label: Text(
                 inStock ? 'Add to Cart' : 'Out of Stock',
-                style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w600),
+                style:
+                    const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryOrange,
@@ -699,8 +721,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               icon: const Icon(Icons.bolt_rounded, size: 18),
               label: const Text(
                 'Buy Now',
-                style:
-                    TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryPink,
@@ -771,6 +792,41 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   color: Colors.grey[500],
                   fontWeight: FontWeight.w500)),
           const SizedBox(height: 10),
+          Row(
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryPurple.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.storefront_rounded,
+                        size: 14, color: AppTheme.primaryPurple),
+                    const SizedBox(width: 4),
+                    Text(
+                      _shopName,
+                      style: const TextStyle(
+                        color: AppTheme.primaryPurple,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: _openSellerShop,
+                icon: const Icon(Icons.store_mall_directory, size: 16),
+                label: const Text('Visit Shop'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           InkWell(
             borderRadius: BorderRadius.circular(10),
             onTap: () => Navigator.push(
@@ -795,14 +851,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           style: const TextStyle(
                               fontSize: 15, fontWeight: FontWeight.bold)),
                       Text(_seller!.role,
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.grey[600])),
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[600])),
                     ],
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(colors: [
                       AppTheme.primaryPurple,
@@ -843,16 +899,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
               const SizedBox(width: 8),
               const Text('Product Details',
-                  style: TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.bold)),
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 12),
           Text(product.description,
               style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[700],
-                  height: 1.6)),
+                  fontSize: 14, color: Colors.grey[700], height: 1.6)),
         ],
       ),
     );
@@ -878,7 +931,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'More from ${_seller?.name ?? 'this seller'}',
+                  'More from ${_shopName.isNotEmpty ? _shopName : (_seller?.name ?? 'this seller')}',
                   style: const TextStyle(
                       fontSize: 17, fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis,
@@ -896,9 +949,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               mainAxisSpacing: 10,
               childAspectRatio: 0.72,
             ),
-            itemCount: _sellerProducts.length > 6
-                ? 6
-                : _sellerProducts.length,
+            itemCount: _sellerProducts.length > 6 ? 6 : _sellerProducts.length,
             itemBuilder: (_, i) =>
                 _ProductGridCard(product: _sellerProducts[i]),
           ),
@@ -926,8 +977,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
               const SizedBox(width: 8),
               const Text('You may also like',
-                  style: TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.bold)),
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 14),
@@ -941,8 +991,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               childAspectRatio: 0.72,
             ),
             itemCount: _recommended.length,
-            itemBuilder: (_, i) =>
-                _ProductGridCard(product: _recommended[i]),
+            itemBuilder: (_, i) => _ProductGridCard(product: _recommended[i]),
           ),
         ],
       ),
@@ -963,9 +1012,8 @@ class _ProductGridCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final validImage = product.images
-        .where((url) => url.trim().isNotEmpty)
-        .toList();
+    final validImage =
+        product.images.where((url) => url.trim().isNotEmpty).toList();
     final bool inStock = product.isAvailable && product.stock > 0;
 
     return GestureDetector(

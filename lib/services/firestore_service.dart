@@ -266,12 +266,38 @@ class FirestoreService {
     return <String, dynamic>{};
   }
 
+  Stream<Map<String, dynamic>> userSettingsStream(String userId) {
+    return _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(userId)
+        .snapshots()
+        .map((doc) {
+      if (!doc.exists) return <String, dynamic>{};
+      final settings = doc.data()?['settings'];
+      if (settings is Map) {
+        return Map<String, dynamic>.from(settings);
+      }
+      return <String, dynamic>{};
+    });
+  }
+
   Future<void> updateUserSettings(
     String userId,
     Map<String, dynamic> settings,
   ) async {
     await _firestore.collection(AppConstants.usersCollection).doc(userId).set({
       'settings': settings,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> updateUserSettingField(
+    String userId, {
+    required String key,
+    required dynamic value,
+  }) async {
+    await _firestore.collection(AppConstants.usersCollection).doc(userId).set({
+      'settings': {key: value},
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
@@ -1527,7 +1553,7 @@ class FirestoreService {
       final shopSettings = sellerShopSettingsById[latestProduct.userId]!;
       final userSettings = sellerUserSettingsById[latestProduct.userId]!;
       final profileWorkflowEnabled =
-          parseAllowDelivery(userSettings['enableShopDeliveryWorkflow']);
+          (userSettings['enableShopDeliveryWorkflow'] as bool?) ?? false;
       final allowDeliveryIfAvailable =
           parseAllowDelivery(shopSettings['enableDeliveryIfAvailable']);
       final configuredMaxDeliveryQty =

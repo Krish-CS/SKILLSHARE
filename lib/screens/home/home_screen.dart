@@ -17,6 +17,7 @@ import 'explore_screen.dart';
 import '../../widgets/notification_bell.dart';
 import '../../widgets/filter_bottom_sheet.dart';
 import '../../utils/app_dialog.dart';
+import '../../utils/app_helpers.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -329,7 +330,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '$greeting, ${(currentUser?.name ?? 'there').split(' ').first}!',
+                          '$greeting, ${(currentUser?.name ?? 'there').split(' ').first.capitalizeWords()}!',
                           style: const TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
@@ -1170,7 +1171,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      profile.name ?? 'Professional',
+                      (profile.name ?? 'Professional').capitalizeWords(),
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,

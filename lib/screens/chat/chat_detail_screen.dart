@@ -650,9 +650,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           requestTitle: r.title,
                         );
                         if (mounted) {
-                          AppPopup.show(context,
-                              message: 'Reminder sent!',
-                              type: PopupType.success);
+                          AppDialog.success(context, 'Reminder sent!');
                         }
                       } catch (e) {
                         if (mounted) {
@@ -770,9 +768,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                             approve: true,
                           );
                           if (mounted) {
-                            AppPopup.show(context,
-                                message: 'Work request accepted!',
-                                type: PopupType.success);
+                            AppDialog.success(context, 'Work request accepted!');
                           }
                         } catch (e) {
                           if (mounted) {
@@ -1021,9 +1017,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                     details: detailsController.text.trim(),
                   );
                   if (mounted) {
-                    AppPopup.show(context,
-                        message: 'Chat reported. Our team will review it.',
-                        type: PopupType.success);
+                    AppDialog.success(context, 'Chat reported. Our team will review it.');
                   }
                 } catch (e) {
                   if (mounted) {
@@ -1241,7 +1235,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          widget.otherUserName,
+                          widget.otherUserName.capitalizeWords(),
                           style: const TextStyle(
                               color: Colors.white, fontSize: 17),
                           maxLines: 1,
@@ -1832,8 +1826,7 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
       await widget.firestoreService
           .updateRequestStatus(widget.request.id, 'completed');
       if (mounted) {
-        AppPopup.show(context,
-            message: 'Project marked as completed!', type: PopupType.success);
+        AppDialog.success(context, 'Project marked as completed!');
       }
     } catch (e) {
       if (mounted) {
@@ -1898,12 +1891,9 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
       await widget.firestoreService
           .updateRequestStatus(widget.request.id, 'completed');
       if (!mounted) return;
-      AppPopup.show(
+      AppDialog.success(
         context,
-        message:
-            'Payment successful: Rs.${amount.toStringAsFixed(2)} (TXN: $txnId)',
-        type: PopupType.success,
-        duration: const Duration(seconds: 4),
+        'Payment successful: Rs.${amount.toStringAsFixed(2)} (TXN: $txnId)',
       );
     } catch (e) {
       if (mounted) {
@@ -2505,8 +2495,7 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
       _lastRemindTimes[widget.request.id] = DateTime.now();
       if (mounted) {
         setState(() {});
-        AppPopup.show(context,
-            message: 'Reminder sent!', type: PopupType.success);
+        AppDialog.success(context, 'Reminder sent!');
         widget.onActionDone();
       }
     } catch (e) {
@@ -2593,9 +2582,11 @@ class _PendingDetailCardState extends State<_PendingDetailCard> {
         approve: approve,
       );
       if (mounted) {
-        AppPopup.show(context,
-            message: 'Work request ${approve ? 'accepted' : 'rejected'}.',
-            type: approve ? PopupType.success : PopupType.info);
+        if (approve) {
+          AppDialog.success(context, 'Work request accepted.');
+        } else {
+          AppDialog.info(context, 'Work request rejected.');
+        }
         widget.onActionDone();
       }
     } catch (e) {
@@ -2915,9 +2906,7 @@ class _AskWorkSheetState extends State<_AskWorkSheet> {
       );
       if (mounted) Navigator.pop(context);
       if (mounted && parentCtx.mounted) {
-        AppPopup.show(parentCtx,
-            message: 'Work request sent. Waiting for approval.',
-            type: PopupType.success);
+        AppDialog.success(parentCtx, 'Work request sent. Waiting for approval.');
       }
     } catch (e) {
       if (mounted) {

@@ -8,6 +8,7 @@ import '../screens/profile/profile_screen.dart';
 import '../screens/chat/chat_detail_screen.dart';
 import 'universal_avatar.dart';
 import 'app_popup.dart';
+import '../utils/app_helpers.dart';
 
 class ExpertCard extends StatefulWidget {
   final SkilledUserProfile profile;
@@ -89,7 +90,7 @@ class _ExpertCardState extends State<ExpertCard> {
                   children: [
                     // User name
                     Text(
-                      widget.profile.name ?? 'Professional',
+                      (widget.profile.name ?? 'Professional').capitalizeWords(),
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -257,7 +258,7 @@ class _ExpertCardState extends State<ExpertCard> {
           builder: (_) => ChatDetailScreen(
             chatId: chatId,
             otherUserId: widget.profile.userId,
-            otherUserName: otherUser?.name ?? 'User',
+            otherUserName: (otherUser?.name ?? 'User').capitalizeWords(),
             otherUserPhoto: widget.profile.profilePicture,
           ),
         ),
