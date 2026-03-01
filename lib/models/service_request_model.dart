@@ -23,6 +23,8 @@ class ServiceRequestModel {
   final String? responseMessage;
   final DateTime? respondedAt;
   final String? hireType; // full_time, part_time, project_based
+  /// Role of the person who sent this request: 'company', 'customer', etc.
+  final String? requesterRole;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -49,9 +51,12 @@ class ServiceRequestModel {
     this.responseMessage,
     this.respondedAt,
     this.hireType,
+    this.requesterRole,
     required this.createdAt,
     required this.updatedAt,
   });
+
+  bool get isCompanyProject => requesterRole == 'company';
 
   factory ServiceRequestModel.fromMap(Map<String, dynamic> map, String id) {
     final customerId =
@@ -89,6 +94,7 @@ class ServiceRequestModel {
       responseMessage: map['responseMessage'],
       respondedAt: (map['respondedAt'] as Timestamp?)?.toDate(),
       hireType: map['hireType'],
+      requesterRole: map['requesterRole'],
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -120,6 +126,7 @@ class ServiceRequestModel {
       'respondedAt':
           respondedAt != null ? Timestamp.fromDate(respondedAt!) : null,
       if (hireType != null) 'hireType': hireType,
+      if (requesterRole != null) 'requesterRole': requesterRole,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };

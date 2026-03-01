@@ -2376,6 +2376,7 @@ class FirestoreService {
       status: AppConstants.requestStatusPending,
       scheduledDate: scheduledDate,
       hireType: hireType,
+      requesterRole: (requester?.role ?? '').toLowerCase().trim(),
       createdAt: now,
       updatedAt: now,
     );
@@ -2433,6 +2434,7 @@ class FirestoreService {
       'title': normalizedTitle,
       'description': normalizedDescription,
       'status': AppConstants.requestStatusPending,
+      'requesterRole': customerRole, // 'company' or 'customer'
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });

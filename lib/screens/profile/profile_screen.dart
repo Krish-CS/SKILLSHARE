@@ -1841,7 +1841,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       .where((r) =>
                           r.status.toLowerCase().trim() ==
                           AppConstants.requestStatusCompleted)
-                      .toList();
+                      .toList()
+                    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
                   final activeProjects = requests
                       .where((r) =>
                           r.status.toLowerCase().trim() ==
@@ -1850,6 +1851,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   final hireProjects = requests
                       .where((r) =>
                           r.serviceId.toLowerCase().trim() == 'direct_hire')
+                      .toList();
+                  // Split completed projects by client type
+                  final companyProjects = completedProjects
+                      .where((r) => r.isCompanyProject)
+                      .toList();
+                  final customerProjects = completedProjects
+                      .where((r) => !r.isCompanyProject)
                       .toList();
                   final portfolioCount = _profile?.portfolioImages.length ?? 0;
                   final topSkills = _profile?.skills.length ?? 0;
@@ -1977,32 +1985,163 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        if (completedProjects.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Recent completed projects',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF2E2E2E),
+                        const SizedBox(height: 16),
+                        // ── Project History ──────────────────────────────
+                        Row(
+                          children: [
+                            const Icon(Icons.work_history_rounded,
+                                size: 16, color: Color(0xFF2196F3)),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Project History (${completedProjects.length})',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF2E2E2E),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 6),
-                          ...completedProjects.take(3).map(
-                                (r) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: Text(
-                                    '- ${r.title}',
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        if (completedProjects.isEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 14, horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF5F5F5),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.info_outline,
+                                    size: 15, color: Color(0xFF9E9E9E)),
+                                SizedBox(width: 8),
+                                Text('No projects completed yet',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF9E9E9E))),
+                              ],
+                            ),
+                          )
+                        else
+                          // Company projects first, then customer projects
+                          ...[ ...companyProjects, ...customerProjects ]
+                              .map((r) {
+                            final isCompany = r.isCompanyProject;
+                            final badgeColor = isCompany
+                                ? const Color(0xFF1A237E)
+                                : const Color(0xFF00695C);
+                            final badgeLabel =
+                                isCompany ? '🏢 Company' : '👤 Customer';
+                            final dateStr = '${r.updatedAt.day}/${r.updatedAt.month}/${r.updatedAt.year}';
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: isCompany
+                                      ? const Color(0xFFBBDEFB)
+                                      : const Color(0xFFB2DFDB),
+                                  width: 1,
+                                ),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color:
+                                        Color.fromRGBO(0, 0, 0, 0.04),
+                                    blurRadius: 4,
+                                    offset: Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: badgeColor,
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                        ),
+                                        child: Text(
+                                          badgeLabel,
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                      if (r.hireType != null &&
+                                          r.hireType!.isNotEmpty) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding:
+                                              const EdgeInsets.symmetric(
+                                                  horizontal: 7,
+                                                  vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF37474F),
+                                            borderRadius:
+                                                BorderRadius.circular(20),
+                                          ),
+                                          child: Text(
+                                            r.hireType!
+                                                .replaceAll('_', ' '),
+                                            style: const TextStyle(
+                                              fontSize: 9,
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                      const Spacer(),
+                                      Text(
+                                          dateStr,
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            color: Color(0xFF9E9E9E),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    r.title,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
                                       fontSize: 12,
-                                      color: Color(0xFF616161),
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF2E2E2E),
                                     ),
                                   ),
-                                ),
+                                  if (r.description.isNotEmpty) ...[
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      r.description,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: Color(0xFF757575),
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
-                        ],
+                            );
+                          }),
                         if (_reviews.isNotEmpty) ...[
                           const SizedBox(height: 12),
                           const Text(
