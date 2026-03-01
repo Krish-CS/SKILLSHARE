@@ -2955,313 +2955,206 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
   Widget build(BuildContext context) {
     final req = widget.request;
     final isCustomer = req.customerId == widget.currentUserId;
+    final startDate = req.respondedAt != null
+        ? AppHelpers.formatDate(req.respondedAt!)
+        : AppHelpers.formatDate(req.createdAt);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF5E35B1), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-              color: const Color(0xFF5E35B1).withValues(alpha: 0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 2)),
-        ],
-      ),
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header ──
+          // ── Slim colour-band header ──────────────────────────────────────
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            height: 5,
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 colors: [Color(0xFF5E35B1), Color(0xFF9C27B0)],
               ),
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(14),
-                topRight: Radius.circular(14),
-              ),
-            ),
-            child: Row(
-              children: [
-                // Project number circle
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.25),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      '#${widget.projectIndex}',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    req.title,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15),
-                    maxLines: 2,
-                  ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'Active',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
             ),
           ),
 
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Description
-                if (req.description.isNotEmpty) ...[
-                  const Text('Description',
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey)),
-                  const SizedBox(height: 4),
-                  Text(req.description,
-                      style:
-                          const TextStyle(fontSize: 14, color: Colors.black87)),
-                  const SizedBox(height: 12),
-                ],
-
-                // Parties
-                _infoRow(Icons.person_outline, 'Client',
-                    isCustomer ? 'You' : widget.otherUserName),
-                const SizedBox(height: 6),
-                _infoRow(Icons.engineering_outlined, 'Skilled Person',
-                    isCustomer ? widget.otherUserName : 'You'),
-                const SizedBox(height: 6),
-                _infoRow(
-                  Icons.calendar_today_outlined,
-                  'Started',
-                  req.respondedAt != null
-                      ? AppHelpers.formatDate(req.respondedAt!)
-                      : AppHelpers.formatDate(req.createdAt),
-                ),
-
-                if (req.hireType != null) ...[
-                  const SizedBox(height: 6),
-                  _infoRow(Icons.work_history_outlined, 'Hire Type',
-                      req.hireType!.replaceAll('_', ' ').toUpperCase()),
-                ],
-
-                // Work chat notice
-                const SizedBox(height: 14),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8F4FF),
-                    borderRadius: BorderRadius.circular(10),
-                    border:
-                        Border.all(color: const Color(0xFF90CAF9), width: 1),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.forum_outlined,
-                          size: 14, color: Color(0xFF1565C0)),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Main chat stays active. Use Work Chat for this project discussion and files.',
-                          style:
-                              TextStyle(fontSize: 11, color: Color(0xFF1565C0)),
+                // Title row
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        req.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.black87,
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 14),
-                Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
                     ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                          color:
-                              const Color(0xFF1565C0).withValues(alpha: 0.25),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3)),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: _openingWorkChat ? null : _openWorkChat,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _openingWorkChat
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2, color: Colors.white))
-                                : const Icon(Icons.chat_bubble_outline_rounded,
-                                    color: Colors.white, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              _openingWorkChat
-                                  ? 'Opening...'
-                                  : 'Open Work Chat',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: Colors.green.withValues(alpha: 0.4)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                              color: Colors.green,
+                              shape: BoxShape.circle,
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 5),
+                          const Text(
+                            'Active',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.green,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
+                  ],
                 ),
 
-                if (isCustomer) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF2E7D32), Color(0xFF66BB6A)],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                            color:
-                                const Color(0xFF2E7D32).withValues(alpha: 0.25),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3)),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: _paying ? null : _triggerPayment,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              _paying
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2, color: Colors.white))
-                                  : const Icon(Icons.payment_rounded,
-                                      color: Colors.white, size: 20),
-                              const SizedBox(width: 8),
-                              Text(
-                                _paying
-                                    ? 'Processing...'
-                                    : 'Pay via Google Pay',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
+                if (req.description.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    req.description,
+                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
 
-                // Mark Complete (skilled person only)
-                if (!isCustomer) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF5E35B1), Color(0xFF9C27B0)],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                            color:
-                                const Color(0xFF5E35B1).withValues(alpha: 0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3)),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: _completing ? null : _markCompleted,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              _completing
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2, color: Colors.white))
-                                  : const Icon(Icons.check_circle_outline,
-                                      color: Colors.white, size: 20),
-                              const SizedBox(width: 8),
-                              Text(
-                                _completing
-                                    ? 'Completing...'
-                                    : 'Mark as Completed',
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600),
-                              ),
-                            ],
-                          ),
+                const SizedBox(height: 14),
+                // ── Metadata chips row ───────────────────────────────────
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    _chip(Icons.person_outline,
+                        'Client: ${isCustomer ? 'You' : widget.otherUserName}'),
+                    _chip(Icons.engineering_outlined,
+                        'Worker: ${isCustomer ? widget.otherUserName : 'You'}'),
+                    _chip(Icons.calendar_today_outlined,
+                        'Started $startDate'),
+                    if (req.hireType != null)
+                      _chip(Icons.work_history_outlined,
+                          req.hireType!.replaceAll('_', ' ')),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+
+                // ── Action buttons ───────────────────────────────────────
+                Row(
+                  children: [
+                    // Open Work Chat — always shown, takes more space
+                    Expanded(
+                      flex: 3,
+                      child: FilledButton.icon(
+                        onPressed: _openingWorkChat ? null : _openWorkChat,
+                        icon: _openingWorkChat
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.chat_bubble_outline_rounded,
+                                size: 16),
+                        label: Text(
+                            _openingWorkChat ? 'Opening…' : 'Work Chat',
+                            style: const TextStyle(fontSize: 13)),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF1565C0),
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    // Second action varies by role
+                    if (isCustomer)
+                      Expanded(
+                        flex: 3,
+                        child: FilledButton.icon(
+                          onPressed: _paying ? null : _triggerPayment,
+                          icon: _paying
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white))
+                              : const Icon(Icons.currency_rupee, size: 16),
+                          label: Text(
+                              _paying ? 'Processing…' : 'Pay',
+                              style: const TextStyle(fontSize: 13)),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF2E7D32),
+                            padding: const EdgeInsets.symmetric(vertical: 11),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      )
+                    else
+                      Expanded(
+                        flex: 3,
+                        child: FilledButton.icon(
+                          onPressed: _completing ? null : _markCompleted,
+                          icon: _completing
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white))
+                              : const Icon(Icons.check_circle_outline,
+                                  size: 16),
+                          label: Text(
+                              _completing ? 'Saving…' : 'Complete',
+                              style: const TextStyle(fontSize: 13)),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF5E35B1),
+                            padding: const EdgeInsets.symmetric(vertical: 11),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+
+                // Subtle hint
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        size: 12, color: Colors.grey[400]),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Use Work Chat for project files & discussion.',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -3270,19 +3163,22 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
     );
   }
 
-  Widget _infoRow(IconData icon, String label, String value) => Row(
-        children: [
-          Icon(icon, size: 16, color: Colors.grey[600]),
-          const SizedBox(width: 6),
-          Text('$label: ',
-              style:
-                  const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-          Expanded(
-            child: Text(value,
-                style: const TextStyle(fontSize: 13, color: Colors.black87),
-                overflow: TextOverflow.ellipsis),
-          ),
-        ],
+  Widget _chip(IconData icon, String label) => Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: Colors.grey[100],
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: Colors.grey[600]),
+            const SizedBox(width: 5),
+            Text(label,
+                style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+          ],
+        ),
       );
 }
 
