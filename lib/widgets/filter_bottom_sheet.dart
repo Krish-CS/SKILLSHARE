@@ -156,7 +156,7 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+                      colors: [Color(0xFF6A11CB), Color(0xFFe43396)],
                     ),
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -344,25 +344,45 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
               child: SizedBox(
                 width: double.infinity,
                 height: 50,
-                child: ElevatedButton(
-                  onPressed: _apply,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6A11CB),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF6A11CB), Color(0xFFe43396)],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
                     ),
-                    elevation: 3,
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.check_rounded, size: 20),
-                      SizedBox(width: 8),
-                      Text('Apply Filters',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold)),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF6A11CB).withValues(alpha: 0.35),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
                     ],
+                  ),
+                  child: ElevatedButton(
+                    onPressed: _apply,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      elevation: 0,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.check_rounded, size: 20, color: Colors.white),
+                        SizedBox(width: 8),
+                        Text('Apply Filters',
+                            style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white)),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -399,7 +419,14 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF6A11CB) : Colors.grey[50],
+          gradient: selected
+              ? const LinearGradient(
+                  colors: [Color(0xFF6A11CB), Color(0xFFe43396)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                )
+              : null,
+          color: selected ? null : Colors.grey[50],
           borderRadius: BorderRadius.circular(22),
           border: Border.all(
             color: selected ? const Color(0xFF6A11CB) : Colors.grey[300]!,
@@ -407,7 +434,7 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: const Color(0xFF6A11CB).withValues(alpha: 0.25),
+                    color: const Color(0xFFe43396).withValues(alpha: 0.25),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   )
