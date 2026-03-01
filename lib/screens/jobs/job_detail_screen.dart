@@ -35,6 +35,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   UserModel? _employer;
   late JobModel _job;
   StreamSubscription<JobModel?>? _jobSub;
+  StreamSubscription<UserModel?>? _employerSub;
+  StreamSubscription<UserModel?>? _currentUserSub;
   bool _isLoading = false;
   bool _hasApplied = false;
   String? _processingApplicantId;
@@ -47,12 +49,15 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     super.initState();
     _job = widget.job;
     _subscribeToJob();
-    _loadData();
+    _subscribeToUsers();
+    _loadApplicantProfilesIfNeeded();
   }
 
   @override
   void dispose() {
     _jobSub?.cancel();
+    _employerSub?.cancel();
+    _currentUserSub?.cancel();
     super.dispose();
   }
 
@@ -71,23 +76,33 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     });
   }
 
-  Future<void> _loadData() async {
-    try {
-      final userId = FirebaseAuth.instance.currentUser?.uid;
-      if (userId != null) {
-        _currentUser = await _firestoreService.getUserById(userId);
-        _hasApplied = _job.applicants.contains(userId);
-      }
+  void _subscribeToUsers() {
+    // Stream the employer's data live
+    _employerSub = _firestoreService
+        .streamUserModel(_job.companyId)
+        .listen((user) {
+      if (mounted) setState(() => _employer = user);
+    });
 
-      _employer = await _firestoreService.getUserById(_job.companyId);
+    // Stream the current user's data live
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId != null) {
+      _currentUserSub = _firestoreService
+          .streamUserModel(userId)
+          .listen((user) {
+        if (!mounted) return;
+        setState(() {
+          _currentUser = user;
+          _hasApplied = _job.applicants.contains(userId);
+        });
+      });
+    }
+  }
 
-      if (_isEmployer) {
-        await _loadApplicantProfiles();
-      }
-
+  Future<void> _loadApplicantProfilesIfNeeded() async {
+    if (_isEmployer) {
+      await _loadApplicantProfiles();
       if (mounted) setState(() {});
-    } catch (e) {
-      debugPrint('Error loading data: $e');
     }
   }
 
@@ -975,7 +990,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                             ),
                           );
                           if (result == true && mounted) {
-                            _loadData();
+                            // Job data is streamed live — updates will
+                            // arrive automatically via _jobSub.
+                            setState(() {});
                           }
                         },
                         icon: const Icon(Icons.edit),

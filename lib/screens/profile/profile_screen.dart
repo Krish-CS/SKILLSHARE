@@ -52,6 +52,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _userRole;
   bool _isLoading = true;
   StreamSubscription? _profileSub;
+  StreamSubscription<UserModel?>? _userDataSub;
 
   // Company endorsement state
   int _companyEndorsementCount = 0;
@@ -472,6 +473,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void dispose() {
     _profileSub?.cancel();
+    _userDataSub?.cancel();
     _endorsementCountSub?.cancel();
     _endorsementStateSub?.cancel();
     super.dispose();
@@ -530,6 +532,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _subscribeToProfileStream() {
+    // Keep _userData always fresh via stream
+    _userDataSub?.cancel();
+    _userDataSub = _firestoreService
+        .streamUserModel(widget.userId)
+        .listen((user) {
+      if (mounted && user != null) {
+        setState(() => _userData = user);
+      }
+    });
+
     _profileSub?.cancel();
     if (_userRole == AppConstants.roleCustomer) {
       _profileSub = _firestoreService

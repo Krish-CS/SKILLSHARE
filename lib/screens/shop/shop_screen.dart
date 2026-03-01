@@ -32,12 +32,14 @@ class _ShopScreenState extends State<ShopScreen> {
   final ScrollController _scrollController = ScrollController();
 
   StreamSubscription<List<ProductModel>>? _productsSub;
+  final Map<String, StreamSubscription<UserModel?>> _sellerUserSubs = {};
+  final Map<String, StreamSubscription<Map<String, dynamic>>> _sellerShopSubs = {};
 
   List<ProductModel> _allProducts = [];
   List<ProductModel> _filteredProducts = [];
   List<ProductModel> _featuredProducts = [];
-  Map<String, String> _shopNameBySellerId = {};
-  Map<String, UserModel> _sellerById = {};
+  final Map<String, String> _shopNameBySellerId = {};
+  final Map<String, UserModel> _sellerById = {};
   bool _isLoading = true;
 
   String _searchQuery = '';
@@ -79,6 +81,12 @@ class _ShopScreenState extends State<ShopScreen> {
   @override
   void dispose() {
     _productsSub?.cancel();
+    for (final sub in _sellerUserSubs.values) {
+      sub.cancel();
+    }
+    for (final sub in _sellerShopSubs.values) {
+      sub.cancel();
+    }
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -105,7 +113,7 @@ class _ShopScreenState extends State<ShopScreen> {
       (products) {
         if (!mounted) return;
         _allProducts = products;
-        _loadSellerShopMetadata(products);
+        _subscribeToSellerMetadata(products);
         // Featured = top rated, in stock
         _featuredProducts = _allProducts
             .where((p) => p.isAvailable && p.rating >= 4.0 && p.stock > 0)
@@ -126,44 +134,66 @@ class _ShopScreenState extends State<ShopScreen> {
     );
   }
 
-  Future<void> _loadSellerShopMetadata(List<ProductModel> products) async {
+  void _subscribeToSellerMetadata(List<ProductModel> products) {
     final sellerIds = products
         .map((p) => p.userId.trim())
         .where((id) => id.isNotEmpty)
-        .toSet()
+        .toSet();
+
+    // Cancel subscriptions for sellers no longer present
+    final removedIds = _sellerUserSubs.keys
+        .where((id) => !sellerIds.contains(id))
         .toList();
-    if (sellerIds.isEmpty) return;
+    for (final id in removedIds) {
+      _sellerUserSubs.remove(id)?.cancel();
+      _sellerShopSubs.remove(id)?.cancel();
+    }
 
-    final shopMap = Map<String, String>.from(_shopNameBySellerId);
-    final sellerMap = Map<String, UserModel>.from(_sellerById);
-
-    await Future.wait(
-      sellerIds.map((sellerId) async {
-        if (!sellerMap.containsKey(sellerId)) {
-          final user = await _firestoreService.getUserById(sellerId);
+    for (final sellerId in sellerIds) {
+      // Stream user model (name, photo)
+      if (!_sellerUserSubs.containsKey(sellerId)) {
+        _sellerUserSubs[sellerId] = _firestoreService
+            .streamUserModel(sellerId)
+            .listen((user) {
+          if (!mounted) return;
           if (user != null) {
-            sellerMap[sellerId] = user;
+            _sellerById[sellerId] = user;
+            _resolveAndSetShopName(sellerId);
           }
-        }
+        });
+      }
 
-        final settings = await _firestoreService.getShopSettings(sellerId);
-        final rawShopName = (settings['shopName'] as String?)?.trim() ?? '';
-        if (rawShopName.isNotEmpty) {
-          shopMap[sellerId] = rawShopName;
-        } else {
-          final sellerName = sellerMap[sellerId]?.name.trim() ?? '';
-          if (sellerName.isNotEmpty) {
-            shopMap[sellerId] = '$sellerName Shop';
+      // Stream shop settings (shop name)
+      if (!_sellerShopSubs.containsKey(sellerId)) {
+        _sellerShopSubs[sellerId] = _firestoreService
+            .streamShopSettings(sellerId)
+            .listen((settings) {
+          if (!mounted) return;
+          final rawShopName =
+              (settings['shopName'] as String?)?.trim() ?? '';
+          if (rawShopName.isNotEmpty) {
+            _shopNameBySellerId[sellerId] = rawShopName;
+          } else {
+            _resolveAndSetShopName(sellerId);
+            return;
           }
-        }
-      }),
-    );
+          setState(() {});
+        });
+      }
+    }
+  }
 
-    if (!mounted) return;
-    setState(() {
-      _shopNameBySellerId = shopMap;
-      _sellerById = sellerMap;
-    });
+  void _resolveAndSetShopName(String sellerId) {
+    final configuredName = _shopNameBySellerId[sellerId];
+    // Only override if no configured shop name already set from settings
+    final sellerName = _sellerById[sellerId]?.name.trim() ?? '';
+    if ((configuredName == null ||
+            configuredName.isEmpty ||
+            configuredName.endsWith(' Shop')) &&
+        sellerName.isNotEmpty) {
+      _shopNameBySellerId[sellerId] = '$sellerName Shop';
+    }
+    if (mounted) setState(() {});
   }
 
   String _resolveShopName(ProductModel product) {

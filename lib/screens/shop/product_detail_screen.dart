@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../models/product_model.dart';
@@ -35,37 +36,43 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   List<ProductModel> _recommended = [];
   int _qty = 1;
 
+  StreamSubscription<UserModel?>? _sellerUserSub;
+  StreamSubscription<Map<String, dynamic>>? _sellerShopSub;
+
   @override
   void initState() {
     super.initState();
-    _loadSeller();
+    _subscribeToSeller();
     _loadSellerProducts();
     _loadRecommended();
   }
 
-  Future<void> _loadSeller() async {
-    try {
-      final results = await Future.wait([
-        _firestoreService.getUserById(widget.product.userId),
-        _firestoreService.getShopSettings(widget.product.userId),
-      ]);
-      final seller = results[0] as UserModel?;
-      final shopSettings = results[1] as Map<String, dynamic>;
-      final configuredShopName = (shopSettings['shopName'] as String?)?.trim();
-      final resolvedShopName =
-          (configuredShopName != null && configuredShopName.isNotEmpty)
-              ? configuredShopName
-              : ((seller?.name.trim().isNotEmpty == true)
-                  ? '${seller!.name.trim()} Shop'
-                  : 'Shop');
-      if (mounted) {
-        setState(() {
-          _seller = seller;
-          _shopName = resolvedShopName;
-        });
+  void _subscribeToSeller() {
+    final sellerId = widget.product.userId;
+    _sellerUserSub = _firestoreService.streamUserModel(sellerId).listen((user) {
+      if (!mounted) return;
+      setState(() {
+        _seller = user;
+        _resolveShopName();
+      });
+    });
+    _sellerShopSub = _firestoreService.streamShopSettings(sellerId).listen((settings) {
+      if (!mounted) return;
+      final configuredName = (settings['shopName'] as String?)?.trim() ?? '';
+      if (configuredName.isNotEmpty) {
+        setState(() => _shopName = configuredName);
+      } else {
+        _resolveShopName();
       }
-    } catch (e) {
-      debugPrint('Error loading seller: $e');
+    });
+  }
+
+  void _resolveShopName() {
+    final sellerName = _seller?.name.trim() ?? '';
+    if (_shopName == 'Shop' || _shopName.endsWith(' Shop')) {
+      setState(() {
+        _shopName = sellerName.isNotEmpty ? '$sellerName Shop' : 'Shop';
+      });
     }
   }
 
@@ -1000,6 +1007,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   @override
   void dispose() {
+    _sellerUserSub?.cancel();
+    _sellerShopSub?.cancel();
     _imagePageController.dispose();
     super.dispose();
   }

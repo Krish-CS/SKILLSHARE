@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../models/chat_model.dart';
 import '../../models/service_request_model.dart';
+import '../../models/user_model.dart';
 import '../../services/chat_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/cloudinary_service.dart';
@@ -52,6 +53,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   String? _currentUserId;
   String? _currentUserRole;
   String? _otherUserRole;
+  StreamSubscription<UserModel?>? _otherUserSub;
   bool _isLoading = false;
   bool _isSending = false;
 
@@ -169,6 +171,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     _workReqSubscription?.cancel();
     _messageReadSubscription?.cancel();
     _presenceSubscription?.cancel();
+    _otherUserSub?.cancel();
     _bubbleCtrl.dispose();
     _gradientCtrl.dispose();
     _tabController.dispose();
@@ -191,20 +194,23 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             (r.hireType != null && r.hireType!.trim().isNotEmpty),
       );
 
-  Future<void> _loadConversationRoles() async {
+  void _loadConversationRoles() {
     final auth = Provider.of<app_auth.AuthProvider>(context, listen: false);
     final currentRole = UserRoles.normalizeRole(auth.userRole ?? '');
 
-    String? otherRole;
-    try {
-      final otherUser = await _firestoreService.getUserById(widget.otherUserId);
-      otherRole = UserRoles.normalizeRole(otherUser?.role ?? '');
-    } catch (_) {}
-
     if (!mounted) return;
-    setState(() {
-      _currentUserRole = currentRole;
-      _otherUserRole = otherRole;
+    setState(() => _currentUserRole = currentRole);
+
+    // Stream the other user's role so it stays fresh
+    _otherUserSub?.cancel();
+    _otherUserSub = _firestoreService
+        .streamUserModel(widget.otherUserId)
+        .listen((user) {
+      if (!mounted) return;
+      final role = UserRoles.normalizeRole(user?.role ?? '');
+      if (role != _otherUserRole) {
+        setState(() => _otherUserRole = role);
+      }
     });
   }
 
