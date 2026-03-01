@@ -653,10 +653,6 @@ class _MyShopScreenState extends State<MyShopScreen>
               onPressed: () => Navigator.pop(ctx, 'cancel'),
               child: const Text('Cancel'),
             ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 'open_profile'),
-              child: const Text('Open Profile Settings'),
-            ),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, 'enable_now'),
               style: ElevatedButton.styleFrom(
@@ -668,22 +664,18 @@ class _MyShopScreenState extends State<MyShopScreen>
         ),
       );
 
-      if (result == 'open_profile' && context.mounted) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const SettingsScreen()),
-        );
-        return;
-      }
-
       if (result == 'enable_now') {
         await _firestoreService.updateUserSettings(userId, {
           ...userSettings,
           'enableShopDeliveryWorkflow': true,
         });
         if (context.mounted) {
-          AppDialog.success(
-              context, 'Delivery workflow enabled. You can configure it now.');
+          AppDialog.success(context,
+              'Delivery workflow enabled. Opening profile settings...');
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SettingsScreen()),
+          );
         }
       } else {
         return;

@@ -17,8 +17,13 @@ import '../main_navigation.dart';
 
 class CustomerSetupScreen extends StatefulWidget {
   final String userId;
+  final bool isEditing;
 
-  const CustomerSetupScreen({super.key, required this.userId});
+  const CustomerSetupScreen({
+    super.key,
+    required this.userId,
+    this.isEditing = false,
+  });
 
   @override
   State<CustomerSetupScreen> createState() => _CustomerSetupScreenState();
@@ -234,12 +239,18 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
       if (!mounted) return;
 
       AppDialog.success(context, 'Profile saved successfully!',
-          onDismiss: () => Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const MainNavigation(),
-            ),
-          ));
+          onDismiss: () {
+            if (widget.isEditing) {
+              Navigator.pop(context);
+            } else {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const MainNavigation(),
+                ),
+              );
+            }
+          });
     } catch (e) {
       if (!mounted) return;
       

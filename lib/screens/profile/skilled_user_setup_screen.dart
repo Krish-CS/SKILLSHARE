@@ -19,8 +19,13 @@ import '../main_navigation.dart';
 
 class SkilledUserSetupScreen extends StatefulWidget {
   final String userId;
+  final bool isEditing;
 
-  const SkilledUserSetupScreen({super.key, required this.userId});
+  const SkilledUserSetupScreen({
+    super.key,
+    required this.userId,
+    this.isEditing = false,
+  });
 
   @override
   State<SkilledUserSetupScreen> createState() => _SkilledUserSetupScreenState();
@@ -33,6 +38,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
   final _aadhaarController = TextEditingController();
   final _customCategoryController = TextEditingController();
   final _locationController = TextEditingController();
+  final _shopNameController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   final CloudinaryService _cloudinaryService = CloudinaryService();
   final FirestoreService _firestoreService = FirestoreService();
@@ -46,6 +52,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
   bool _isVerifying = false; // Separate flag for verification
   String _verificationStatus = 'pending';
   String _uploadStatusMessage = 'Saving profile...';
+  String _visibility = 'private';
   
   // Image variables
   File? _profileImage;
@@ -97,6 +104,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       }
       
       _skills = List.from(profile.skills);
+      _visibility = profile.visibility;
       _profileImageUrl = profile.profilePicture;
       _avatarConfig = profile.avatarConfig;
       _portfolioImageUrls = List.from(profile.portfolioImages);
@@ -116,6 +124,16 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       debugPrint('Error loading skill suggestions: $e');
     }
 
+    // Load shop name (only relevant when editing)
+    if (widget.isEditing) {
+      try {
+        final shopSettings = await _firestoreService.getShopSettings(widget.userId);
+        _shopNameController.text = shopSettings['shopName'] as String? ?? '';
+      } catch (e) {
+        debugPrint('Error loading shop settings: $e');
+      }
+    }
+
     setState(() {
       _isLoading = false;
     });
@@ -128,6 +146,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
     _aadhaarController.dispose();
     _customCategoryController.dispose();
     _locationController.dispose();
+    _shopNameController.dispose();
     super.dispose();
   }
 
@@ -650,7 +669,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
         category: finalCategory,
         profilePicture: effectiveProfileUrl,
         verificationStatus: _verificationStatus,
-        visibility: _isVerified ? AppConstants.visibilityPublic : AppConstants.visibilityPrivate,
+        visibility: widget.isEditing ? _visibility : (_isVerified ? AppConstants.visibilityPublic : AppConstants.visibilityPrivate),
         portfolioImages: finalPortfolioUrls,
         portfolioVideos: currentProfile?.portfolioVideos ?? [],
         verificationData: verificationData,
@@ -694,12 +713,28 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
           debugPrint('Error updating user profile photo: $e');
         }
 
+        // Save shop name when editing
+        if (widget.isEditing && _shopNameController.text.trim().isNotEmpty) {
+          try {
+            await _firestoreService.updateShopSettings(widget.userId, {
+              'shopName': _shopNameController.text.trim(),
+            });
+          } catch (e) {
+            debugPrint('Error saving shop name: $e');
+          }
+        }
+
         if (!mounted) return;
-        AppDialog.success(context, 'Profile saved successfully!',
-            onDismiss: () => nav.pushAndRemoveUntil(
-              MaterialPageRoute(builder: (_) => const MainNavigation()),
-              (route) => false,
-            ));
+        if (widget.isEditing) {
+          AppDialog.success(context, 'Profile updated successfully!',
+              onDismiss: () => nav.pop());
+        } else {
+          AppDialog.success(context, 'Profile saved successfully!',
+              onDismiss: () => nav.pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const MainNavigation()),
+                (route) => false,
+              ));
+        }
         
       } else {
         throw Exception(userProvider.error ?? 'Failed to save profile');
@@ -727,7 +762,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Setup Profile'),
+        title: Text(widget.isEditing ? 'Edit Profile' : 'Setup Profile'),
         actions: [
           TextButton(
             onPressed: _saveProfile,
@@ -855,6 +890,54 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
+
+                  // ── Edit-only: Visibility + Shop Name ─────────────────
+                  if (widget.isEditing) ...[  
+                    Card(
+                      elevation: 1,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _visibility == 'public' ? Icons.visibility : Icons.visibility_off,
+                              color: _visibility == 'public' ? Colors.green : Colors.orange,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Profile Visibility', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                                  Text(
+                                    _visibility == 'public' ? 'Visible to everyone' : 'Hidden from search',
+                                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch(
+                              value: _visibility == 'public',
+                              onChanged: (v) => setState(() => _visibility = v ? 'public' : 'private'),
+                              activeColor: Colors.green,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _shopNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Shop Name',
+                        hintText: 'e.g., Ravi\'s Handicrafts, Priya Studio...',
+                        prefixIcon: Icon(Icons.storefront),
+                        helperText: 'Displayed on your product listings',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
 
                   // Category Selection
                   DropdownButtonFormField<String>(

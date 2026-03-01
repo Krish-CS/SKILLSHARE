@@ -15,8 +15,13 @@ import '../main_navigation.dart';
 
 class CompanySetupScreen extends StatefulWidget {
   final String userId;
+  final bool isEditing;
 
-  const CompanySetupScreen({super.key, required this.userId});
+  const CompanySetupScreen({
+    super.key,
+    required this.userId,
+    this.isEditing = false,
+  });
 
   @override
   State<CompanySetupScreen> createState() => _CompanySetupScreenState();
@@ -221,10 +226,16 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
       if (!mounted) return;
 
       AppDialog.success(context, 'Company profile saved successfully!',
-          onDismiss: () => Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const MainNavigation()),
-          ));
+          onDismiss: () {
+            if (widget.isEditing) {
+              Navigator.pop(context);
+            } else {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const MainNavigation()),
+              );
+            }
+          });
     } catch (e) {
       if (!mounted) return;
       AppDialog.error(context, 'Error saving profile', detail: e.toString());

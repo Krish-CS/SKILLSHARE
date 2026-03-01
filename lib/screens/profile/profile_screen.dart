@@ -877,7 +877,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             // ── Action buttons ──
             if (!isOwnProfile)
               SliverToBoxAdapter(
-                child: _buildActionButtons(),
+                child: _buildActionButtons(coverColors),
               ),
 
             // ── Own-profile controls ──
@@ -962,19 +962,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         onPressed: onTap,
       );
 
-  /// Stable background gradient for profile body (no animation).
+  /// Keeps profile body clean and neutral.
   BoxDecoration _bodyGradient(List<Color> coverColors) {
-    return BoxDecoration(
-      gradient: LinearGradient(
-        colors: [
-          coverColors.first.withValues(alpha: 0.07),
-          const Color(0xFFF6F7FB),
-          coverColors.last.withValues(alpha: 0.05),
-        ],
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-      ),
-    );
+    return const BoxDecoration(color: Colors.white);
   }
 
   // ─── Minimal profile view for delivery partner / admin ────────────────────
@@ -1416,7 +1406,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildActionButtons() {
+  Widget _buildActionButtons(List<Color> coverColors) {
+    final secondaryActionColors = [coverColors.last, coverColors.first];
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
       child: Row(
@@ -1426,7 +1417,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: _gradientButton(
               label: 'Message',
               icon: Icons.chat_bubble_rounded,
-              colors: const [Color(0xFF5E35B1), Color(0xFF8E24AA)],
+              colors: coverColors,
               onTap: () async {
                 final nav = Navigator.of(context);
                 try {
@@ -1480,7 +1471,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: _gradientButton(
                 label: 'Review',
                 icon: Icons.star_rate_rounded,
-                colors: const [Color(0xFF5E35B1), Color(0xFFAB47BC)],
+                colors: const [Color(0xFFFF9800), Color(0xFFF4511E)],
                 onTap: _showAddReviewDialog,
               ),
             ),
@@ -1489,7 +1480,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: _gradientButton(
                 label: 'Hire',
                 icon: Icons.handshake_rounded,
-                colors: const [Color(0xFF1565C0), Color(0xFF1976D2)],
+                colors: secondaryActionColors,
                 onTap: _showHireRequestDialog,
               ),
             ),

@@ -14,7 +14,6 @@ import '../../widgets/universal_avatar.dart';
 import '../../screens/avatar/avatar_builder_screen.dart';
 import '../../utils/user_roles.dart';
 import 'profile_screen.dart';
-import 'edit_skilled_profile_screen.dart';
 import 'skilled_user_setup_screen.dart';
 import 'customer_setup_screen.dart';
 import 'company_setup_screen.dart';
@@ -599,21 +598,22 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                 onTap: () async {
                                   if (_currentUser == null) return;
                                   Widget editScreen;
-                                  if (_currentUser!.role ==
-                                      UserRoles.skilledPerson) {
-                                    editScreen =
-                                        const EditSkilledProfileScreen();
-                                  } else if (_currentUser!.role ==
-                                      UserRoles.customer) {
+                                  if (_currentUser!.role == UserRoles.skilledPerson) {
+                                    editScreen = SkilledUserSetupScreen(
+                                        userId: _currentUser!.uid,
+                                        isEditing: true);
+                                  } else if (_currentUser!.role == UserRoles.customer) {
                                     editScreen = CustomerSetupScreen(
-                                        userId: _currentUser!.uid);
-                                  } else if (_currentUser!.role ==
-                                      UserRoles.company) {
+                                        userId: _currentUser!.uid,
+                                        isEditing: true);
+                                  } else if (_currentUser!.role == UserRoles.company) {
                                     editScreen = CompanySetupScreen(
-                                        userId: _currentUser!.uid);
+                                        userId: _currentUser!.uid,
+                                        isEditing: true);
                                   } else {
-                                    editScreen =
-                                        const EditSkilledProfileScreen();
+                                    editScreen = SkilledUserSetupScreen(
+                                        userId: _currentUser!.uid,
+                                        isEditing: true);
                                   }
                                   await Navigator.push(
                                     context,
