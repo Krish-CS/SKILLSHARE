@@ -905,7 +905,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildSkilledPersonProfile() {
     const coverHeight = 210.0;
     const avatarRadius = 52.0;
-    const avatarBorder = 3.0;
 
     // gradient stops derived from category for a unique feel
     final List<Color> coverColors = _getCoverGradient(_profile!.category);
@@ -915,16 +914,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: Container(
         decoration: _bodyGradient(coverColors),
         child: CustomScrollView(
-          clipBehavior: Clip.none,
           slivers: [
-            // ── Pinned app-bar overlay (transparent → fills as you scroll) ──
+            // ── Pinned app-bar (LinkedIn/Instagram style: name shows when collapsed) ──
             SliverAppBar(
-              clipBehavior: Clip.none,
               pinned: true,
               expandedHeight: coverHeight,
               backgroundColor: coverColors.first,
               foregroundColor: Colors.white,
               elevation: 0,
+              scrolledUnderElevation: 0,
+              surfaceTintColor: Colors.transparent,
+              title: Text(
+                _displayNameUpper(_userData?.name, fallback: 'User'),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16),
+              ),
               actions: [
                 if (!isOwnProfile) ...[
                   _appBarIcon(Icons.share_rounded, () {
@@ -960,57 +966,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
               ],
-              flexibleSpace: LayoutBuilder(
-                builder: (context, constraints) {
-                  final top = MediaQuery.of(context).padding.top;
-                  final t =
-                      ((constraints.biggest.height - kToolbarHeight - top) /
-                              (coverHeight - kToolbarHeight))
-                          .clamp(0.0, 1.0);
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    fit: StackFit.expand,
-                    children: [
-                      FlexibleSpaceBar(
-                        background: _buildCoverBanner(coverColors, coverHeight),
-                      ),
-                      if (t > 0.05)
-                        Positioned(
-                          bottom: -(avatarRadius + avatarBorder),
-                          left: 20,
-                          child: Opacity(
-                            opacity: t,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: LinearGradient(
-                                  colors: coverColors,
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: coverColors.last
-                                        .withValues(alpha: 0.45),
-                                    blurRadius: 20,
-                                    spreadRadius: 2,
-                                    offset: const Offset(0, 6),
-                                  ),
-                                ],
-                              ),
-                              padding: const EdgeInsets.all(avatarBorder),
-                              child: UniversalAvatar(
-                                avatarConfig: _userData?.avatarConfig,
-                                photoUrl: _profile!.profilePicture,
-                                fallbackName: _userData?.name,
-                                radius: avatarRadius,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
+              flexibleSpace: FlexibleSpaceBar(
+                collapseMode: CollapseMode.pin,
+                background: _buildCoverBanner(coverColors, coverHeight),
               ),
             ),
 
@@ -1134,15 +1092,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: Container(
         decoration: _bodyGradient(coverColors),
         child: CustomScrollView(
-          clipBehavior: Clip.none,
           slivers: [
             SliverAppBar(
-              clipBehavior: Clip.none,
               pinned: true,
               expandedHeight: coverHeight,
               backgroundColor: coverColors.first,
               foregroundColor: Colors.white,
               elevation: 0,
+              scrolledUnderElevation: 0,
+              surfaceTintColor: Colors.transparent,
+              title: Text(
+                _displayNameUpper(_userData?.name, fallback: 'User'),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16),
+              ),
               actions: [
                 if (!isOwnProfile)
                   IconButton(
@@ -1191,146 +1156,131 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     },
                   ),
               ],
-              flexibleSpace: LayoutBuilder(
-                builder: (context, constraints) {
-                  final top = MediaQuery.of(context).padding.top;
-                  final t =
-                      ((constraints.biggest.height - kToolbarHeight - top) /
-                              (coverHeight - kToolbarHeight))
-                          .clamp(0.0, 1.0);
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    fit: StackFit.expand,
-                    children: [
-                      FlexibleSpaceBar(
-                        background: BannerDisplay(
-                          enableAnimations: false,
-                          bannerData: _normalizedBannerData(
-                                _profile?.bannerData,
-                                fallbackName: _userData?.name,
-                              ) ??
-                              {
-                                'type': 'text',
-                                'text': _displayNameUpper(_userData?.name,
-                                    fallback: 'User'),
-                                'fontKey': 'default',
-                                'textColor': 0xFFFFFFFF,
-                                'fontSize': 28.0,
-                                'animation': 'none',
-                              },
-                          defaultColors: coverColors,
-                          height: coverHeight,
-                          child: Stack(
-                            fit: StackFit.expand,
-                            clipBehavior: Clip.none,
-                            children: [
-                              if (isOwnProfile)
-                                Positioned(
-                                  top: 12,
-                                  right: 12,
-                                  child: GestureDetector(
-                                    onTap: _openBannerEditor,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.45),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(Icons.edit_rounded,
-                                          color: Colors.white, size: 18),
-                                    ),
-                                  ),
-                                ),
-                            ],
+              flexibleSpace: FlexibleSpaceBar(
+                collapseMode: CollapseMode.pin,
+                background: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned.fill(
+                      child: BannerDisplay(
+                        enableAnimations: false,
+                        bannerData: _normalizedBannerData(
+                              _profile?.bannerData,
+                              fallbackName: _userData?.name,
+                            ) ??
+                            {
+                              'type': 'text',
+                              'text': _displayNameUpper(_userData?.name,
+                                  fallback: 'User'),
+                              'fontKey': 'default',
+                              'textColor': 0xFFFFFFFF,
+                              'fontSize': 28.0,
+                              'animation': 'none',
+                            },
+                        defaultColors: coverColors,
+                        height: coverHeight,
+                      ),
+                    ),
+                    if (isOwnProfile)
+                      Positioned(
+                        top: 12,
+                        right: 12,
+                        child: GestureDetector(
+                          onTap: _openBannerEditor,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.edit_rounded,
+                                color: Colors.white, size: 18),
                           ),
                         ),
                       ),
-                      if (t > 0.05)
-                        Positioned(
-                          bottom: -(avatarRadius + avatarBorder),
-                          left: 20,
-                          child: Opacity(
-                            opacity: t,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: LinearGradient(
-                                    colors: coverColors,
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight),
-                                boxShadow: [
-                                  BoxShadow(
-                                      color: coverColors.last
-                                          .withValues(alpha: 0.45),
-                                      blurRadius: 20,
-                                      spreadRadius: 2,
-                                      offset: const Offset(0, 6)),
-                                ],
-                              ),
-                              padding: const EdgeInsets.all(avatarBorder),
-                              child: UniversalAvatar(
-                                avatarConfig: _userData?.avatarConfig,
-                                avatarKey: _customerProfile?.avatarKey,
-                                photoUrl: imageUrl,
-                                fallbackName: _userData?.name,
-                                radius: avatarRadius,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
+                  ],
+                ),
               ),
             ),
 
-            // ── Identity: name centered under avatar ──
+            // ── Identity: avatar + name (LinkedIn-style) ──
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                    16, avatarRadius + avatarBorder + 12, 16, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4),
-                      child: SizedBox(
-                        width: 2 * (avatarRadius + avatarBorder),
-                        child: Text(
-                          _displayNameUpper(_userData?.name, fallback: 'User'),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w900,
-                              color: Color(0xFF1A1A2E),
-                              letterSpacing: 1.2),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: coverColors),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(roleIcon, size: 12, color: Colors.white),
-                          const SizedBox(width: 4),
-                          Text(roleLabel,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                        16, avatarRadius + avatarBorder + 12, 16, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: SizedBox(
+                            width: 2 * (avatarRadius + avatarBorder),
+                            child: Text(
+                              _displayNameUpper(_userData?.name,
+                                  fallback: 'User'),
+                              textAlign: TextAlign.center,
                               style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold)),
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w900,
+                                  color: Color(0xFF1A1A2E),
+                                  letterSpacing: 1.2),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(colors: coverColors),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(roleIcon, size: 12, color: Colors.white),
+                              const SizedBox(width: 4),
+                              Text(roleLabel,
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Avatar overlapping cover photo
+                  Positioned(
+                    top: -(avatarRadius + avatarBorder),
+                    left: 16,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border:
+                            Border.all(color: Colors.white, width: avatarBorder),
+                        boxShadow: [
+                          BoxShadow(
+                            color: coverColors.last.withValues(alpha: 0.45),
+                            blurRadius: 20,
+                            spreadRadius: 2,
+                            offset: const Offset(0, 6),
+                          ),
                         ],
                       ),
+                      child: UniversalAvatar(
+                        avatarConfig: _userData?.avatarConfig,
+                        photoUrl: imageUrl,
+                        fallbackName: _userData?.name,
+                        radius: avatarRadius,
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
 
@@ -1363,46 +1313,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildCoverBanner(List<Color> colors, double height) {
-    return BannerDisplay(
-      enableAnimations: false,
-      bannerData: _normalizedBannerData(
-            _profile?.bannerData,
-            fallbackName: _userData?.name,
-          ) ??
-          {
-            'type': 'text',
-            'text': _displayNameUpper(_userData?.name, fallback: 'User'),
-            'fontKey': 'default',
-            'textColor': 0xFFFFFFFF,
-            'fontSize': 28.0,
-            'animation': 'none',
-          },
-      defaultColors: colors,
-      height: height,
-      child: Stack(
-        fit: StackFit.expand,
-        clipBehavior: Clip.none,
-        children: [
-          // Edit banner button (own profile only) — top right
-          if (isOwnProfile)
-            Positioned(
-              top: 12,
-              right: 12,
-              child: GestureDetector(
-                onTap: _openBannerEditor,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.edit_rounded,
-                      color: Colors.white, size: 18),
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned.fill(
+          child: BannerDisplay(
+            enableAnimations: false,
+            bannerData: _normalizedBannerData(
+                      _profile?.bannerData,
+                      fallbackName: _userData?.name,
+                    ) ??
+                    {
+                      'type': 'text',
+                      'text': _displayNameUpper(_userData?.name, fallback: 'User'),
+                      'fontKey': 'default',
+                      'textColor': 0xFFFFFFFF,
+                      'fontSize': 28.0,
+                      'animation': 'none',
+                    },
+            defaultColors: colors,
+            height: height,
+          ),
+        ),
+        // Edit banner button (own profile only) — top right
+        if (isOwnProfile)
+          Positioned(
+            top: 12,
+            right: 12,
+            child: GestureDetector(
+              onTap: _openBannerEditor,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  shape: BoxShape.circle,
                 ),
+                child: const Icon(Icons.edit_rounded,
+                    color: Colors.white, size: 18),
               ),
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 
@@ -1411,7 +1362,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     const avatarBorder = 3.0;
     final avatarDiameter = 2 * (avatarRadius + avatarBorder);
 
-    return Padding(
+    // Assign content to local var so we can overlay avatar without re-indenting
+    final content = Padding(
       padding: EdgeInsets.fromLTRB(16, avatarRadius + avatarBorder + 8, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1630,6 +1582,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
         ],
       ),
+    );
+    // ── LinkedIn-style: avatar overlaps cover photo, always visible ──
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        content,
+        Positioned(
+          top: -(avatarRadius + avatarBorder),
+          left: 16,
+          child: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: avatarBorder),
+              boxShadow: [
+                BoxShadow(
+                  color: coverColors.last.withValues(alpha: 0.45),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: UniversalAvatar(
+              avatarConfig: _userData?.avatarConfig,
+              photoUrl: _profile!.profilePicture,
+              fallbackName: _userData?.name,
+              radius: avatarRadius,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -3013,15 +2996,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: Container(
         decoration: _bodyGradient(coverColors),
         child: CustomScrollView(
-          clipBehavior: Clip.none,
           slivers: [
             SliverAppBar(
-              clipBehavior: Clip.none,
               pinned: true,
               expandedHeight: coverHeight,
               backgroundColor: coverColors.first,
               foregroundColor: Colors.white,
               elevation: 0,
+              scrolledUnderElevation: 0,
+              surfaceTintColor: Colors.transparent,
+              title: Text(
+                _displayNameUpper(_userData?.name, fallback: 'Customer'),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16),
+              ),
               actions: [
                 if (!isOwnProfile)
                   IconButton(
@@ -3070,258 +3060,246 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     },
                   ),
               ],
-              flexibleSpace: LayoutBuilder(
-                builder: (context, constraints) {
-                  final top = MediaQuery.of(context).padding.top;
-                  final t =
-                      ((constraints.biggest.height - kToolbarHeight - top) /
-                              (coverHeight - kToolbarHeight))
-                          .clamp(0.0, 1.0);
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    fit: StackFit.expand,
-                    children: [
-                      FlexibleSpaceBar(
-                        collapseMode: CollapseMode.pin,
-                        background: BannerDisplay(
-                          enableAnimations: false,
-                          bannerData: _normalizedBannerData(
-                                _customerProfile?.bannerData,
-                                fallbackName: _userData?.name,
-                              ) ??
-                              {
-                                'type': 'text',
-                                'text': _displayNameUpper(_userData?.name,
-                                    fallback: 'Customer'),
-                                'fontKey': 'default',
-                                'textColor': 0xFFFFFFFF,
-                                'fontSize': 28.0,
-                                'animation': 'none',
-                              },
-                          defaultColors: coverColors,
-                          height: coverHeight,
-                          child: Stack(
-                            fit: StackFit.expand,
-                            clipBehavior: Clip.none,
-                            children: [
-                              if (isOwnProfile)
-                                Positioned(
-                                  top: 12,
-                                  right: 12,
-                                  child: GestureDetector(
-                                    onTap: _openBannerEditor,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.45),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(Icons.edit_rounded,
-                                          color: Colors.white, size: 18),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      if (t > 0.05)
-                        Positioned(
-                          bottom: -(avatarRadius + avatarBorder),
-                          left: 20,
-                          child: Opacity(
-                            opacity: t,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: LinearGradient(
-                                    colors: coverColors,
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight),
-                                boxShadow: [
-                                  BoxShadow(
-                                      color: coverColors.last
-                                          .withValues(alpha: 0.45),
-                                      blurRadius: 20,
-                                      spreadRadius: 2,
-                                      offset: const Offset(0, 6))
-                                ],
-                              ),
-                              padding: const EdgeInsets.all(avatarBorder),
-                              child: UniversalAvatar(
-                                avatarConfig: _userData?.avatarConfig,
-                                photoUrl: imageUrl,
-                                fallbackName: _userData?.name,
-                                radius: avatarRadius,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
-            ),
-
-            // ── Identity: name centered under avatar ──
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                    20, avatarRadius + avatarBorder + 12, 16, 0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+              flexibleSpace: FlexibleSpaceBar(
+                collapseMode: CollapseMode.pin,
+                background: Stack(
+                  clipBehavior: Clip.none,
                   children: [
-                    // Name centered under avatar
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            width: 2 * (avatarRadius + avatarBorder),
-                            child: Text(
-                              _displayNameUpper(_userData?.name,
+                    Positioned.fill(
+                      child: BannerDisplay(
+                        enableAnimations: false,
+                        bannerData: _normalizedBannerData(
+                              _customerProfile?.bannerData,
+                              fallbackName: _userData?.name,
+                            ) ??
+                            {
+                              'type': 'text',
+                              'text': _displayNameUpper(_userData?.name,
                                   fallback: 'Customer'),
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w900,
-                                  color: Color(0xFF1A1A2E),
-                                  letterSpacing: 1.2),
-                            ),
-                          ),
-                          if (locationText.isNotEmpty) ...[
-                            const SizedBox(height: 5),
-                            Row(
-                              children: [
-                                const Icon(Icons.location_on_rounded,
-                                    size: 14, color: Color(0xFFAA44BB)),
-                                const SizedBox(width: 3),
-                                Text(locationText,
-                                    style: const TextStyle(
-                                        color: Color(0xFF777788),
-                                        fontSize: 13)),
-                              ],
-                            ),
-                          ],
-                        ],
+                              'fontKey': 'default',
+                              'textColor': 0xFFFFFFFF,
+                              'fontSize': 28.0,
+                              'animation': 'none',
+                            },
+                        defaultColors: coverColors,
+                        height: coverHeight,
                       ),
                     ),
-                    // Action button
                     if (isOwnProfile)
-                      GestureDetector(
-                        onTap: () async {
-                          await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) => CustomerSetupScreen(
-                                      userId: widget.userId)));
-                          _loadProfile();
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 18, vertical: 10),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(colors: coverColors),
-                            borderRadius: BorderRadius.circular(30),
-                            boxShadow: [
-                              BoxShadow(
-                                  color:
-                                      coverColors.last.withValues(alpha: 0.35),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 3))
-                            ],
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.edit_rounded,
-                                  color: Colors.white, size: 14),
-                              SizedBox(width: 6),
-                              Text('Edit Profile',
-                                  style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12)),
-                            ],
-                          ),
-                        ),
-                      )
-                    else
-                      GestureDetector(
-                        onTap: () async {
-                          final nav = Navigator.of(context);
-                          try {
-                            final cu = FirebaseAuth.instance.currentUser;
-                            if (cu == null) return;
-                            final cuData =
-                                await _firestoreService.getUserById(cu.uid);
-                            if (cuData == null || _userData == null) return;
-                            if (!mounted) return;
-                            showDialog(
-                                context: context,
-                                barrierDismissible: false,
-                                builder: (_) => const Center(
-                                    child: CircularProgressIndicator()));
-                            final chatId = await _chatService.getOrCreateChat(
-                              cu.uid,
-                              widget.userId,
-                              {
-                                'name': cuData.name,
-                                'profilePhoto': cuData.profilePhoto
-                              },
-                              {
-                                'name': _userData!.name,
-                                'profilePhoto': _userData!.profilePhoto
-                              },
-                            );
-                            if (!mounted) return;
-                            nav.pop();
-                            nav.push(MaterialPageRoute(
-                                builder: (_) => ChatDetailScreen(
-                                    chatId: chatId,
-                                    otherUserId: widget.userId,
-                                    otherUserName: _userData!.name,
-                                    otherUserPhoto: _userData!.profilePhoto)));
-                          } catch (e) {
-                            if (!mounted) return;
-                            nav.pop();
-                            AppDialog.error(context, 'Error starting chat',
-                                detail: e.toString());
-                          }
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 18, vertical: 10),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                                colors: [Color(0xFF2979FF), Color(0xFF00B0FF)]),
-                            borderRadius: BorderRadius.circular(30),
-                            boxShadow: [
-                              BoxShadow(
-                                  color: const Color(0xFF2979FF)
-                                      .withValues(alpha: 0.35),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 3))
-                            ],
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.chat_bubble_rounded,
-                                  color: Colors.white, size: 14),
-                              SizedBox(width: 6),
-                              Text('Message',
-                                  style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12)),
-                            ],
+                      Positioned(
+                        top: 12,
+                        right: 12,
+                        child: GestureDetector(
+                          onTap: _openBannerEditor,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.edit_rounded,
+                                color: Colors.white, size: 18),
                           ),
                         ),
                       ),
                   ],
                 ),
+              ),
+            ),
+
+            // ── Identity: avatar + name (LinkedIn-style) ──
+            SliverToBoxAdapter(
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                        20, avatarRadius + avatarBorder + 12, 16, 0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Name centered under avatar
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 2 * (avatarRadius + avatarBorder),
+                                child: Text(
+                                  _displayNameUpper(_userData?.name,
+                                      fallback: 'Customer'),
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w900,
+                                      color: Color(0xFF1A1A2E),
+                                      letterSpacing: 1.2),
+                                ),
+                              ),
+                              if (locationText.isNotEmpty) ...[
+                                const SizedBox(height: 5),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.location_on_rounded,
+                                        size: 14, color: Color(0xFFAA44BB)),
+                                    const SizedBox(width: 3),
+                                    Text(locationText,
+                                        style: const TextStyle(
+                                            color: Color(0xFF777788),
+                                            fontSize: 13)),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        // Action button
+                        if (isOwnProfile)
+                          GestureDetector(
+                            onTap: () async {
+                              await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => CustomerSetupScreen(
+                                          userId: widget.userId)));
+                              _loadProfile();
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 18, vertical: 10),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(colors: coverColors),
+                                borderRadius: BorderRadius.circular(30),
+                                boxShadow: [
+                                  BoxShadow(
+                                      color: coverColors.last
+                                          .withValues(alpha: 0.35),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 3))
+                                ],
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.edit_rounded,
+                                      color: Colors.white, size: 14),
+                                  SizedBox(width: 6),
+                                  Text('Edit Profile',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                          )
+                        else
+                          GestureDetector(
+                            onTap: () async {
+                              final nav = Navigator.of(context);
+                              try {
+                                final cu = FirebaseAuth.instance.currentUser;
+                                if (cu == null) return;
+                                final cuData =
+                                    await _firestoreService.getUserById(cu.uid);
+                                if (cuData == null || _userData == null) return;
+                                if (!mounted) return;
+                                showDialog(
+                                    context: context,
+                                    barrierDismissible: false,
+                                    builder: (_) => const Center(
+                                        child: CircularProgressIndicator()));
+                                final chatId =
+                                    await _chatService.getOrCreateChat(
+                                  cu.uid,
+                                  widget.userId,
+                                  {
+                                    'name': cuData.name,
+                                    'profilePhoto': cuData.profilePhoto
+                                  },
+                                  {
+                                    'name': _userData!.name,
+                                    'profilePhoto': _userData!.profilePhoto
+                                  },
+                                );
+                                if (!mounted) return;
+                                nav.pop();
+                                nav.push(MaterialPageRoute(
+                                    builder: (_) => ChatDetailScreen(
+                                        chatId: chatId,
+                                        otherUserId: widget.userId,
+                                        otherUserName: _userData!.name,
+                                        otherUserPhoto:
+                                            _userData!.profilePhoto)));
+                              } catch (e) {
+                                if (!mounted) return;
+                                nav.pop();
+                                AppDialog.error(context, 'Error starting chat',
+                                    detail: e.toString());
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 18, vertical: 10),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(colors: [
+                                  Color(0xFF2979FF),
+                                  Color(0xFF00B0FF)
+                                ]),
+                                borderRadius: BorderRadius.circular(30),
+                                boxShadow: [
+                                  BoxShadow(
+                                      color: const Color(0xFF2979FF)
+                                          .withValues(alpha: 0.35),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 3))
+                                ],
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.chat_bubble_rounded,
+                                      color: Colors.white, size: 14),
+                                  SizedBox(width: 6),
+                                  Text('Message',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  // Avatar overlapping cover photo
+                  Positioned(
+                    top: -(avatarRadius + avatarBorder),
+                    left: 16,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border:
+                            Border.all(color: Colors.white, width: avatarBorder),
+                        boxShadow: [
+                          BoxShadow(
+                            color: coverColors.last.withValues(alpha: 0.45),
+                            blurRadius: 20,
+                            spreadRadius: 2,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: UniversalAvatar(
+                        avatarConfig: _userData?.avatarConfig,
+                        photoUrl: imageUrl,
+                        fallbackName: _userData?.name,
+                        radius: avatarRadius,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
 
@@ -3529,15 +3507,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         child: CustomScrollView(
-          clipBehavior: Clip.none,
           slivers: [
             SliverAppBar(
-              clipBehavior: Clip.none,
               pinned: true,
               expandedHeight: coverHeight,
               backgroundColor: coverColors.first,
               foregroundColor: Colors.white,
               elevation: 0,
+              scrolledUnderElevation: 0,
+              surfaceTintColor: Colors.transparent,
+              title: Text(
+                _displayNameUpper(profile.companyName, fallback: 'Company'),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16),
+              ),
               actions: [
                 if (!isOwnProfile) ...[
                   IconButton(
@@ -3563,110 +3548,65 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
               ],
-              flexibleSpace: LayoutBuilder(
-                builder: (context, constraints) {
-                  final top = MediaQuery.of(context).padding.top;
-                  final t =
-                      ((constraints.biggest.height - kToolbarHeight - top) /
-                              (coverHeight - kToolbarHeight))
-                          .clamp(0.0, 1.0);
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    fit: StackFit.expand,
-                    children: [
-                      FlexibleSpaceBar(
-                        collapseMode: CollapseMode.pin,
-                        background: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            Positioned.fill(
-                              child: BannerDisplay(
-                                enableAnimations: false,
-                                bannerData: _normalizedBannerData(
-                                      profile.bannerData,
-                                      fallbackName: profile.companyName,
-                                    ) ??
-                                    {
-                                      'type': 'text',
-                                      'text': _displayNameUpper(
-                                        profile.companyName,
-                                        fallback: 'Company',
-                                      ),
-                                      'fontKey': 'default',
-                                      'textColor': 0xFFFFFFFF,
-                                      'fontSize': 28.0,
-                                      'animation': 'none',
-                                    },
-                                defaultColors: coverColors,
-                                height: coverHeight,
+              flexibleSpace: FlexibleSpaceBar(
+                collapseMode: CollapseMode.pin,
+                background: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned.fill(
+                      child: BannerDisplay(
+                        enableAnimations: false,
+                        bannerData: _normalizedBannerData(
+                              profile.bannerData,
+                              fallbackName: profile.companyName,
+                            ) ??
+                            {
+                              'type': 'text',
+                              'text': _displayNameUpper(
+                                profile.companyName,
+                                fallback: 'Company',
                               ),
-                            ),
-                            if (isOwnProfile)
-                              Positioned(
-                                top: 12,
-                                right: 12,
-                                child: GestureDetector(
-                                  onTap: _openBannerEditor,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color:
-                                          Colors.black.withValues(alpha: 0.45),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(Icons.edit_rounded,
-                                        color: Colors.white, size: 18),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
+                              'fontKey': 'default',
+                              'textColor': 0xFFFFFFFF,
+                              'fontSize': 28.0,
+                              'animation': 'none',
+                            },
+                        defaultColors: coverColors,
+                        height: coverHeight,
                       ),
-                      if (t > 0.05)
-                        Positioned(
-                          bottom: -(avatarRadius + avatarBorder),
-                          left: 20,
-                          child: Opacity(
-                            opacity: t,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: LinearGradient(
-                                    colors: coverColors,
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight),
-                                boxShadow: [
-                                  BoxShadow(
-                                      color: coverColors.last
-                                          .withValues(alpha: 0.45),
-                                      blurRadius: 20,
-                                      spreadRadius: 2,
-                                      offset: const Offset(0, 6))
-                                ],
-                              ),
-                              padding: const EdgeInsets.all(avatarBorder),
-                              child: UniversalAvatar(
-                                avatarConfig: _userData?.avatarConfig,
-                                photoUrl: imageUrl,
-                                fallbackName: profile.companyName,
-                                radius: avatarRadius,
-                              ),
+                    ),
+                    if (isOwnProfile)
+                      Positioned(
+                        top: 12,
+                        right: 12,
+                        child: GestureDetector(
+                          onTap: _openBannerEditor,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              shape: BoxShape.circle,
                             ),
+                            child: const Icon(Icons.edit_rounded,
+                                color: Colors.white, size: 18),
                           ),
                         ),
-                    ],
-                  );
-                },
+                      ),
+                  ],
+                ),
               ),
             ),
 
-            // ── Identity: name centered under avatar ──
+            // ── Identity: avatar + company name (LinkedIn-style) ──
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                    20, avatarRadius + avatarBorder + 12, 16, 0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                        20, avatarRadius + avatarBorder + 12, 16, 0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Name centered under avatar
                     Expanded(
@@ -3892,6 +3832,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                   ],
                 ),
+              ),
+                  // Avatar overlapping cover photo
+                  Positioned(
+                    top: -(avatarRadius + avatarBorder),
+                    left: 16,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: Colors.white, width: avatarBorder),
+                        boxShadow: [
+                          BoxShadow(
+                            color: coverColors.last.withValues(alpha: 0.45),
+                            blurRadius: 20,
+                            spreadRadius: 2,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: UniversalAvatar(
+                        avatarConfig: _userData?.avatarConfig,
+                        photoUrl: imageUrl,
+                        fallbackName: profile.companyName,
+                        radius: avatarRadius,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
 

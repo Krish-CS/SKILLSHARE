@@ -6,6 +6,7 @@ import '../../services/firestore_service.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../utils/app_helpers.dart';
 import '../../utils/app_dialog.dart';
+import '../../utils/modern_pickers.dart';
 
 class CreateJobScreen extends StatefulWidget {
   final JobModel? existingJob;
@@ -33,23 +34,29 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   bool _isLoading = false;
 
   // ── Shift / schedule state ──────────────────────────────────────────────
-  String? _shiftType;       // 'morning' | 'afternoon' | 'evening' | 'night' | 'custom' | 'flexible'
-  TimeOfDay? _shiftStart;   // only for 'custom'
-  TimeOfDay? _shiftEnd;     // only for 'custom'
+  String?
+      _shiftType; // 'morning' | 'afternoon' | 'evening' | 'night' | 'custom' | 'flexible'
+  TimeOfDay? _shiftStart; // only for 'custom'
+  TimeOfDay? _shiftEnd; // only for 'custom'
   final Set<String> _selectedWorkDays = {};
 
   static const _shiftOptions = [
-    ('flexible',  'Flexible (any time)'),
-    ('morning',   'Morning  6 AM – 12 PM'),
+    ('flexible', 'Flexible (any time)'),
+    ('morning', 'Morning  6 AM – 12 PM'),
     ('afternoon', 'Afternoon  12 PM – 6 PM'),
-    ('evening',   'Evening  6 PM – 10 PM'),
-    ('night',     'Night  10 PM – 6 AM'),
-    ('custom',    'Custom hours'),
+    ('evening', 'Evening  6 PM – 10 PM'),
+    ('night', 'Night  10 PM – 6 AM'),
+    ('custom', 'Custom hours'),
   ];
 
   static const _days = [
-    ('mon', 'Mon'), ('tue', 'Tue'), ('wed', 'Wed'),
-    ('thu', 'Thu'), ('fri', 'Fri'), ('sat', 'Sat'), ('sun', 'Sun'),
+    ('mon', 'Mon'),
+    ('tue', 'Tue'),
+    ('wed', 'Wed'),
+    ('thu', 'Thu'),
+    ('fri', 'Fri'),
+    ('sat', 'Sat'),
+    ('sun', 'Sun'),
   ];
 
   bool get _isEditing => widget.existingJob != null;
@@ -102,7 +109,11 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   }
 
   Future<TimeOfDay?> _pickTime(TimeOfDay initial) =>
-      showTimePicker(context: context, initialTime: initial);
+      ModernPickers.showModernTimePicker(
+        context: context,
+        initialTime: initial,
+        seedColor: const Color(0xFF2196F3),
+      );
 
   String _formatTod(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
@@ -110,21 +121,15 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   bool get _needsShift =>
       _selectedJobType == 'Full-time' || _selectedJobType == 'Part-time';
 
-  Future<void> _selectDeadline() async {    final DateTime? picked = await showDatePicker(
+  Future<void> _selectDeadline() async {
+    final DateTime? picked = await ModernPickers.showModernDatePicker(
       context: context,
       initialDate: DateTime.now().add(const Duration(days: 30)),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF2196F3),
-            ),
-          ),
-          child: child!,
-        );
-      },
+      seedColor: const Color(0xFF2196F3),
+      helpText: 'Select Job Deadline',
+      confirmText: 'Set Deadline',
     );
 
     if (picked != null) {
@@ -191,9 +196,10 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           jobType: _selectedJobType!.toLowerCase(),
           status: widget.existingJob!.status,
           shiftType: _needsShift ? (_shiftType ?? 'flexible') : null,
-          shiftStart: (_needsShift && _shiftType == 'custom' && _shiftStart != null)
-              ? _formatTod(_shiftStart!)
-              : null,
+          shiftStart:
+              (_needsShift && _shiftType == 'custom' && _shiftStart != null)
+                  ? _formatTod(_shiftStart!)
+                  : null,
           shiftEnd: (_needsShift && _shiftType == 'custom' && _shiftEnd != null)
               ? _formatTod(_shiftEnd!)
               : null,
@@ -227,9 +233,10 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           jobType: _selectedJobType!.toLowerCase(),
           status: 'open',
           shiftType: _needsShift ? (_shiftType ?? 'flexible') : null,
-          shiftStart: (_needsShift && _shiftType == 'custom' && _shiftStart != null)
-              ? _formatTod(_shiftStart!)
-              : null,
+          shiftStart:
+              (_needsShift && _shiftType == 'custom' && _shiftStart != null)
+                  ? _formatTod(_shiftStart!)
+                  : null,
           shiftEnd: (_needsShift && _shiftType == 'custom' && _shiftEnd != null)
               ? _formatTod(_shiftEnd!)
               : null,
@@ -427,9 +434,12 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                                 ),
                                 onPressed: () async {
                                   final t = await _pickTime(
-                                    _shiftStart ?? const TimeOfDay(hour: 9, minute: 0),
+                                    _shiftStart ??
+                                        const TimeOfDay(hour: 9, minute: 0),
                                   );
-                                  if (t != null) setState(() => _shiftStart = t);
+                                  if (t != null) {
+                                    setState(() => _shiftStart = t);
+                                  }
                                 },
                               ),
                             ),
@@ -448,7 +458,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                                 ),
                                 onPressed: () async {
                                   final t = await _pickTime(
-                                    _shiftEnd ?? const TimeOfDay(hour: 18, minute: 0),
+                                    _shiftEnd ??
+                                        const TimeOfDay(hour: 18, minute: 0),
                                   );
                                   if (t != null) setState(() => _shiftEnd = t);
                                 },

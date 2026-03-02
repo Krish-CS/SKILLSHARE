@@ -9,6 +9,14 @@ allprojects {
 
 subprojects {
     project.evaluationDependsOn(':app')
+    // Fix: on Windows, PUB_CACHE (C:\) and project (D:\) are on different drives,
+    // so Gradle cannot resolve cross-drive relative paths for plugin test sources.
+    // Redirect each plugin subproject's build dir into its own source directory.
+    afterEvaluate { proj ->
+        if (proj.name != 'app') {
+            proj.buildDir = new File(proj.projectDir, 'build')
+        }
+    }
 }
 
 tasks.register("clean", Delete) {

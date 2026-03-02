@@ -38,6 +38,8 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
   double _fontSize = 28;
   int _gradientIndex = 0;
   String _animation = 'none';
+  String _textStyle = 'bold';
+  double _animationSpeed = 1.0;
   Matrix4 _textMatrix = Matrix4.identity();
 
   // ─── Image options ─────────────────────────────────────────────────────────
@@ -61,6 +63,16 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
     [Color(0xFF654ea3), Color(0xFFeaafc8)],
     [Color(0xFF0F2027), Color(0xFF2C5364)],
     [Color(0xFFDA4453), Color(0xFF89216B)],
+    [Color(0xFF0B132B), Color(0xFF6FFFE9)],
+    [Color(0xFFFC466B), Color(0xFF3F5EFB)],
+    [Color(0xFF30CFD0), Color(0xFF330867)],
+    [Color(0xFFFF9966), Color(0xFFFF5E62)],
+    [Color(0xFF56CCF2), Color(0xFF2F80ED)],
+    [Color(0xFF00C6FF), Color(0xFF0072FF)],
+    [Color(0xFFF4D03F), Color(0xFF16A085)],
+    [Color(0xFF667EEA), Color(0xFF764BA2)],
+    [Color(0xFFFF0844), Color(0xFFFFB199)],
+    [Color(0xFF200122), Color(0xFF6F0000)],
   ];
 
   // ─── Font options ──────────────────────────────────────────────────────────
@@ -105,6 +117,16 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
     ('glow', 'Glow', Icons.flare),
     ('typewriter', 'Typewriter', Icons.keyboard),
     ('rotate', 'Rotate', Icons.rotate_right),
+    ('float', 'Float', Icons.air),
+    ('flicker', 'Flicker', Icons.bolt),
+  ];
+
+  static const _textStyles = [
+    ('bold', 'Bold', Icons.text_fields_rounded),
+    ('neon', 'Neon', Icons.flash_on_rounded),
+    ('outline', 'Outline', Icons.border_color_rounded),
+    ('glass', 'Glass', Icons.blur_on_rounded),
+    ('shadow', 'Shadow', Icons.layers_rounded),
   ];
 
   @override
@@ -122,6 +144,9 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
       _fontSize = (d['fontSize'] as num?)?.toDouble() ?? 28.0;
       _gradientIndex = (d['gradientIndex'] as int?) ?? 0;
       _animation = (d['animation'] as String?) ?? 'none';
+      _textStyle = (d['textStyle'] as String?) ?? 'bold';
+      _animationSpeed =
+          ((d['animationSpeed'] as num?)?.toDouble() ?? 1.0).clamp(0.6, 2.2);
       _uploadedImageUrl = d['imageUrl'] as String?;
       _textMatrix = _matrixFromDynamic(d['textMatrix']);
     }
@@ -151,6 +176,8 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
       'fontSize': _fontSize,
       'gradientIndex': _gradientIndex,
       'animation': _animation,
+      'textStyle': _textStyle,
+      'animationSpeed': _animationSpeed,
       'textMatrix': _textMatrix.storage.toList(),
     };
   }
@@ -512,6 +539,11 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
         _buildColorPicker(),
         const SizedBox(height: 16),
 
+        // Text style
+        _sectionLabel('Text Style'),
+        _buildTextStylePicker(),
+        const SizedBox(height: 16),
+
         // Font size slider
         _sectionLabel('Size: ${_fontSize.round()}px'),
         Slider(
@@ -532,6 +564,17 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
         // Animation
         _sectionLabel('Text Animation'),
         _buildAnimationPicker(),
+        const SizedBox(height: 16),
+        _sectionLabel(
+            'Animation Speed: ${_animationSpeed.toStringAsFixed(1)}x'),
+        Slider(
+          value: _animationSpeed,
+          min: 0.6,
+          max: 2.2,
+          divisions: 16,
+          activeColor: const Color(0xFF6A11CB),
+          onChanged: (v) => setState(() => _animationSpeed = v),
+        ),
         const SizedBox(height: 14),
 
         Row(
@@ -668,6 +711,8 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
       children: [
         ..._colorPresets.map((c) {
           final selected = _textColor == c;
+          final tickColor =
+              c.computeLuminance() > 0.6 ? Colors.black87 : Colors.white;
           return GestureDetector(
             onTap: () => setState(() => _textColor = c),
             child: AnimatedContainer(
@@ -689,8 +734,7 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
                     : [],
               ),
               child: selected
-                  ? const Icon(Icons.check_rounded,
-                      color: Colors.black, size: 16)
+                  ? Icon(Icons.check_rounded, color: tickColor, size: 16)
                   : null,
             ),
           );
@@ -723,51 +767,226 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
   }
 
   Future<void> _pickCustomColor() async {
-    // Simple HSV slider dialog
-    double hue = HSVColor.fromColor(_textColor).hue;
-    final picked = await showDialog<Color>(
+    var current = HSVColor.fromColor(_textColor);
+    final picked = await showModalBottomSheet<Color>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Pick Text Color'),
-        content: StatefulBuilder(
-          builder: (ctx, setS) {
-            final c = HSVColor.fromAHSV(1, hue, 1, 1).toColor();
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: c,
-                      borderRadius: BorderRadius.circular(8),
-                    )),
-                const SizedBox(height: 12),
-                Slider(
-                  value: hue,
-                  min: 0,
-                  max: 360,
-                  divisions: 360,
-                  activeColor: c,
-                  onChanged: (v) => setS(() => hue = v),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheet) {
+            final color = current.toColor();
+            return SafeArea(
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8F9FF),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      blurRadius: 22,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
                 ),
-              ],
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      height: 5,
+                      width: 56,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[350],
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            color.withValues(alpha: 0.92),
+                            color.withValues(alpha: 0.64),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: color,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '#${_toHexRgb(color)}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                          const Text(
+                            'Live',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _colorSliderRow(
+                      label: 'Hue',
+                      value: current.hue,
+                      min: 0,
+                      max: 360,
+                      activeColor: color,
+                      onChanged: (v) => setSheet(
+                        () => current = current.withHue(v),
+                      ),
+                    ),
+                    _colorSliderRow(
+                      label: 'Saturation',
+                      value: current.saturation,
+                      min: 0,
+                      max: 1,
+                      activeColor: color,
+                      onChanged: (v) => setSheet(
+                        () => current = current.withSaturation(v),
+                      ),
+                    ),
+                    _colorSliderRow(
+                      label: 'Brightness',
+                      value: current.value,
+                      min: 0,
+                      max: 1,
+                      activeColor: color,
+                      onChanged: (v) => setSheet(
+                        () => current = current.withValue(v),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF6A11CB),
+                                side:
+                                    const BorderSide(color: Color(0xFF6A11CB)),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              child: const Text('Cancel'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () => Navigator.pop(ctx, color),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF6A11CB),
+                                foregroundColor: Colors.white,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              child: const Text('Apply Color'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             );
           },
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () =>
-                Navigator.pop(ctx, HSVColor.fromAHSV(1, hue, 1, 1).toColor()),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6A11CB)),
-            child: const Text('Select', style: TextStyle(color: Colors.white)),
+        );
+      },
+    );
+    if (picked != null) setState(() => _textColor = picked);
+  }
+
+  String _toHexRgb(Color color) {
+    int to8(num channel) {
+      final value = channel <= 1 ? (channel * 255.0) : channel.toDouble();
+      return value.round().clamp(0, 255);
+    }
+
+    final r = to8(color.r).toRadixString(16).padLeft(2, '0');
+    final g = to8(color.g).toRadixString(16).padLeft(2, '0');
+    final b = to8(color.b).toRadixString(16).padLeft(2, '0');
+    return '$r$g$b'.toUpperCase();
+  }
+
+  Widget _colorSliderRow({
+    required String label,
+    required double value,
+    required double min,
+    required double max,
+    required Color activeColor,
+    required ValueChanged<double> onChanged,
+  }) {
+    final normalized = (value - min) / (max - min);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF3B3E5A),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${(normalized * 100).round()}%',
+                style: TextStyle(
+                  color: Colors.grey[700],
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: activeColor,
+              inactiveTrackColor: activeColor.withValues(alpha: 0.18),
+              thumbColor: activeColor,
+              overlayColor: activeColor.withValues(alpha: 0.15),
+              trackHeight: 4,
+            ),
+            child: Slider(
+              value: value.clamp(min, max),
+              min: min,
+              max: max,
+              onChanged: onChanged,
+            ),
           ),
         ],
       ),
     );
-    if (picked != null) setState(() => _textColor = picked);
   }
 
   // ─── Gradient picker ──────────────────────────────────────────────────────
@@ -818,6 +1037,67 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
   }
 
   // ─── Animation picker ──────────────────────────────────────────────────────
+
+  Widget _buildTextStylePicker() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: _textStyles.map((opt) {
+        final (key, label, icon) = opt;
+        final selected = _textStyle == key;
+        return GestureDetector(
+          onTap: () => setState(() => _textStyle = key),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              gradient: selected
+                  ? const LinearGradient(
+                      colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : null,
+              color: selected ? null : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: selected ? Colors.transparent : Colors.grey[300]!,
+              ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFF6A11CB).withValues(alpha: 0.3),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : [],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 16,
+                  color: selected ? Colors.white : Colors.grey[700],
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: selected ? Colors.white : Colors.black87,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
 
   Widget _buildAnimationPicker() {
     return Wrap(

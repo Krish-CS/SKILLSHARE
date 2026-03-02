@@ -43,17 +43,50 @@ class _BannerDisplayState extends State<BannerDisplay>
   late final AnimationController _ctrl;
   late final Animation<double> _anim;
 
+  double get _speedFactor {
+    final raw = widget.bannerData?['animationSpeed'];
+    final value = (raw is num) ? raw.toDouble() : 1.0;
+    return value.clamp(0.6, 2.2);
+  }
+
+  Duration get _animationDuration {
+    final millis = (2000 / _speedFactor).round().clamp(900, 3600);
+    return Duration(milliseconds: millis);
+  }
+
   @override
   void initState() {
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1800),
+      duration: _animationDuration,
     );
     if (widget.enableAnimations) {
       _ctrl.repeat(reverse: true);
     }
     _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
+  }
+
+  @override
+  void didUpdateWidget(covariant BannerDisplay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (_ctrl.duration != _animationDuration) {
+      _ctrl.duration = _animationDuration;
+      if (widget.enableAnimations) {
+        _ctrl
+          ..stop()
+          ..repeat(reverse: true);
+      }
+    }
+
+    if (widget.enableAnimations != oldWidget.enableAnimations) {
+      if (widget.enableAnimations) {
+        _ctrl.repeat(reverse: true);
+      } else {
+        _ctrl.stop();
+      }
+    }
   }
 
   @override
@@ -75,6 +108,16 @@ class _BannerDisplayState extends State<BannerDisplay>
     [Color(0xFF654ea3), Color(0xFFeaafc8)], // soft purple
     [Color(0xFF0F2027), Color(0xFF2C5364)], // dark teal
     [Color(0xFFDA4453), Color(0xFF89216B)], // berry
+    [Color(0xFF0B132B), Color(0xFF6FFFE9)], // deep cyan
+    [Color(0xFFFC466B), Color(0xFF3F5EFB)], // pink-indigo
+    [Color(0xFF30CFD0), Color(0xFF330867)], // aqua-violet
+    [Color(0xFFFF9966), Color(0xFFFF5E62)], // peach-red
+    [Color(0xFF56CCF2), Color(0xFF2F80ED)], // sky
+    [Color(0xFF00C6FF), Color(0xFF0072FF)], // electric blue
+    [Color(0xFFF4D03F), Color(0xFF16A085)], // gold-teal
+    [Color(0xFF667EEA), Color(0xFF764BA2)], // dusk
+    [Color(0xFFFF0844), Color(0xFFFFB199)], // coral punch
+    [Color(0xFF200122), Color(0xFF6F0000)], // wine
   ];
 
   List<Color> get _resolvedGradient {
@@ -141,11 +184,62 @@ class _BannerDisplayState extends State<BannerDisplay>
     }
   }
 
+  TextStyle _applyTextStylePreset(
+      TextStyle base, Color color, String stylePreset) {
+    switch (stylePreset) {
+      case 'neon':
+        return base.copyWith(
+          fontWeight: FontWeight.w800,
+          shadows: [
+            Shadow(color: color.withValues(alpha: 0.95), blurRadius: 8),
+            Shadow(color: color.withValues(alpha: 0.75), blurRadius: 20),
+            Shadow(color: Colors.white.withValues(alpha: 0.5), blurRadius: 30),
+          ],
+        );
+      case 'outline':
+        return base.copyWith(
+          fontWeight: FontWeight.w900,
+          shadows: const [
+            Shadow(color: Colors.black, offset: Offset(-1, -1), blurRadius: 0),
+            Shadow(color: Colors.black, offset: Offset(1, -1), blurRadius: 0),
+            Shadow(color: Colors.black, offset: Offset(-1, 1), blurRadius: 0),
+            Shadow(color: Colors.black, offset: Offset(1, 1), blurRadius: 0),
+          ],
+        );
+      case 'glass':
+        return base.copyWith(
+          color: color.withValues(alpha: 0.88),
+          letterSpacing: 0.6,
+          fontWeight: FontWeight.w700,
+          shadows: [
+            Shadow(color: Colors.white.withValues(alpha: 0.45), blurRadius: 6),
+            Shadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 10),
+          ],
+        );
+      case 'shadow':
+        return base.copyWith(
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.5,
+          shadows: const [
+            Shadow(color: Colors.black54, offset: Offset(0, 2), blurRadius: 6),
+            Shadow(color: Colors.black38, offset: Offset(0, 5), blurRadius: 12),
+          ],
+        );
+      case 'bold':
+      default:
+        return base.copyWith(fontWeight: FontWeight.w800);
+    }
+  }
+
   // ─── Animated text ────────────────────────────────────────────────────────
 
   Widget _animatedText(String text, String? fontKey, Color color,
-      double fontSize, String animation) {
-    final style = fontStyle(fontKey, fontSize, color, true);
+      double fontSize, String animation, String textStyle) {
+    final style = _applyTextStylePreset(
+      fontStyle(fontKey, fontSize, color, true),
+      color,
+      textStyle,
+    );
     if (!widget.enableAnimations) {
       return Text(text, style: style, textAlign: TextAlign.center);
     }
@@ -244,6 +338,29 @@ class _BannerDisplayState extends State<BannerDisplay>
           turns: Tween<double>(begin: -0.02, end: 0.02).animate(_anim),
           child: Text(text, style: style, textAlign: TextAlign.center),
         );
+      case 'float':
+        return AnimatedBuilder(
+          animation: _ctrl,
+          builder: (_, __) {
+            final dy = -8.0 * (1 - (2 * _ctrl.value - 1).abs());
+            return Transform.translate(
+              offset: Offset(0, dy),
+              child: Text(text, style: style, textAlign: TextAlign.center),
+            );
+          },
+        );
+      case 'flicker':
+        return AnimatedBuilder(
+          animation: _ctrl,
+          builder: (_, __) {
+            final flicker =
+                0.65 + (0.35 * ((_ctrl.value * 10).floor().isEven ? 1 : 0));
+            return Opacity(
+              opacity: flicker.clamp(0.45, 1.0),
+              child: Text(text, style: style, textAlign: TextAlign.center),
+            );
+          },
+        );
       default:
         return Text(text, style: style, textAlign: TextAlign.center);
     }
@@ -256,75 +373,81 @@ class _BannerDisplayState extends State<BannerDisplay>
     final d = widget.bannerData;
     final type = d?['type'] as String?;
 
-    return SizedBox(
-      height: widget.height,
-      child: Stack(
-        fit: StackFit.expand,
-        clipBehavior: Clip.none,
-        children: [
-          // ── background ──
-          if (type == 'image' &&
-              (d?['imageUrl'] as String?)?.isNotEmpty == true)
-            Positioned.fill(
-              child: WebImageLoader.loadImage(
-                imageUrl: d!['imageUrl'] as String,
-                fit: BoxFit.cover,
-              ),
-            )
-          else
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: _resolvedGradient,
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (_, __) {
+        final t = widget.enableAnimations ? _ctrl.value : 0.0;
+        final bgBegin = Alignment(-1 + (0.45 * t), -1 + (0.15 * t));
+        final bgEnd = Alignment(1 - (0.25 * t), 1);
+
+        return SizedBox(
+          height: widget.height,
+          child: Stack(
+            fit: StackFit.expand,
+            clipBehavior: Clip.none,
+            children: [
+              if (type == 'image' &&
+                  (d?['imageUrl'] as String?)?.isNotEmpty == true)
+                Positioned.fill(
+                  child: WebImageLoader.loadImage(
+                    imageUrl: d!['imageUrl'] as String,
+                    fit: BoxFit.cover,
                   ),
-                ),
-              ),
-            ),
-
-          // ── decorative blobs ──
-          Positioned(
-              top: -40,
-              right: -40,
-              child: _blob(200, Colors.white.withValues(alpha: 0.07))),
-          Positioned(
-              top: 20,
-              left: -50,
-              child: _blob(160, Colors.white.withValues(alpha: 0.05))),
-          Positioned(
-              bottom: 30,
-              right: 60,
-              child: _blob(80, Colors.white.withValues(alpha: 0.04))),
-
-          // ── text overlay (for text-type banners) ──
-          if (type == 'text' && d != null)
-            Positioned.fill(
-              child: Center(
-                child: Transform(
-                  alignment: Alignment.center,
-                  transform: _textMatrixFromData(d),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: _animatedText(
-                      (d['text'] as String?) ?? '',
-                      d['fontKey'] as String?,
-                      Color((d['textColor'] as int?) ?? 0xFFFFFFFF),
-                      (d['fontSize'] as num?)?.toDouble() ?? 28.0,
-                      widget.enableAnimations
-                          ? (d['animation'] as String?) ?? 'none'
-                          : 'none',
+                )
+              else
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: _resolvedGradient,
+                        begin: bgBegin,
+                        end: bgEnd,
+                      ),
                     ),
                   ),
                 ),
+              Positioned(
+                top: -40 + (8 * t),
+                right: -40 + (20 * t),
+                child: _blob(200, Colors.white.withValues(alpha: 0.07)),
               ),
-            ),
-
-          // ── caller-supplied overlay (role pill, edit button, etc.) ──
-          if (widget.child != null) widget.child!,
-        ],
-      ),
+              Positioned(
+                top: 20 + (10 * (1 - t)),
+                left: -50 + (12 * t),
+                child: _blob(160, Colors.white.withValues(alpha: 0.05)),
+              ),
+              Positioned(
+                bottom: 30 + (12 * (1 - t)),
+                right: 60 - (18 * t),
+                child: _blob(80, Colors.white.withValues(alpha: 0.04)),
+              ),
+              if (type == 'text' && d != null)
+                Positioned.fill(
+                  child: Center(
+                    child: Transform(
+                      alignment: Alignment.center,
+                      transform: _textMatrixFromData(d),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: _animatedText(
+                          (d['text'] as String?) ?? '',
+                          d['fontKey'] as String?,
+                          Color((d['textColor'] as int?) ?? 0xFFFFFFFF),
+                          (d['fontSize'] as num?)?.toDouble() ?? 28.0,
+                          widget.enableAnimations
+                              ? (d['animation'] as String?) ?? 'none'
+                              : 'none',
+                          (d['textStyle'] as String?) ?? 'bold',
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (widget.child != null) widget.child!,
+            ],
+          ),
+        );
+      },
     );
   }
 

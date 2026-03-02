@@ -915,7 +915,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                   IconButton(
                                     onPressed: () async {
                                       if (applicantUser == null ||
-                                          _currentUser == null) return;
+                                          _currentUser == null) {
+                                        return;
+                                      }
                                       final nav = Navigator.of(context);
                                       try {
                                         final currentUser =
@@ -1032,9 +1034,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                                 final chatId =
                                                     await _acceptApplicant(
                                                         profile.userId);
-                                                if (!mounted || chatId == null) {
-                                                  return;
-                                                }
+                                                if (chatId == null) return;
+                                                if (!mounted) return;
                                                 Navigator.push(
                                                   context,
                                                   MaterialPageRoute(

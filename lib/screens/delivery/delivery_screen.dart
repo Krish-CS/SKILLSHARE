@@ -5,6 +5,7 @@ import '../../models/order_model.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/app_helpers.dart';
 import '../../utils/app_dialog.dart';
+import '../../utils/modern_pickers.dart';
 import '../shop/order_tracking_screen.dart';
 
 class DeliveryScreen extends StatefulWidget {
@@ -396,17 +397,23 @@ class _DeliveryCard extends StatelessWidget {
 
   Future<DateTime?> _pickEstimatedDelivery(BuildContext context) async {
     final now = DateTime.now();
-    final pickedDate = await showDatePicker(
+    final pickedDate = await ModernPickers.showModernDatePicker(
       context: context,
       initialDate: now.add(const Duration(days: 1)),
       firstDate: now,
       lastDate: now.add(const Duration(days: 14)),
+      seedColor: const Color(0xFFFF6B35),
+      helpText: 'Select Delivery Date',
+      confirmText: 'Select',
     );
     if (pickedDate == null || !context.mounted) return null;
 
-    final pickedTime = await showTimePicker(
+    final pickedTime = await ModernPickers.showModernTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 48))),
+      seedColor: const Color(0xFFFF6B35),
+      helpText: 'Select Delivery Time',
+      confirmText: 'Set Time',
     );
     if (pickedTime == null) return null;
 
@@ -490,17 +497,23 @@ class _AcceptButtonState extends State<_AcceptButton> {
 
   Future<DateTime?> _pickEstimatedDelivery(BuildContext context) async {
     final now = DateTime.now();
-    final pickedDate = await showDatePicker(
+    final pickedDate = await ModernPickers.showModernDatePicker(
       context: context,
       initialDate: now.add(const Duration(days: 1)),
       firstDate: now,
       lastDate: now.add(const Duration(days: 14)),
+      seedColor: const Color(0xFFFF6B35),
+      helpText: 'Select Delivery Date',
+      confirmText: 'Select',
     );
     if (pickedDate == null || !context.mounted) return null;
 
-    final pickedTime = await showTimePicker(
+    final pickedTime = await ModernPickers.showModernTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 48))),
+      seedColor: const Color(0xFFFF6B35),
+      helpText: 'Select Delivery Time',
+      confirmText: 'Set Time',
     );
     if (pickedTime == null) return null;
 

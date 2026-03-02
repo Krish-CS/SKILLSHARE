@@ -66,6 +66,11 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
 
   bool get _isProductMode => widget.mode == 'products';
 
+  Color get _primaryColor => const Color(0xFF6A11CB);
+  Color get _secondaryColor =>
+      _isProductMode ? const Color(0xFFe43396) : const Color(0xFF2575FC);
+  List<Color> get _gradientColors => [_primaryColor, _secondaryColor];
+
   List<String> get _categories => ['All', ...AppConstants.categories];
 
   // Sort options depending on mode
@@ -155,8 +160,8 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF6A11CB), Color(0xFFe43396)],
+                    gradient: LinearGradient(
+                      colors: _gradientColors,
                     ),
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -172,8 +177,8 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                 const Spacer(),
                 TextButton(
                   onPressed: _reset,
-                  child: const Text('Reset',
-                      style: TextStyle(color: Color(0xFF6A11CB))),
+                  child: Text('Reset',
+                      style: TextStyle(color: _primaryColor)),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close, size: 22),
@@ -238,11 +243,10 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                   const SizedBox(height: 4),
                   SliderTheme(
                     data: SliderThemeData(
-                      activeTrackColor: const Color(0xFF6A11CB),
+                      activeTrackColor: _primaryColor,
                       inactiveTrackColor: Colors.grey[200],
-                      thumbColor: const Color(0xFF6A11CB),
-                      overlayColor:
-                          const Color(0xFF6A11CB).withValues(alpha: 0.15),
+                      thumbColor: _secondaryColor,
+                      overlayColor: _secondaryColor.withValues(alpha: 0.15),
                       trackHeight: 4,
                     ),
                     child: Slider(
@@ -272,11 +276,10 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                     const SizedBox(height: 4),
                     SliderTheme(
                       data: SliderThemeData(
-                        activeTrackColor: const Color(0xFF6A11CB),
+                        activeTrackColor: _primaryColor,
                         inactiveTrackColor: Colors.grey[200],
-                        thumbColor: const Color(0xFF6A11CB),
-                        overlayColor:
-                            const Color(0xFF6A11CB).withValues(alpha: 0.15),
+                        thumbColor: _secondaryColor,
+                        overlayColor: _secondaryColor.withValues(alpha: 0.15),
                         trackHeight: 4,
                       ),
                       child: RangeSlider(
@@ -346,15 +349,15 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                 height: 50,
                 child: Container(
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF6A11CB), Color(0xFFe43396)],
+                    gradient: LinearGradient(
+                      colors: _gradientColors,
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
                     ),
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF6A11CB).withValues(alpha: 0.35),
+                        color: _secondaryColor.withValues(alpha: 0.35),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -396,7 +399,7 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
   Widget _sectionTitle(String title, IconData icon) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: const Color(0xFF6A11CB)),
+        Icon(icon, size: 18, color: _primaryColor),
         const SizedBox(width: 6),
         Text(title,
             style: const TextStyle(
@@ -420,8 +423,8 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
         decoration: BoxDecoration(
           gradient: selected
-              ? const LinearGradient(
-                  colors: [Color(0xFF6A11CB), Color(0xFFe43396)],
+              ? LinearGradient(
+                  colors: _gradientColors,
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                 )
@@ -429,12 +432,12 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
           color: selected ? null : Colors.grey[50],
           borderRadius: BorderRadius.circular(22),
           border: Border.all(
-            color: selected ? const Color(0xFF6A11CB) : Colors.grey[300]!,
+            color: selected ? _primaryColor : Colors.grey[300]!,
           ),
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: const Color(0xFFe43396).withValues(alpha: 0.25),
+                    color: _secondaryColor.withValues(alpha: 0.25),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   )
