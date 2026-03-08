@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
@@ -27,7 +28,17 @@ class AppTheme {
   );
 
   static ThemeData get lightTheme {
-    final loraTextTheme = GoogleFonts.loraTextTheme();
+    // On web, allow Google Fonts to fall back to platform fonts when CDN
+    // is unreachable so text never renders invisible.
+    if (kIsWeb) {
+      GoogleFonts.config.allowRuntimeFetching = true;
+    }
+
+    // Build the Lora text theme on top of the Material baseline so that
+    // every style has a non-null, visible color even if the font download
+    // hasn't completed yet.
+    final baseTextTheme = ThemeData.light(useMaterial3: true).textTheme;
+    final loraTextTheme = GoogleFonts.loraTextTheme(baseTextTheme);
 
     return ThemeData(
       useMaterial3: true,

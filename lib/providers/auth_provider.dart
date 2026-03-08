@@ -75,25 +75,30 @@ class AuthProvider with ChangeNotifier {
       _currentUser = await _authService.getUserData(uid);
       if (_currentUser == null) {
         // getUserData returned null — could be "doc doesn't exist" OR
-        // a transient network/cache failure.  Use .set(merge:true) so we
-        // never accidentally overwrite existing fields (like profilePhoto)
-        // if the doc actually exists but the read failed.
+        // a transient network/cache failure.  Do NOT overwrite role if
+        // the doc already exists — that would corrupt a skilled_person
+        // or company into a customer.
         final firebaseUser = _authService.currentUser;
         if (firebaseUser != null) {
+          // Only create a fallback model for in-memory use.
+          // Do NOT write role to Firestore — the doc may already have
+          // the correct role; a merge with role:'customer' would overwrite it.
           _currentUser = UserModel(
             uid: uid,
             email: firebaseUser.email ?? '',
             name: firebaseUser.displayName ??
                 firebaseUser.email?.split('@').first ??
                 'User',
-            role: 'customer',
+            role: 'customer', // in-memory default only
             profilePhoto: firebaseUser.photoURL,
             createdAt: DateTime.now(),
             updatedAt: DateTime.now(),
           );
-          // Use merge:true so existing fields (e.g. profilePhoto) are
-          // never wiped when the read failed but the doc exists.
-          await _authService.mergeUserProfile(_currentUser!);
+          // Only merge non-role fields so we never corrupt the stored role.
+          // Use a minimal map that excludes 'role'.
+          try {
+            await _authService.mergeUserProfileWithoutRole(_currentUser!);
+          } catch (_) {}
         }
       }
       _error = null;

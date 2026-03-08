@@ -70,7 +70,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
   @override
   void initState() {
     super.initState();
-    _loadProfile();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadProfile());
   }
 
   Future<void> _loadProfile() async {
@@ -141,6 +141,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
         if (kIsWeb) {
           // For web, read as bytes
           final bytes = await image.readAsBytes();
+          if (!mounted) return;
           setState(() {
             _profileImageBytes = bytes;
           });
@@ -282,7 +283,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
           slivers: [
             // Gradient app bar with avatar
             SliverAppBar(
-              expandedHeight: 200,
+              expandedHeight: 240,
               pinned: true,
               stretch: true,
               backgroundColor: const Color(0xFF00695C),

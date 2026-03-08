@@ -705,25 +705,33 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color:
-                                const Color(0xFF2196F3).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '${_applicantProfiles.length} ${_applicantProfiles.length == 1 ? 'applicant' : 'applicants'}',
-                            style: const TextStyle(
-                              color: Color(0xFF2196F3),
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
+                        Builder(builder: (_) {
+                          final activeCount = _applicantProfiles
+                              .where((p) =>
+                                  (_job.applicationStatus[p.userId] ??
+                                      'pending') !=
+                                  'rejected')
+                              .length;
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
                             ),
-                          ),
-                        ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2196F3)
+                                  .withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '$activeCount ${activeCount == 1 ? 'applicant' : 'applicants'}',
+                              style: const TextStyle(
+                                color: Color(0xFF2196F3),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          );
+                        }),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -1031,13 +1039,14 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                                         onPressed: isProcessing
                                             ? null
                                             : () async {
+                                                final nav =
+                                                    Navigator.of(context);
                                                 final chatId =
                                                     await _acceptApplicant(
                                                         profile.userId);
                                                 if (chatId == null) return;
                                                 if (!mounted) return;
-                                                Navigator.push(
-                                                  context,
+                                                nav.push(
                                                   MaterialPageRoute(
                                                     builder: (_) =>
                                                         ChatDetailScreen(
@@ -1252,13 +1261,20 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                           Icons.people,
                           color: Colors.white,
                         ),
-                        label: Text(
-                          '${_job.applicants.length} Applicant${_job.applicants.length == 1 ? '' : 's'}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        label: Builder(builder: (_) {
+                          final activeCount = _job.applicants
+                              .where((id) =>
+                                  (_job.applicationStatus[id] ?? 'pending') !=
+                                  'rejected')
+                              .length;
+                          return Text(
+                            '$activeCount Applicant${activeCount == 1 ? '' : 's'}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          );
+                        }),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2196F3),
                           foregroundColor: Colors.white,

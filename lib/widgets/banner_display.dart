@@ -87,6 +87,15 @@ class _BannerDisplayState extends State<BannerDisplay>
         _ctrl.stop();
       }
     }
+
+    // If banner data changed, restart animation so new settings take effect
+    if (widget.bannerData != oldWidget.bannerData) {
+      if (widget.enableAnimations) {
+        _ctrl
+          ..stop()
+          ..repeat(reverse: true);
+      }
+    }
   }
 
   @override

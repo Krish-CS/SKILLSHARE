@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/skilled_user_profile.dart';
@@ -17,8 +19,12 @@ import '../utils/user_roles.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final Random _random = Random.secure();
   static const String _aadhaarRegistryCollection =
       AppConstants.aadhaarRegistryCollection;
+
+  String _generateDeliveryVerificationCode() =>
+      (_random.nextInt(900000) + 100000).toString();
   static const String _aadhaarChangeRequestType = 'aadhaar_change_request';
   static const String _chatWorkRequestType = 'chat_work_request';
   static const String _legacyDirectHireServiceId = 'direct_hire';
@@ -225,7 +231,8 @@ class FirestoreService {
     // Skilled-person callers must pass false to avoid a permission error.
     bool updateJobRecord = true,
   }) async {
-    final jobRef = _firestore.collection(AppConstants.jobsCollection).doc(jobId);
+    final jobRef =
+        _firestore.collection(AppConstants.jobsCollection).doc(jobId);
     final jobDoc = await jobRef.get();
     if (!jobDoc.exists || jobDoc.data() == null) {
       throw Exception('Job not found.');
@@ -235,17 +242,21 @@ class FirestoreService {
 
     // Only enforce owner + status checks when the caller requests it
     if (!skipStatusCheck) {
-      final ownerId =
-          ((data['companyId'] as String?) ?? (data['postedBy'] as String?) ?? '')
-              .trim();
+      final ownerId = ((data['companyId'] as String?) ??
+              (data['postedBy'] as String?) ??
+              '')
+          .trim();
       if (ownerId.isEmpty) throw Exception('Job owner information missing.');
-      if (ownerId != companyId) throw Exception('Invalid company for this job.');
+      if (ownerId != companyId) {
+        throw Exception('Invalid company for this job.');
+      }
 
       final statusMap =
           Map<String, dynamic>.from(data['applicationStatus'] ?? const {});
       final applicantStatus = (statusMap[skilledUserId] as String?)?.trim();
       if (applicantStatus != 'accepted') {
-        throw Exception('Job chat is available only for accepted applications.');
+        throw Exception(
+            'Job chat is available only for accepted applications.');
       }
     }
 
@@ -258,7 +269,8 @@ class FirestoreService {
     final skilled = await getUserById(skilledUserId);
     final participants = [companyId, skilledUserId]..sort();
     final chatId = 'jobchat_${jobId}_${participants[0]}__${participants[1]}';
-    final chatRef = _firestore.collection(AppConstants.chatsCollection).doc(chatId);
+    final chatRef =
+        _firestore.collection(AppConstants.chatsCollection).doc(chatId);
 
     await chatRef.set({
       'participants': participants,
@@ -1599,6 +1611,8 @@ class FirestoreService {
     String userId, {
     String paymentMethod = 'gpay_simulation',
     String? paymentReference,
+    String? deliveryAddress,
+    String? deliveryLocation,
   }) async {
     final cartItems = await getCartItems(userId);
     if (cartItems.isEmpty) {
@@ -1619,6 +1633,8 @@ class FirestoreService {
     final normalizedPaymentMethod =
         paymentMethod.trim().isEmpty ? 'gpay_simulation' : paymentMethod.trim();
     final normalizedReference = paymentReference?.trim();
+    final normalizedDeliveryAddress = deliveryAddress?.trim();
+    final normalizedDeliveryLocation = deliveryLocation?.trim();
 
     int parseMaxDeliveryQuantity(dynamic value) {
       if (value is int) return value;
@@ -1677,6 +1693,7 @@ class FirestoreService {
       final deliveryByPartner = profileWorkflowEnabled &&
           allowDeliveryIfAvailable &&
           item.quantity <= appliedMaxDeliveryQty;
+      final deliveryCode = _generateDeliveryVerificationCode();
 
       final orderRef =
           _firestore.collection(AppConstants.ordersCollection).doc();
@@ -1705,6 +1722,15 @@ class FirestoreService {
         sellerTransferStatus: 'credited_simulated',
         sellerTransferAt: now,
         statusTimeline: {'pending': now},
+        deliveryAddress: normalizedDeliveryAddress != null &&
+                normalizedDeliveryAddress.isNotEmpty
+            ? normalizedDeliveryAddress
+            : null,
+        deliveryLocation: normalizedDeliveryLocation != null &&
+                normalizedDeliveryLocation.isNotEmpty
+            ? normalizedDeliveryLocation
+            : null,
+        deliveryVerificationCode: deliveryCode,
         deliveryByPartner: deliveryByPartner,
         deliveryQuantityLimit: appliedMaxDeliveryQty,
         createdAt: now,
@@ -1897,6 +1923,7 @@ class FirestoreService {
     required String orderId,
     required String deliveryPartnerId,
     required String status,
+    String? deliveryVerificationCode,
   }) async {
     const allowed = {
       'out_for_delivery',
@@ -1920,9 +1947,23 @@ class FirestoreService {
       throw Exception(
           'You are not the assigned delivery partner for this order.');
     }
+    final expectedCode =
+        (data['deliveryVerificationCode'] as String?)?.trim() ?? '';
+    if (status == 'delivered' && expectedCode.isNotEmpty) {
+      final enteredCode = deliveryVerificationCode?.trim() ?? '';
+      if (enteredCode.isEmpty) {
+        throw Exception(
+            'Enter the customer delivery code to complete delivery.');
+      }
+      if (enteredCode != expectedCode) {
+        throw Exception('Invalid delivery code. Ask the customer again.');
+      }
+    }
     await ref.update({
       'status': status,
       'statusTimeline.$status': FieldValue.serverTimestamp(),
+      if (status == 'delivered')
+        'deliveryCodeVerifiedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -2031,6 +2072,11 @@ class FirestoreService {
       if (existingStatus == 'accepted') {
         throw Exception('You are already accepted for this job.');
       }
+      if (existingStatus == 'pending') {
+        throw Exception('You have already applied for this job.');
+      }
+
+      final bool isReapplication = existingStatus == 'rejected';
 
       final Map<String, dynamic> updates = {
         'applicants': FieldValue.arrayUnion([userId]),
@@ -2040,19 +2086,24 @@ class FirestoreService {
 
       transaction.update(jobRef, updates);
 
-      // Notify the company about the new application
+      // Notify the company about the new / re-application
       final companyId = (jobData['companyId'] as String?)?.trim() ?? '';
+      final applicantName = (userData['name'] as String?)?.trim() ?? 'Someone';
+      final jobTitle = (jobData['title'] as String?)?.trim() ?? 'your job';
       if (companyId.isNotEmpty && companyId != userId) {
         final notifRef = _firestore.collection('notifications').doc();
         transaction.set(notifRef, {
           'toUserId': companyId,
           'fromUserId': userId,
-          'type': 'jobApplication',
-          'title': 'New job application',
-          'body':
-              '${(userData['name'] as String?)?.trim() ?? 'Someone'} applied for "${(jobData['title'] as String?)?.trim() ?? 'your job'}"',
+          'type': isReapplication ? 'jobReApplication' : 'jobApplication',
+          'title': isReapplication
+              ? 'Re-application received'
+              : 'New job application',
+          'body': isReapplication
+              ? '$applicantName has re-applied for "$jobTitle"'
+              : '$applicantName applied for "$jobTitle"',
           'jobId': jobId,
-          'jobTitle': (jobData['title'] as String?)?.trim() ?? '',
+          'jobTitle': jobTitle,
           'createdAt': FieldValue.serverTimestamp(),
           'seen': false,
         });
@@ -2154,8 +2205,7 @@ class FirestoreService {
 
     // ── 2. Re-read job for title ────────────────────────────────────────────
     final jobDoc = await jobRef.get();
-    final jobTitle =
-        (jobDoc.data()?['title'] as String?)?.trim() ?? 'a job';
+    final jobTitle = (jobDoc.data()?['title'] as String?)?.trim() ?? 'a job';
     // skipStatusCheck: the transaction already verified acceptance;
     // a fresh Firestore read might return a cached pre-acceptance snapshot.
     final chatId = await ensureJobApplicationChat(
@@ -2174,9 +2224,9 @@ class FirestoreService {
       'fromUserId': companyId,
       'type': 'jobAccepted',
       'title': 'Application Accepted',
-      'body':
-          'Your application for "$jobTitle" has been accepted. '
-          'Open the Jobs → My Jobs tab and check your chat for the offer letter.',
+      'body': 'Your application for "$jobTitle" has been accepted. '
+          'Open the Jobs > My Jobs tab to view the confirmation message. '
+          'The offer letter with full details will be shared soon.',
       'jobId': jobId,
       'jobTitle': jobTitle,
       'chatId': chatId,
@@ -2184,43 +2234,35 @@ class FirestoreService {
       'seen': false,
     });
 
-
     final companyDoc = await _firestore
         .collection(AppConstants.usersCollection)
         .doc(companyId)
         .get();
-    final companyName =
-        (companyDoc.data()?['name'] as String?)?.trim() ??
+    final companyName = (companyDoc.data()?['name'] as String?)?.trim() ??
         (companyDoc.data()?['companyName'] as String?)?.trim() ??
         'The company';
 
-
     // ── 5. Send offer-letter message ────────────────────────────────────────
-    final offerText =
-        '🎉 Offer Letter\n\n'
-        'Dear candidate,\n\n'
-        'We are pleased to offer you the position of "$jobTitle". '
-        'Please review the details and confirm your availability.\n\n'
-        'Congratulations and welcome aboard!\n\n'
-        '— $companyName';
+    final confirmationText = 'Application Selected\n\n'
+        'Congratulations! You have been selected for the "$jobTitle" role at '
+        '$companyName.\n\n'
+        'We will share the offer letter with the full details soon.';
 
-    final msgRef = chatRef
-        .collection(AppConstants.messagesCollection)
-        .doc();
+    final msgRef = chatRef.collection(AppConstants.messagesCollection).doc();
     final batch = _firestore.batch();
     batch.set(msgRef, {
       'chatId': chatId,
       'senderId': companyId,
-      'text': offerText,
-      'type': 'offer_letter',
+      'text': confirmationText,
+      'type': 'job_confirmation',
       'jobId': jobId,
       'jobTitle': jobTitle,
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
     batch.update(chatRef, {
-      'lastMessage': '📄 Offer Letter – $jobTitle',
-      'lastMessageType': 'offer_letter',
+      'lastMessage': 'Application selected - $jobTitle',
+      'lastMessageType': 'job_confirmation',
       'lastMessageTime': FieldValue.serverTimestamp(),
       'isJobChat': true,
       'jobId': jobId,
@@ -2235,8 +2277,7 @@ class FirestoreService {
 
   /// Returns a human-readable conflict description if the applicant's
   /// existing accepted jobs clash with [newJobId], or null if safe to accept.
-  Future<String?> checkJobConflicts(
-      String applicantId, String newJobId) async {
+  Future<String?> checkJobConflicts(String applicantId, String newJobId) async {
     final newDoc = await _firestore
         .collection(AppConstants.jobsCollection)
         .doc(newJobId)
@@ -2270,7 +2311,7 @@ class FirestoreService {
       final eShift = e.shiftMinutes;
       if (nShift != null && eShift != null) {
         final overlapStart = nShift.$1 > eShift.$1 ? nShift.$1 : eShift.$1;
-        final overlapEnd   = nShift.$2 < eShift.$2 ? nShift.$2 : eShift.$2;
+        final overlapEnd = nShift.$2 < eShift.$2 ? nShift.$2 : eShift.$2;
         if (overlapStart < overlapEnd) {
           // Check if same work-day overlap
           final nDays = newJob.workDays;
@@ -2296,9 +2337,7 @@ class FirestoreService {
         .where('applicants', arrayContains: userId)
         .snapshots()
         .map((s) {
-      final list = s.docs
-          .map((d) => JobModel.fromMap(d.data(), d.id))
-          .toList();
+      final list = s.docs.map((d) => JobModel.fromMap(d.data(), d.id)).toList();
       list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       return list;
     });
@@ -2334,14 +2373,13 @@ class FirestoreService {
         throw Exception('Applicant not found in this job.');
       }
 
-      jobTitle =
-          ((data['title'] as String?)?.trim().isNotEmpty == true)
-              ? data['title'] as String
-              : 'a job';
+      jobTitle = ((data['title'] as String?)?.trim().isNotEmpty == true)
+          ? data['title'] as String
+          : 'a job';
 
       final currentStatus =
-          (data['applicationStatus'] as Map<String, dynamic>?
-                  ?? {})[applicantId] as String?;
+          (data['applicationStatus'] as Map<String, dynamic>? ??
+              {})[applicantId] as String?;
       wasAccepted = currentStatus == 'accepted';
 
       // If revoking an accepted applicant, also reset job status & selectedApplicant
@@ -2570,8 +2608,9 @@ class FirestoreService {
         .collection(AppConstants.skilledUsersCollection)
         .doc(skilledUserId)
         .snapshots()
-        .map((snap) =>
-            snap.exists ? ((snap.data()?['companyEndorsementCount'] ?? 0) as int) : 0);
+        .map((snap) => snap.exists
+            ? ((snap.data()?['companyEndorsementCount'] ?? 0) as int)
+            : 0);
   }
 
   // ===== Service Requests =====
@@ -2792,7 +2831,8 @@ class FirestoreService {
     });
   }
 
-  Stream<List<ServiceRequestModel>> streamSkilledRequests(String skilledUserId) {
+  Stream<List<ServiceRequestModel>> streamSkilledRequests(
+      String skilledUserId) {
     return _firestore
         .collection(AppConstants.requestsCollection)
         .where('skilledUserId', isEqualTo: skilledUserId)

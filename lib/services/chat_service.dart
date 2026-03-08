@@ -220,6 +220,7 @@ class ChatService {
     required String text,
     String type = 'text',
     String? mediaUrl,
+    String? attachmentName,
   }) async {
     if (senderId == receiverId) {
       throw Exception('Invalid chat users.');
@@ -232,10 +233,12 @@ class ChatService {
       return;
     }
 
-    final normalizedType =
-        (normalizedMediaUrl != null && normalizedMediaUrl.isNotEmpty)
-            ? 'image'
-            : type;
+    final requestedType = type.trim().isEmpty ? 'text' : type.trim();
+    final normalizedType = requestedType == 'text' &&
+            normalizedMediaUrl != null &&
+            normalizedMediaUrl.isNotEmpty
+        ? 'image'
+        : requestedType;
     final messageText = normalizedType == 'image'
         ? (trimmedText.isEmpty ? 'Photo' : trimmedText)
         : trimmedText;
@@ -269,6 +272,8 @@ class ChatService {
       'text': messageText,
       'type': normalizedType,
       'mediaUrl': normalizedMediaUrl,
+      if (attachmentName != null && attachmentName.trim().isNotEmpty)
+        'attachmentName': attachmentName.trim(),
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
@@ -427,8 +432,12 @@ class ChatService {
     if (!snap.exists) throw Exception('Message not found.');
     final data = snap.data()!;
     if (data['senderId'] != senderId) throw Exception('Not your message.');
-    if (data['isDeleted'] == true) throw Exception('Cannot edit a deleted message.');
-    if ((data['type'] ?? 'text') != 'text') throw Exception('Only text messages can be edited.');
+    if (data['isDeleted'] == true) {
+      throw Exception('Cannot edit a deleted message.');
+    }
+    if ((data['type'] ?? 'text') != 'text') {
+      throw Exception('Only text messages can be edited.');
+    }
 
     await ref.update({
       'text': trimmed,
@@ -450,7 +459,9 @@ class ChatService {
 
     final snap = await ref.get();
     if (!snap.exists) return;
-    if (snap.data()?['senderId'] != senderId) throw Exception('Not your message.');
+    if (snap.data()?['senderId'] != senderId) {
+      throw Exception('Not your message.');
+    }
 
     await ref.update({
       'text': 'This message was deleted',

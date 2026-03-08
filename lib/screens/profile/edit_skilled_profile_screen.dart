@@ -27,7 +27,7 @@ class _EditSkilledProfileScreenState extends State<EditSkilledProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _loadProfile();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadProfile());
   }
 
   Future<void> _loadProfile() async {
@@ -41,6 +41,7 @@ class _EditSkilledProfileScreenState extends State<EditSkilledProfileScreen> {
         debugPrint('Error loading services: $e');
       }
     }
+    if (!mounted) return;
     setState(() {
       _profile = userProvider.currentProfile;
       _isLoading = false;

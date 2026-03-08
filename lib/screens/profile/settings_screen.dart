@@ -52,6 +52,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     try {
       final user = await _firestoreService.getUserById(uid);
+      if (!mounted) return;
       setState(() {
         _isSkilledPerson =
             UserRoles.normalizeRole(user?.role) == UserRoles.skilledPerson;

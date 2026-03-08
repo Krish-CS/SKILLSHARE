@@ -64,7 +64,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
       vsync: this,
       duration: const Duration(seconds: 6),
     )..repeat();
-    _gradientAnim = CurvedAnimation(parent: _gradientCtrl, curve: Curves.linear);
+    _gradientAnim =
+        CurvedAnimation(parent: _gradientCtrl, curve: Curves.linear);
     _subscribeToUserData();
   }
 
@@ -85,7 +86,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
     final next = (idx + 1) % _gradientPalettes.length;
     final frac = t - t.floor();
     return List.generate(3, (i) {
-      return Color.lerp(_gradientPalettes[idx][i], _gradientPalettes[next][i], frac)!;
+      return Color.lerp(
+          _gradientPalettes[idx][i], _gradientPalettes[next][i], frac)!;
     });
   }
 
@@ -179,24 +181,14 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
   }
 
   Future<void> _handleLogout() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Logout'),
-          ),
-        ],
-      ),
+    final confirm = await AppDialog.confirm(
+      context,
+      title: 'Logout',
+      message: 'Are you sure you want to logout?',
+      confirmText: 'Logout',
+      cancelText: 'Cancel',
+      gradientColors: const [Color(0xFFE53935), Color(0xFFFF6F61)],
+      icon: Icons.logout_rounded,
     );
 
     if (confirm != true || !mounted) return;
@@ -297,7 +289,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                     ),
                     // Content
                     Padding(
-                      padding: EdgeInsets.fromLTRB(0, MediaQuery.of(context).padding.top + 20, 0, 32),
+                      padding: EdgeInsets.fromLTRB(
+                          0, MediaQuery.of(context).padding.top + 20, 0, 32),
                       child: Column(
                         children: [
                           // Avatar with gradient ring
@@ -383,7 +376,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                   const SizedBox(width: 6),
                                   Text(
                                     UserRoles.getDisplayName(
-                                        _currentUser?.role ?? UserRoles.company),
+                                        _currentUser?.role ??
+                                            UserRoles.company),
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w600,
@@ -394,7 +388,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                               ),
                             ),
                           // Business verification badge for companies
-                          if (_currentUser?.role == UserRoles.company) ...[  
+                          if (_currentUser?.role == UserRoles.company) ...[
                             const SizedBox(height: 8),
                             if (_companyProfile?.isVerified == true)
                               Container(
@@ -404,8 +398,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                   color: Colors.green.withValues(alpha: 0.25),
                                   borderRadius: BorderRadius.circular(20),
                                   border: Border.all(
-                                      color: Colors.greenAccent.withValues(
-                                          alpha: 0.7),
+                                      color: Colors.greenAccent
+                                          .withValues(alpha: 0.7),
                                       width: 1.2),
                                 ),
                                 child: const Row(
@@ -425,7 +419,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                   ],
                                 ),
                               )
-                            else if (_companyProfile?.verificationStatus == 'submitted')
+                            else if (_companyProfile?.verificationStatus ==
+                                'submitted')
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 14, vertical: 5),
@@ -433,8 +428,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                   color: Colors.blue.withValues(alpha: 0.25),
                                   borderRadius: BorderRadius.circular(20),
                                   border: Border.all(
-                                      color: Colors.blueAccent.withValues(
-                                          alpha: 0.7),
+                                      color: Colors.blueAccent
+                                          .withValues(alpha: 0.7),
                                       width: 1.2),
                                 ),
                                 child: const Row(
@@ -470,11 +465,12 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 14, vertical: 5),
                                   decoration: BoxDecoration(
-                                    color: Colors.orange.withValues(alpha: 0.25),
+                                    color:
+                                        Colors.orange.withValues(alpha: 0.25),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
-                                        color: Colors.orange.withValues(
-                                            alpha: 0.7),
+                                        color: Colors.orange
+                                            .withValues(alpha: 0.7),
                                         width: 1.2),
                                   ),
                                   child: const Row(
@@ -498,7 +494,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                           ],
                           const SizedBox(height: 20),
                           // Verified badge for skilled users
-                          if (_currentUser?.role == UserRoles.skilledPerson) ...[
+                          if (_currentUser?.role ==
+                              UserRoles.skilledPerson) ...[
                             const SizedBox(height: 8),
                             if (_skilledProfile?.isVerified == true)
                               Container(
@@ -508,8 +505,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                   color: Colors.green.withValues(alpha: 0.25),
                                   borderRadius: BorderRadius.circular(20),
                                   border: Border.all(
-                                      color: Colors.greenAccent.withValues(
-                                          alpha: 0.7),
+                                      color: Colors.greenAccent
+                                          .withValues(alpha: 0.7),
                                       width: 1.2),
                                 ),
                                 child: const Row(
@@ -546,11 +543,12 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 14, vertical: 5),
                                   decoration: BoxDecoration(
-                                    color: Colors.orange.withValues(alpha: 0.25),
+                                    color:
+                                        Colors.orange.withValues(alpha: 0.25),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
-                                        color: Colors.orange.withValues(
-                                            alpha: 0.7),
+                                        color: Colors.orange
+                                            .withValues(alpha: 0.7),
                                         width: 1.2),
                                   ),
                                   child: const Row(
@@ -599,15 +597,18 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                 onTap: () async {
                                   if (_currentUser == null) return;
                                   Widget editScreen;
-                                  if (_currentUser!.role == UserRoles.skilledPerson) {
+                                  if (_currentUser!.role ==
+                                      UserRoles.skilledPerson) {
                                     editScreen = SkilledUserSetupScreen(
                                         userId: _currentUser!.uid,
                                         isEditing: true);
-                                  } else if (_currentUser!.role == UserRoles.customer) {
+                                  } else if (_currentUser!.role ==
+                                      UserRoles.customer) {
                                     editScreen = CustomerSetupScreen(
                                         userId: _currentUser!.uid,
                                         isEditing: true);
-                                  } else if (_currentUser!.role == UserRoles.company) {
+                                  } else if (_currentUser!.role ==
+                                      UserRoles.company) {
                                     editScreen = CompanySetupScreen(
                                         userId: _currentUser!.uid,
                                         isEditing: true);
@@ -634,7 +635,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                     context,
                                     MaterialPageRoute(
                                       builder: (_) => AvatarBuilderScreen(
-                                        initialConfig: _currentUser!.avatarConfig,
+                                        initialConfig:
+                                            _currentUser!.avatarConfig,
                                       ),
                                     ),
                                   );
@@ -674,7 +676,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                   child: Column(
                     children: [
                       // My Portfolio — skilled persons only
-                      if (_currentUser?.role == UserRoles.skilledPerson) ...[  
+                      if (_currentUser?.role == UserRoles.skilledPerson) ...[
                         _buildMenuTile(
                           icon: Icons.photo_library_rounded,
                           iconColor: const Color(0xFFC2185B),
@@ -874,11 +876,13 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                         if (!ctx.mounted) return;
                         Navigator.pop(ctx);
                         // ignore: use_build_context_synchronously
-                        AppDialog.success(context, 'Support ticket submitted! We\'ll respond soon.');
+                        AppDialog.success(context,
+                            'Support ticket submitted! We\'ll respond soon.');
                       } catch (e) {
                         setDialogState(() => isSending = false);
                         // ignore: use_build_context_synchronously
-                        AppDialog.error(context, 'Error submitting ticket', detail: e.toString());
+                        AppDialog.error(context, 'Error submitting ticket',
+                            detail: e.toString());
                       }
                     },
               style: ElevatedButton.styleFrom(

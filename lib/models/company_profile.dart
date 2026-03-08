@@ -86,7 +86,9 @@ class CompanyProfile {
       assignedProjects: (map['assignedProjects'] as List<dynamic>? ?? [])
           .map((e) => Map<String, dynamic>.from(e is Map ? e : {}))
           .toList(),
-      bannerData: map['bannerData'] as Map<String, dynamic>?,
+      bannerData: map['bannerData'] is Map
+          ? Map<String, dynamic>.from(map['bannerData'] as Map)
+          : null,
       avatarConfig: map['avatarConfig'] is Map
           ? Map<String, dynamic>.from(map['avatarConfig'] as Map)
           : null,
@@ -145,6 +147,8 @@ class CompanyProfile {
     int? reviewCount,
     DateTime? verifiedAt,
     List<Map<String, dynamic>>? assignedProjects,
+    Map<String, dynamic>? bannerData,
+    bool clearBanner = false,
     Map<String, dynamic>? avatarConfig,
   }) {
     return CompanyProfile(
@@ -169,6 +173,7 @@ class CompanyProfile {
       reviewCount: reviewCount ?? this.reviewCount,
       verifiedAt: verifiedAt ?? this.verifiedAt,
       assignedProjects: assignedProjects ?? this.assignedProjects,
+      bannerData: clearBanner ? null : (bannerData ?? this.bannerData),
       avatarConfig: avatarConfig ?? this.avatarConfig,
       createdAt: createdAt,
       updatedAt: DateTime.now(),

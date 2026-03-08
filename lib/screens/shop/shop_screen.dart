@@ -5,6 +5,7 @@ import 'package:shimmer/shimmer.dart';
 import '../../models/product_model.dart';
 import '../../models/user_model.dart';
 import '../../services/firestore_service.dart';
+import '../../utils/app_dialog.dart';
 import '../../widgets/product_card.dart';
 import '../../widgets/app_popup.dart';
 import '../../providers/auth_provider.dart';
@@ -268,31 +269,11 @@ class _ShopScreenState extends State<ShopScreen> {
     }
     if (userProvider.currentProfile?.isVerified != true) {
       if (!context.mounted) return;
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(children: [
-            Icon(Icons.fingerprint, color: Colors.deepPurple),
-            SizedBox(width: 8),
-            Text('Verification Required'),
-          ]),
-          content: const Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                  'To open your shop and sell products, complete Aadhaar + fingerprint verification first.'),
-              SizedBox(height: 12),
-              Text('Go to: Profile → Edit Profile → Verify Identity',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            ],
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx), child: const Text('OK'))
-          ],
-        ),
+      AppDialog.info(
+        context,
+        'To open your shop and sell products, complete Aadhaar + fingerprint verification first.\n\nGo to: Profile → Edit Profile → Verify Identity',
+        title: 'Verification Required',
+        buttonText: 'OK',
       );
       return;
     }

@@ -121,6 +121,7 @@ class _MainNavigationState extends State<MainNavigation> {
     _notifSub?.cancel();
     _bannerTimer?.cancel();
     _bannerEntry?.remove();
+    _bannerEntry = null;
     super.dispose();
   }
   // ────────────────────────────────────────────────────────────────────────

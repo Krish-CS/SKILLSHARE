@@ -24,6 +24,10 @@ class OrderModel {
   final Map<String, DateTime> statusTimeline;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? deliveryAddress;
+  final String? deliveryLocation;
+  final String? deliveryVerificationCode;
+  final DateTime? deliveryCodeVerifiedAt;
   final String? deliveryPartnerId;
   final String? deliveryPartnerName;
   final DateTime? estimatedDelivery;
@@ -53,6 +57,10 @@ class OrderModel {
     this.statusTimeline = const {},
     required this.createdAt,
     required this.updatedAt,
+    this.deliveryAddress,
+    this.deliveryLocation,
+    this.deliveryVerificationCode,
+    this.deliveryCodeVerifiedAt,
     this.deliveryPartnerId,
     this.deliveryPartnerName,
     this.estimatedDelivery,
@@ -108,6 +116,11 @@ class OrderModel {
       statusTimeline: _parseTimeline(map['statusTimeline']),
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      deliveryAddress: map['deliveryAddress'],
+      deliveryLocation: map['deliveryLocation'],
+      deliveryVerificationCode: map['deliveryVerificationCode'],
+      deliveryCodeVerifiedAt:
+          (map['deliveryCodeVerifiedAt'] as Timestamp?)?.toDate(),
       deliveryPartnerId: map['deliveryPartnerId'],
       deliveryPartnerName: map['deliveryPartnerName'],
       estimatedDelivery: (map['estimatedDelivery'] as Timestamp?)?.toDate(),
@@ -143,6 +156,12 @@ class OrderModel {
       ),
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
+      if (deliveryAddress != null) 'deliveryAddress': deliveryAddress,
+      if (deliveryLocation != null) 'deliveryLocation': deliveryLocation,
+      if (deliveryVerificationCode != null)
+        'deliveryVerificationCode': deliveryVerificationCode,
+      if (deliveryCodeVerifiedAt != null)
+        'deliveryCodeVerifiedAt': Timestamp.fromDate(deliveryCodeVerifiedAt!),
       if (deliveryPartnerId != null) 'deliveryPartnerId': deliveryPartnerId,
       if (deliveryPartnerName != null)
         'deliveryPartnerName': deliveryPartnerName,

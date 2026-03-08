@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -14,6 +15,7 @@ import '../../models/user_model.dart';
 import '../../services/chat_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/cloudinary_service.dart';
+import '../../services/offer_letter_service.dart';
 import '../../services/presence_service.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/app_helpers.dart';
@@ -25,6 +27,7 @@ import '../../providers/auth_provider.dart' as app_auth;
 import '../../widgets/app_popup.dart';
 import '../../widgets/gpay_simulation_dialog.dart';
 import '../profile/profile_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   final String chatId;
@@ -46,9 +49,19 @@ class ChatDetailScreen extends StatefulWidget {
 
 class _ChatDetailScreenState extends State<ChatDetailScreen>
     with TickerProviderStateMixin {
+  static final TextInputFormatter _moneyInputFormatter =
+      TextInputFormatter.withFunction((oldValue, newValue) {
+    if (newValue.text.isEmpty ||
+        RegExp(r'^\d*\.?\d{0,2}$').hasMatch(newValue.text)) {
+      return newValue;
+    }
+    return oldValue;
+  });
+
   final ChatService _chatService = ChatService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
   final FirestoreService _firestoreService = FirestoreService();
+  final OfferLetterService _offerLetterService = OfferLetterService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _picker = ImagePicker();
@@ -179,7 +192,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     }
 
     _loadChatContext();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadConversationRoles());
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _loadConversationRoles());
   }
 
   @override
@@ -221,6 +235,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       _workRequestId != null &&
       _workRequestId!.trim().isNotEmpty;
 
+  String get _offerLetterPrefillPosition {
+    final title = (_workProjectName ?? '').trim();
+    return title;
+  }
+
   String? _senderRoleForMessage(MessageModel message) {
     if (message.senderId == _currentUserId) return _currentUserRole;
     if (message.senderId == widget.otherUserId) return _otherUserRole;
@@ -234,10 +253,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           .doc(widget.chatId)
           .get();
       final data = doc.data() ?? <String, dynamic>{};
-      final detectedWorkChat =
-          _isWorkChat || data['isWorkChat'] == true || widget.chatId.startsWith('work_');
-      final detectedJobChat =
-          _isJobChat || data['isJobChat'] == true || widget.chatId.startsWith('jobchat_');
+      final detectedWorkChat = _isWorkChat ||
+          data['isWorkChat'] == true ||
+          widget.chatId.startsWith('work_');
+      final detectedJobChat = _isJobChat ||
+          data['isJobChat'] == true ||
+          widget.chatId.startsWith('jobchat_');
       final requestId = (data['workRequestId'] as String?)?.trim();
       var title = (detectedJobChat
               ? (data['jobTitle'] as String?)
@@ -316,9 +337,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
     // Stream the other user's role so it stays fresh
     _otherUserSub?.cancel();
-    _otherUserSub = _firestoreService
-        .streamUserModel(widget.otherUserId)
-        .listen((user) {
+    _otherUserSub =
+        _firestoreService.streamUserModel(widget.otherUserId).listen((user) {
       if (!mounted) return;
       final role = UserRoles.normalizeRole(user?.role ?? '');
       if (role != _otherUserRole) {
@@ -336,7 +356,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       return;
     }
 
-    final positionController = TextEditingController();
+    final positionController =
+        TextEditingController(text: _offerLetterPrefillPosition);
     final compensationController = TextEditingController();
     final locationController = TextEditingController();
     final joiningDateController = TextEditingController();
@@ -357,172 +378,229 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           labelStyle: const TextStyle(fontSize: 13),
         );
 
-    final shouldSend = await showModalBottomSheet<bool>(
+    final shouldSend = await showDialog<bool>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom),
-        child: Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // ── Gradient header ──
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF1A237E), Color(0xFF3949AB), Color(0xFF5C6BC0)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+      barrierColor: Colors.black54,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 430),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x33000000),
+                    blurRadius: 28,
+                    offset: Offset(0, 16),
                   ),
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(10),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF1A237E), Color(0xFF3949AB)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                      child: const Icon(Icons.description_rounded,
-                          color: Colors.white, size: 22),
+                      borderRadius:
+                          BorderRadius.vertical(top: Radius.circular(24)),
                     ),
-                    const SizedBox(width: 14),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Send Offer Letter',
-                              style: TextStyle(
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.description_rounded,
+                              color: Colors.white, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Send Offer Letter',
+                                style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold)),
-                          SizedBox(height: 2),
-                          Text('Fill in the hiring details below',
-                              style: TextStyle(
-                                  color: Colors.white70, fontSize: 12)),
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Compact hiring details popup',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded,
+                              color: Colors.white70),
+                          onPressed: () => Navigator.of(ctx).pop(false),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(18, 18, 18, 10),
+                      child: Column(
+                        children: [
+                          TextField(
+                            controller: positionController,
+                            decoration: fieldDeco(
+                                'Position / Role *',
+                                _offerLetterPrefillPosition.isEmpty
+                                    ? 'e.g., Senior Tailor'
+                                    : 'Prefilled from the applied job role',
+                                Icons.work_outline_rounded),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: compensationController,
+                            decoration: fieldDeco('Compensation *',
+                                'e.g., 35000', Icons.currency_rupee_rounded),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [_moneyInputFormatter],
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: locationController,
+                            decoration: fieldDeco(
+                                'Work Location',
+                                'e.g., Chennai, Tamil Nadu',
+                                Icons.location_on_outlined),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: joiningDateController,
+                            readOnly: true,
+                            onTap: () async {
+                              final now = DateTime.now();
+                              final localizations =
+                                  MaterialLocalizations.of(dialogContext);
+                              final picked = await showDatePicker(
+                                context: dialogContext,
+                                initialDate: now,
+                                firstDate:
+                                    now.subtract(const Duration(days: 30)),
+                                lastDate: DateTime(now.year + 5),
+                                helpText: 'Select joining date',
+                              );
+                              if (picked == null) return;
+                              joiningDateController.text =
+                                  localizations.formatMediumDate(picked);
+                              setDialogState(() {});
+                            },
+                            decoration: fieldDeco(
+                              'Joining Date',
+                              'Select from calendar',
+                              Icons.calendar_today_outlined,
+                            ).copyWith(
+                              suffixIcon: IconButton(
+                                onPressed: () async {
+                                  final now = DateTime.now();
+                                  final localizations =
+                                      MaterialLocalizations.of(dialogContext);
+                                  final picked = await showDatePicker(
+                                    context: dialogContext,
+                                    initialDate: now,
+                                    firstDate:
+                                        now.subtract(const Duration(days: 30)),
+                                    lastDate: DateTime(now.year + 5),
+                                    helpText: 'Select joining date',
+                                  );
+                                  if (picked == null) return;
+                                  joiningDateController.text =
+                                      localizations.formatMediumDate(picked);
+                                  setDialogState(() {});
+                                },
+                                icon: const Icon(Icons.date_range_rounded),
+                                color: const Color(0xFF3949AB),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: notesController,
+                            minLines: 2,
+                            maxLines: 4,
+                            decoration: fieldDeco(
+                                'Additional Terms',
+                                'e.g., probation period, benefits, reporting manager',
+                                Icons.notes_rounded),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '* Required fields',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey[500]),
+                          ),
                         ],
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white70),
-                      onPressed: () => Navigator.of(ctx).pop(false),
-                    ),
-                  ],
-                ),
-              ),
-              // ── Form fields ──
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
-                  child: Column(
-                    children: [
-                      TextField(
-                        controller: positionController,
-                        decoration: fieldDeco(
-                            'Position / Role *', 'e.g., Senior Tailor',
-                            Icons.work_outline_rounded),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: compensationController,
-                        decoration: fieldDeco(
-                            'Compensation *', 'e.g., ₹35,000/month',
-                            Icons.currency_rupee_rounded),
-                        keyboardType: TextInputType.text,
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: locationController,
-                        decoration: fieldDeco(
-                            'Work Location', 'e.g., Chennai, Tamil Nadu',
-                            Icons.location_on_outlined),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: joiningDateController,
-                        decoration: fieldDeco(
-                            'Joining Date', 'e.g., 20 March 2026',
-                            Icons.calendar_today_outlined),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: notesController,
-                        minLines: 2,
-                        maxLines: 4,
-                        decoration: fieldDeco(
-                            'Additional Terms',
-                            'e.g., probation period, benefits, reporting manager',
-                            Icons.notes_rounded),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '* Required fields',
-                        style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                      ),
-                    ],
                   ),
-                ),
-              ),
-              // ── Action buttons ──
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(ctx).pop(false),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                          side: const BorderSide(color: Color(0xFF3949AB)),
-                        ),
-                        child: const Text('Cancel',
-                            style: TextStyle(color: Color(0xFF3949AB))),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF1A237E), Color(0xFF3949AB)],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: ElevatedButton.icon(
-                          onPressed: () => Navigator.of(ctx).pop(true),
-                          icon: const Icon(Icons.send_rounded,
-                              color: Colors.white, size: 18),
-                          label: const Text('Send Offer Letter',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 4, 18, 18),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(ctx).pop(false),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 13),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14)),
+                              side: const BorderSide(color: Color(0xFF3949AB)),
+                            ),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(color: Color(0xFF3949AB)),
+                            ),
                           ),
                         ),
-                      ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => Navigator.of(ctx).pop(true),
+                            icon: const Icon(Icons.send_rounded, size: 18),
+                            label: const Text('Send'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF3949AB),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 13),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -540,7 +618,20 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     final position = positionController.text.trim();
     final compensation = compensationController.text.trim();
     if (position.isEmpty || compensation.isEmpty) {
-      if (mounted) AppDialog.error(context, 'Position and compensation are required.');
+      if (mounted) {
+        AppDialog.error(context, 'Position and compensation are required.');
+      }
+      positionController.dispose();
+      compensationController.dispose();
+      locationController.dispose();
+      joiningDateController.dispose();
+      notesController.dispose();
+      return;
+    }
+    if (double.tryParse(compensation) == null) {
+      if (mounted) {
+        AppDialog.error(context, 'Compensation must contain numbers only.');
+      }
       positionController.dispose();
       compensationController.dispose();
       locationController.dispose();
@@ -550,32 +641,51 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     }
 
     final offerText = StringBuffer()
-      ..writeln('Offer Letter')
       ..writeln('Position: $position')
       ..writeln('Compensation: $compensation');
     if (locationController.text.trim().isNotEmpty) {
-      offerText.writeln('Location: ${locationController.text.trim()}');
+      offerText.writeln('Work Location: ${locationController.text.trim()}');
     }
     if (joiningDateController.text.trim().isNotEmpty) {
       offerText.writeln('Joining Date: ${joiningDateController.text.trim()}');
     }
     if (notesController.text.trim().isNotEmpty) {
-      offerText.writeln('Terms: ${notesController.text.trim()}');
+      offerText.writeln('Additional Terms: ${notesController.text.trim()}');
     }
+    offerText
+      ..writeln()
+      ..writeln(
+          'You have been selected for this role. Please review the attached PDF offer letter for the complete details.');
 
     try {
+      final pdfUrl = await _offerLetterService.createAndUploadOfferLetterPdf(
+        companyId: _currentUserId!,
+        candidateName: widget.otherUserName,
+        position: position,
+        compensation: compensation,
+        location: locationController.text.trim(),
+        joiningDate: joiningDateController.text.trim(),
+        additionalTerms: notesController.text.trim(),
+      );
+      if (pdfUrl == null || pdfUrl.trim().isEmpty) {
+        throw Exception('Could not generate the offer letter PDF.');
+      }
+
       await _chatService.sendMessage(
         chatId: widget.chatId,
         senderId: _currentUserId!,
         receiverId: widget.otherUserId,
         text: offerText.toString().trim(),
         type: 'offer_letter',
+        mediaUrl: pdfUrl,
+        attachmentName: 'Offer Letter - $position.pdf',
       );
       if (!mounted) return;
       AppDialog.success(context, 'Offer letter sent successfully!');
     } catch (e) {
       if (!mounted) return;
-      AppDialog.error(context, 'Failed to send offer letter', detail: e.toString());
+      AppDialog.error(context, 'Failed to send offer letter',
+          detail: e.toString());
     } finally {
       positionController.dispose();
       compensationController.dispose();
@@ -587,13 +697,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   String _extractAadhaarNumber(Map<String, dynamic>? verificationData) {
     if (verificationData == null) return '';
-    final aadhaar =
-        (verificationData['aadhaarNumber'] ??
-                verificationData['aadharNumber'] ??
-                verificationData['adharNumber'] ??
-                '')
-            .toString()
-            .trim();
+    final aadhaar = (verificationData['aadhaarNumber'] ??
+            verificationData['aadharNumber'] ??
+            verificationData['adharNumber'] ??
+            '')
+        .toString()
+        .trim();
     return aadhaar;
   }
 
@@ -608,7 +717,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
     try {
       final user = await _firestoreService.getUserById(_currentUserId!);
-      final profile = await _firestoreService.getSkilledUserProfile(_currentUserId!);
+      final profile =
+          await _firestoreService.getSkilledUserProfile(_currentUserId!);
       if (profile == null) throw Exception('Skilled profile not found.');
 
       final aadhaar = _extractAadhaarNumber(profile.verificationData);
@@ -641,11 +751,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Color(0xFF004D40), Color(0xFF00796B), Color(0xFF26A69A)],
+                      colors: [
+                        Color(0xFF004D40),
+                        Color(0xFF00796B),
+                        Color(0xFF26A69A)
+                      ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(24)),
                   ),
                   child: Row(
                     children: [
@@ -688,10 +803,18 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           (user?.name ?? profile.name ?? 'N/A').trim()),
                       _shareRow(Icons.category_rounded, 'Category',
                           profile.category ?? 'Not specified'),
-                      _shareRow(Icons.build_rounded, 'Skills',
-                          profile.skills.isEmpty ? 'Not specified' : profile.skills.take(5).join(', ')),
-                      _shareRow(Icons.location_on_rounded, 'Location',
-                          location.isEmpty ? 'Not provided' : location.join(', ')),
+                      _shareRow(
+                          Icons.build_rounded,
+                          'Skills',
+                          profile.skills.isEmpty
+                              ? 'Not specified'
+                              : profile.skills.take(5).join(', ')),
+                      _shareRow(
+                          Icons.location_on_rounded,
+                          'Location',
+                          location.isEmpty
+                              ? 'Not provided'
+                              : location.join(', ')),
                       _shareRow(Icons.star_rounded, 'Rating',
                           '${profile.rating.toStringAsFixed(1)} (${profile.reviewCount} reviews)'),
                       _shareRow(Icons.assignment_turned_in_rounded, 'Projects',
@@ -740,7 +863,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                               if (aadhaar.isNotEmpty)
                                 Switch(
                                   value: includeAadhaar,
-                                  onChanged: (v) => setS(() => includeAadhaar = v),
+                                  onChanged: (v) =>
+                                      setS(() => includeAadhaar = v),
                                   activeColor: const Color(0xFFF57C00),
                                 ),
                             ],
@@ -828,12 +952,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
       final profileText = StringBuffer()
         ..writeln('Shared Skilled Profile')
-        ..writeln('Name: ${(user?.name ?? profile.name ?? 'Skilled Person').trim()}')
+        ..writeln(
+            'Name: ${(user?.name ?? profile.name ?? 'Skilled Person').trim()}')
         ..writeln('Category: ${(profile.category ?? 'Not specified').trim()}')
-        ..writeln('Skills: ${profile.skills.isEmpty ? 'Not specified' : profile.skills.join(', ')}')
+        ..writeln(
+            'Skills: ${profile.skills.isEmpty ? 'Not specified' : profile.skills.join(', ')}')
         ..writeln('Bio: ${profile.bio.isEmpty ? 'Not provided' : profile.bio}')
-        ..writeln('Location: ${location.isEmpty ? 'Not provided' : location.join(', ')}')
-        ..writeln('Rating: ${profile.rating.toStringAsFixed(1)} (${profile.reviewCount} reviews)')
+        ..writeln(
+            'Location: ${location.isEmpty ? 'Not provided' : location.join(', ')}')
+        ..writeln(
+            'Rating: ${profile.rating.toStringAsFixed(1)} (${profile.reviewCount} reviews)')
         ..writeln('Completed Projects: ${profile.projectCount}')
         ..writeln('Portfolio Items: ${profile.portfolioImages.length}');
 
@@ -854,7 +982,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       );
 
       if (!mounted) return;
-      AppDialog.success(context, 'Your full profile has been shared with the company!');
+      AppDialog.success(
+          context, 'Your full profile has been shared with the company!');
     } catch (e) {
       if (!mounted) return;
       AppDialog.error(context, 'Failed to share profile', detail: e.toString());
@@ -1495,7 +1624,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                             approve: true,
                           );
                           if (mounted) {
-                            AppDialog.success(context, 'Work request accepted!');
+                            AppDialog.success(
+                                context, 'Work request accepted!');
                             await Future<void>.delayed(
                                 const Duration(milliseconds: 150));
                             if (mounted && _workLocked) {
@@ -1749,7 +1879,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                     details: detailsController.text.trim(),
                   );
                   if (mounted) {
-                    AppDialog.success(context, 'Chat reported. Our team will review it.');
+                    AppDialog.success(
+                        context, 'Chat reported. Our team will review it.');
                   }
                 } catch (e) {
                   if (mounted) {
@@ -1903,326 +2034,325 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   Widget build(BuildContext context) {
     final isCustomer = _currentUserRole == UserRoles.customer;
     final isCompany = _currentUserRole == UserRoles.company;
-    final canAskForWork =
-        !_isWorkChat &&
-            !_isJobChat &&
-            (isCustomer || isCompany) &&
-            _currentUserId != null;
+    final canAskForWork = !_isWorkChat &&
+        !_isJobChat &&
+        (isCustomer || isCompany) &&
+        _currentUserId != null;
     final hasPending = _pendingRequests.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          foregroundColor: Colors.white,
-          scrolledUnderElevation: 0,
-          toolbarHeight: 90,
-          titleSpacing: 6,
-          leadingWidth: 48,
-          title: Padding(
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
+        scrolledUnderElevation: 0,
+        toolbarHeight: 90,
+        titleSpacing: 6,
+        leadingWidth: 48,
+        title: Padding(
             padding: const EdgeInsets.only(top: 10, bottom: 4),
             child: StreamBuilder<UserPresence>(
-            stream: PresenceService.instance.watchUser(widget.otherUserId),
-            builder: (context, presSnap) {
-              final presence = presSnap.data;
-              final isOnline = presence?.isOnline ?? false;
-              final lastSeen = presence?.lastSeen;
+              stream: PresenceService.instance.watchUser(widget.otherUserId),
+              builder: (context, presSnap) {
+                final presence = presSnap.data;
+                final isOnline = presence?.isOnline ?? false;
+                final lastSeen = presence?.lastSeen;
 
-              String subtitle;
-              if (isOnline) {
-                subtitle = 'Online';
-              } else if (lastSeen != null) {
-                subtitle = 'Last seen ${AppHelpers.getRelativeTime(lastSeen)}';
-              } else {
-                subtitle = 'Offline';
-              }
+                String subtitle;
+                if (isOnline) {
+                  subtitle = 'Online';
+                } else if (lastSeen != null) {
+                  subtitle =
+                      'Last seen ${AppHelpers.getRelativeTime(lastSeen)}';
+                } else {
+                  subtitle = 'Offline';
+                }
 
-              return Row(
-                children: [
-                  Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 17,
-                        backgroundColor: Colors.transparent,
-                        child: UniversalAvatar(
-                          photoUrl: widget.otherUserPhoto,
-                          fallbackName: widget.otherUserName,
-                          radius: 17,
-                          animate: false,
-                        ),
-                      ),
-                      // Online dot on avatar
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          width: 9,
-                          height: 9,
-                          decoration: BoxDecoration(
-                            color: isOnline ? Colors.green : Colors.grey,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 1.5),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
+                return Row(
+                  children: [
+                    Stack(
                       children: [
-                        Text(
-                          AppHelpers.capitalize(widget.otherUserName),
-                          style: GoogleFonts.lora(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            height: 1.1,
+                        CircleAvatar(
+                          radius: 17,
+                          backgroundColor: Colors.transparent,
+                          child: UniversalAvatar(
+                            photoUrl: widget.otherUserPhoto,
+                            fallbackName: widget.otherUserName,
+                            radius: 17,
+                            animate: false,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                        Text(
-                          subtitle,
-                          style: GoogleFonts.lora(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: isOnline
-                                ? Colors.cyanAccent[100]
-                                : Colors.white70,
+                        // Online dot on avatar
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            width: 9,
+                            height: 9,
+                            decoration: BoxDecoration(
+                              color: isOnline ? Colors.green : Colors.grey,
+                              shape: BoxShape.circle,
+                              border:
+                                  Border.all(color: Colors.white, width: 1.5),
+                            ),
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            AppHelpers.capitalize(widget.otherUserName),
+                            style: GoogleFonts.lora(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              height: 1.1,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            subtitle,
+                            style: GoogleFonts.lora(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isOnline
+                                  ? Colors.cyanAccent[100]
+                                  : Colors.white70,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            )),
+        actions: [
+          // Work Requests List icon — visible to all participants
+          if (_currentUserId != null && !_isWorkChat && !_isJobChat)
+            GestureDetector(
+              onTap: () => _showTaskMonitoringSheet(context),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Icon(Icons.format_list_bulleted,
+                        color: Colors.white, size: 24),
+                  ),
+                  // Total requests badge
+                  if (_pendingRequests.length + _acceptedRequests.length > 0)
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Container(
+                        height: 17,
+                        constraints: const BoxConstraints(minWidth: 17),
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.teal[600],
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${_pendingRequests.length + _acceptedRequests.length}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          // Work-flow button — only for customers/companies
+          if (canAskForWork)
+            GestureDetector(
+              onTap: () => _onWorkButtonTap(context),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.all(12),
+                    child:
+                        Icon(Icons.work_outline, color: Colors.white, size: 24),
+                  ),
+                  // Pending badge — only shown when requests are pending
+                  if (hasPending)
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Container(
+                        height: 17,
+                        constraints: const BoxConstraints(minWidth: 17),
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.orange[700],
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${_pendingRequests.length}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          if ((_isWorkChat || _isJobChat) &&
+              _workProjectName != null &&
+              _workProjectName!.trim().isNotEmpty)
+            Container(
+              constraints: const BoxConstraints(maxWidth: 180),
+              margin: const EdgeInsets.only(right: 6, top: 8, bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.25),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.work_history_rounded,
+                      size: 13, color: Colors.white),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      _workProjectName!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.lora(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ],
-              );
-            },
-          )),
-          actions: [
-            // Work Requests List icon — visible to all participants
-            if (_currentUserId != null && !_isWorkChat && !_isJobChat)
-              GestureDetector(
-                onTap: () => _showTaskMonitoringSheet(context),
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Icon(Icons.format_list_bulleted,
-                          color: Colors.white, size: 24),
-                    ),
-                    // Total requests badge
-                    if (_pendingRequests.length + _acceptedRequests.length > 0)
-                      Positioned(
-                        top: 6,
-                        right: 6,
-                        child: Container(
-                          height: 17,
-                          constraints: const BoxConstraints(minWidth: 17),
-                          padding: const EdgeInsets.symmetric(horizontal: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.teal[600],
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.white, width: 1.5),
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${_pendingRequests.length + _acceptedRequests.length}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
               ),
-            // Work-flow button — only for customers/companies
-            if (canAskForWork)
-              GestureDetector(
-                onTap: () => _onWorkButtonTap(context),
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Icon(Icons.work_outline,
-                          color: Colors.white, size: 24),
-                    ),
-                    // Pending badge — only shown when requests are pending
-                    if (hasPending)
-                      Positioned(
-                        top: 6,
-                        right: 6,
-                        child: Container(
-                          height: 17,
-                          constraints: const BoxConstraints(minWidth: 17),
-                          padding: const EdgeInsets.symmetric(horizontal: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.orange[700],
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.white, width: 1.5),
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${_pendingRequests.length}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            if ((_isWorkChat || _isJobChat) &&
-                _workProjectName != null &&
-                _workProjectName!.trim().isNotEmpty)
-              Container(
-                constraints: const BoxConstraints(maxWidth: 180),
-                margin: const EdgeInsets.only(right: 6, top: 8, bottom: 8),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.25),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.work_history_rounded,
-                        size: 13, color: Colors.white),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        _workProjectName!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.lora(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            if (_canSendOfferLetterInThisChat)
-              IconButton(
-                tooltip: 'Send Offer Letter',
-                onPressed: _showOfferLetterDialog,
-                icon: const Icon(Icons.description_rounded, color: Colors.white),
-              ),
-            if (_canShareProfileInThisChat)
-              IconButton(
-                tooltip: 'Share My Profile',
-                onPressed: _shareFullProfileInChat,
-                icon: const Icon(Icons.badge_rounded, color: Colors.white),
-              ),
-            if (_isCompanySkilledHiringChat)
-              IconButton(
-                tooltip: _currentUserRole == UserRoles.company
-                    ? 'View Skilled Profile'
-                    : 'View Company Profile',
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ProfileScreen(userId: widget.otherUserId),
-                  ),
-                ),
-                icon: Icon(
-                  _currentUserRole == UserRoles.company
-                      ? Icons.person_search_rounded
-                      : Icons.apartment_rounded,
-                  color: Colors.white,
-                ),
-              ),
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, color: Colors.white),
-              onSelected: (value) {
-                if (value == 'report') _showReportChatDialog();
-                if (value == 'block') _blockUser();
-                if (value == 'offer_letter') _showOfferLetterDialog();
-                if (value == 'share_profile') _shareFullProfileInChat();
-              },
-              itemBuilder: (ctx) {
-                final items = <PopupMenuEntry<String>>[];
-
-                if (_canSendOfferLetterInThisChat) {
-                  items.add(
-                    const PopupMenuItem(
-                      value: 'offer_letter',
-                      child: Row(
-                        children: [
-                          Icon(Icons.description_rounded,
-                              color: Colors.indigo),
-                          SizedBox(width: 8),
-                          Text('Send Offer Letter'),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-
-                if (_canShareProfileInThisChat) {
-                  items.add(
-                    const PopupMenuItem(
-                      value: 'share_profile',
-                      child: Row(
-                        children: [
-                          Icon(Icons.badge_rounded, color: Colors.teal),
-                          SizedBox(width: 8),
-                          Text('Share Full Profile'),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-
-                items.addAll(const [
-                  PopupMenuItem(
-                    value: 'report',
-                    child: Row(children: [
-                      Icon(Icons.flag, color: Colors.orange),
-                      SizedBox(width: 8),
-                      Text('Report Chat'),
-                    ]),
-                  ),
-                  PopupMenuItem(
-                    value: 'block',
-                    child: Row(children: [
-                      Icon(Icons.block, color: Colors.red),
-                      SizedBox(width: 8),
-                      Text('Block User'),
-                    ]),
-                  ),
-                ]);
-
-                return items;
-              },
             ),
-          ],
-          // Only show tab bar when work is accepted
-          bottom: (_workLocked && !_isJobChat)
-              ? PreferredSize(
-                  preferredSize: const Size.fromHeight(66),
-                  child: _buildGradientTabStrip(),
-                )
-              : null,
-          flexibleSpace: _buildChatAppBarBackground(),
-        ),
+          if (_canSendOfferLetterInThisChat)
+            IconButton(
+              tooltip: 'Send Offer Letter',
+              onPressed: _showOfferLetterDialog,
+              icon: const Icon(Icons.description_rounded, color: Colors.white),
+            ),
+          if (_canShareProfileInThisChat)
+            IconButton(
+              tooltip: 'Share My Profile',
+              onPressed: _shareFullProfileInChat,
+              icon: const Icon(Icons.badge_rounded, color: Colors.white),
+            ),
+          if (_isCompanySkilledHiringChat)
+            IconButton(
+              tooltip: _currentUserRole == UserRoles.company
+                  ? 'View Skilled Profile'
+                  : 'View Company Profile',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ProfileScreen(userId: widget.otherUserId),
+                ),
+              ),
+              icon: Icon(
+                _currentUserRole == UserRoles.company
+                    ? Icons.person_search_rounded
+                    : Icons.apartment_rounded,
+                color: Colors.white,
+              ),
+            ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onSelected: (value) {
+              if (value == 'report') _showReportChatDialog();
+              if (value == 'block') _blockUser();
+              if (value == 'offer_letter') _showOfferLetterDialog();
+              if (value == 'share_profile') _shareFullProfileInChat();
+            },
+            itemBuilder: (ctx) {
+              final items = <PopupMenuEntry<String>>[];
+
+              if (_canSendOfferLetterInThisChat) {
+                items.add(
+                  const PopupMenuItem(
+                    value: 'offer_letter',
+                    child: Row(
+                      children: [
+                        Icon(Icons.description_rounded, color: Colors.indigo),
+                        SizedBox(width: 8),
+                        Text('Send Offer Letter'),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              if (_canShareProfileInThisChat) {
+                items.add(
+                  const PopupMenuItem(
+                    value: 'share_profile',
+                    child: Row(
+                      children: [
+                        Icon(Icons.badge_rounded, color: Colors.teal),
+                        SizedBox(width: 8),
+                        Text('Share Full Profile'),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              items.addAll(const [
+                PopupMenuItem(
+                  value: 'report',
+                  child: Row(children: [
+                    Icon(Icons.flag, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Text('Report Chat'),
+                  ]),
+                ),
+                PopupMenuItem(
+                  value: 'block',
+                  child: Row(children: [
+                    Icon(Icons.block, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Block User'),
+                  ]),
+                ),
+              ]);
+
+              return items;
+            },
+          ),
+        ],
+        // Only show tab bar when work is accepted
+        bottom: (_workLocked && !_isJobChat)
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(66),
+                child: _buildGradientTabStrip(),
+              )
+            : null,
+        flexibleSpace: _buildChatAppBarBackground(),
+      ),
       body: (_workLocked && !_isJobChat)
           ? TabBarView(
               controller: _tabController,
@@ -2283,8 +2413,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                     : null,
                 borderRadius: borderRadius,
                 border: Border.all(
-                  color:
-                      active ? Colors.transparent : const Color(0xFFD7DEEF),
+                  color: active ? Colors.transparent : const Color(0xFFD7DEEF),
                 ),
               ),
               child: Center(
@@ -2632,8 +2761,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               const SizedBox(width: 6),
               Text(
                 '${_acceptedRequests.length} Active Project${_acceptedRequests.length > 1 ? 's' : ''}',
-                style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w600),
+                style:
+                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -2669,8 +2798,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     final isHighlighted = _editingMessage?.id == message.id;
     final senderRole = _senderRoleForMessage(message);
     final isCompanyMessage = senderRole == UserRoles.company;
-    final isStructuredType =
-        message.type == 'offer_letter' || message.type == 'profile_share';
+    final isStructuredType = message.type == 'offer_letter' ||
+        message.type == 'job_confirmation' ||
+        message.type == 'profile_share';
 
     return GestureDetector(
       onLongPress: () => _showMessageOptions(message, isMe),
@@ -2732,8 +2862,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                               ? const Color(0xFFF3ECFF)
                               : const Color(0xFFEAF5FF))
                           : isMe
-                          ? null
-                          : Colors.grey[300],
+                              ? null
+                              : Colors.grey[300],
                   borderRadius: BorderRadius.only(
                     topLeft: const Radius.circular(16),
                     topRight: const Radius.circular(16),
@@ -2771,12 +2901,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           )
                         : isStructuredType
                             ? _buildStructuredMessageCard(message)
-                        : Text(
-                            message.text,
-                            style: TextStyle(
-                                color: isMe ? Colors.white : Colors.black87,
-                                fontSize: 15),
-                          ),
+                            : Text(
+                                message.text,
+                                style: TextStyle(
+                                    color: isMe ? Colors.white : Colors.black87,
+                                    fontSize: 15),
+                              ),
               ),
               const SizedBox(height: 3),
               Row(
@@ -2842,7 +2972,75 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               ),
             ],
           ),
-          if (title.toLowerCase() != 'offer letter') ...[
+          if (!title.toLowerCase().contains('offer letter')) ...[
+            const SizedBox(height: 6),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF263238),
+              ),
+            ),
+          ],
+          if (content.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              content,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.35,
+                color: Color(0xFF37474F),
+              ),
+            ),
+          ],
+          if (message.mediaUrl != null &&
+              message.mediaUrl!.trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => _openOfferLetterAttachment(message.mediaUrl!),
+              icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
+              label: Text(
+                message.attachmentName?.trim().isNotEmpty == true
+                    ? 'Open PDF'
+                    : 'View PDF',
+              ),
+              style: OutlinedButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                foregroundColor: const Color(0xFF3949AB),
+                side: const BorderSide(color: Color(0xFF3949AB)),
+                textStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+
+    if (message.type == 'job_confirmation') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.verified_rounded, size: 16, color: Color(0xFF2E7D32)),
+              SizedBox(width: 6),
+              Text(
+                'Application Selected',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1B5E20),
+                ),
+              ),
+            ],
+          ),
+          if (title.toLowerCase() != 'application selected') ...[
             const SizedBox(height: 6),
             Text(
               title,
@@ -2931,6 +3129,23 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         ),
       ],
     );
+  }
+
+  Future<void> _openOfferLetterAttachment(String url) async {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null) {
+      AppDialog.error(context, 'Invalid offer letter attachment link.');
+      return;
+    }
+    final launched = await launchUrl(
+      uri,
+      mode:
+          kIsWeb ? LaunchMode.platformDefault : LaunchMode.externalApplication,
+      webOnlyWindowName: '_blank',
+    );
+    if (!launched && mounted) {
+      AppDialog.error(context, 'Could not open the attached offer letter PDF.');
+    }
   }
 
   bool _isSameDay(DateTime d1, DateTime d2) =>
@@ -3174,8 +3389,7 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
                         'Client: ${isCustomer ? 'You' : widget.otherUserName}'),
                     _chip(Icons.engineering_outlined,
                         'Worker: ${isCustomer ? widget.otherUserName : 'You'}'),
-                    _chip(Icons.calendar_today_outlined,
-                        'Started $startDate'),
+                    _chip(Icons.calendar_today_outlined, 'Started $startDate'),
                     if (req.hireType != null)
                       _chip(Icons.work_history_outlined,
                           req.hireType!.replaceAll('_', ' ')),
@@ -3200,8 +3414,7 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
                                     strokeWidth: 2, color: Colors.white))
                             : const Icon(Icons.chat_bubble_outline_rounded,
                                 size: 16),
-                        label: Text(
-                            _openingWorkChat ? 'Opening…' : 'Work Chat',
+                        label: Text(_openingWorkChat ? 'Opening…' : 'Work Chat',
                             style: const TextStyle(fontSize: 13)),
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF1565C0),
@@ -3225,8 +3438,7 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
                                   child: CircularProgressIndicator(
                                       strokeWidth: 2, color: Colors.white))
                               : const Icon(Icons.currency_rupee, size: 16),
-                          label: Text(
-                              _paying ? 'Processing…' : 'Pay',
+                          label: Text(_paying ? 'Processing…' : 'Pay',
                               style: const TextStyle(fontSize: 13)),
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFF2E7D32),
@@ -3249,8 +3461,7 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
                                       strokeWidth: 2, color: Colors.white))
                               : const Icon(Icons.check_circle_outline,
                                   size: 16),
-                          label: Text(
-                              _completing ? 'Saving…' : 'Complete',
+                          label: Text(_completing ? 'Saving…' : 'Complete',
                               style: const TextStyle(fontSize: 13)),
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFF5E35B1),
@@ -3267,8 +3478,7 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Icon(Icons.info_outline,
-                        size: 12, color: Colors.grey[400]),
+                    Icon(Icons.info_outline, size: 12, color: Colors.grey[400]),
                     const SizedBox(width: 5),
                     Text(
                       'Use Work Chat for project files & discussion.',
@@ -3285,8 +3495,7 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
   }
 
   Widget _chip(IconData icon, String label) => Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
         decoration: BoxDecoration(
           color: Colors.grey[100],
           borderRadius: BorderRadius.circular(20),
@@ -3970,7 +4179,8 @@ class _AskWorkSheetState extends State<_AskWorkSheet> {
       );
       if (mounted) Navigator.pop(context);
       if (mounted && parentCtx.mounted) {
-        AppDialog.success(parentCtx, 'Work request sent. Waiting for approval.');
+        AppDialog.success(
+            parentCtx, 'Work request sent. Waiting for approval.');
       }
     } catch (e) {
       if (mounted) {

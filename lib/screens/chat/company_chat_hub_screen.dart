@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,6 +13,7 @@ import '../../models/chat_model.dart';
 import '../../services/chat_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/firestore_service.dart';
+import '../../services/offer_letter_service.dart';
 import '../../services/presence_service.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/app_helpers.dart';
@@ -22,6 +24,7 @@ import '../../widgets/universal_avatar.dart';
 import '../../widgets/app_popup.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../profile/profile_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Data class for one tab entry in the hub
@@ -85,7 +88,17 @@ class CompanyChatHubScreen extends StatefulWidget {
 
 class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
     with TickerProviderStateMixin {
+  static final TextInputFormatter _moneyInputFormatter =
+      TextInputFormatter.withFunction((oldValue, newValue) {
+    if (newValue.text.isEmpty ||
+        RegExp(r'^\d*\.?\d{0,2}$').hasMatch(newValue.text)) {
+      return newValue;
+    }
+    return oldValue;
+  });
+
   final ChatService _chatService = ChatService();
+  final OfferLetterService _offerLetterService = OfferLetterService();
 
   String? _currentUserId;
   String? _currentUserRole;
@@ -198,8 +211,7 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
       _tabController = TabController(
         length: newEntries.isEmpty ? 1 : newEntries.length,
         vsync: this,
-        initialIndex:
-            targetIndex < newEntries.length ? targetIndex : 0,
+        initialIndex: targetIndex < newEntries.length ? targetIndex : 0,
       );
       _tabController!.addListener(() {
         if (!mounted) return;
@@ -211,8 +223,7 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
 
     setState(() {
       _tabs = newEntries;
-      _activeTabIndex =
-          targetIndex < newEntries.length ? targetIndex : 0;
+      _activeTabIndex = targetIndex < newEntries.length ? targetIndex : 0;
     });
   }
 
@@ -261,9 +272,8 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
       final jobKey = (c.jobId?.isNotEmpty == true) ? c.jobId! : c.id;
       if (seenJobIds.contains(jobKey)) continue;
       seenJobIds.add(jobKey);
-      final title = (c.jobTitle?.trim().isNotEmpty == true)
-          ? c.jobTitle!
-          : 'Job Chat';
+      final title =
+          (c.jobTitle?.trim().isNotEmpty == true) ? c.jobTitle! : 'Job Chat';
       entries.add(_ChatTabEntry(
         chatId: c.id,
         label: title,
@@ -305,6 +315,8 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
       _currentUserRole == UserRoles.skilledPerson &&
       _otherUserRole == UserRoles.company;
 
+  String get _offerLetterPrefillPosition => (_activeTab?.jobTitle ?? '').trim();
+
   bool get _isHiringConversation =>
       (_currentUserRole == UserRoles.company &&
           _otherUserRole == UserRoles.skilledPerson) ||
@@ -326,8 +338,7 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
   @override
   Widget build(BuildContext context) {
     if (_currentUserId == null) {
-      return const Scaffold(
-          body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
@@ -457,8 +468,7 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(
-              builder: (_) =>
-                  ProfileScreen(userId: widget.otherUserId)),
+              builder: (_) => ProfileScreen(userId: widget.otherUserId)),
         ),
         icon: Icon(
           _currentUserRole == UserRoles.company
@@ -478,8 +488,7 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
           Navigator.push(
             context,
             MaterialPageRoute(
-                builder: (_) =>
-                    ProfileScreen(userId: widget.otherUserId)),
+                builder: (_) => ProfileScreen(userId: widget.otherUserId)),
           );
         }
       },
@@ -585,135 +594,134 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
           final isActive = _activeTabIndex == i;
           const br = BorderRadius.zero;
 
-              // Color scheme per tab type
-              List<Color> activeColors;
-              if (tab.isHiring) {
-                activeColors = const [
-                  Color(0xFF1B5E20),
-                  Color(0xFF2E7D32),
-                  Color(0xFF43A047),
-                ];
-              } else if (tab.isJob) {
-                activeColors = const [
-                  Color(0xFF0D47A1),
-                  Color(0xFF1565C0),
-                  Color(0xFF1E88E5),
-                ];
-              } else {
-                activeColors = const [
-                  Color(0xFF4A148C),
-                  Color(0xFF7B1FA2),
-                  Color(0xFFAB47BC),
-                ];
-              }
+          // Color scheme per tab type
+          List<Color> activeColors;
+          if (tab.isHiring) {
+            activeColors = const [
+              Color(0xFF1B5E20),
+              Color(0xFF2E7D32),
+              Color(0xFF43A047),
+            ];
+          } else if (tab.isJob) {
+            activeColors = const [
+              Color(0xFF0D47A1),
+              Color(0xFF1565C0),
+              Color(0xFF1E88E5),
+            ];
+          } else {
+            activeColors = const [
+              Color(0xFF4A148C),
+              Color(0xFF7B1FA2),
+              Color(0xFFAB47BC),
+            ];
+          }
 
-              return Expanded(
-                child: Material(
-                  color: Colors.transparent,
-                  borderRadius: br,
-                  child: InkWell(
+          return Expanded(
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: br,
+              child: InkWell(
+                borderRadius: br,
+                onTap: () {
+                  if (_activeTabIndex == i) return;
+                  setState(() => _activeTabIndex = i);
+                  _tabController!.animateTo(i);
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOut,
+                  decoration: BoxDecoration(
+                    color: isActive ? null : Colors.white,
+                    gradient: isActive
+                        ? LinearGradient(
+                            colors: activeColors,
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          )
+                        : null,
                     borderRadius: br,
-                    onTap: () {
-                      if (_activeTabIndex == i) return;
-                      setState(() => _activeTabIndex = i);
-                      _tabController!.animateTo(i);
-                    },
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOut,
-                      decoration: BoxDecoration(
-                        color: isActive ? null : Colors.white,
-                        gradient: isActive
-                            ? LinearGradient(
-                                colors: activeColors,
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              )
-                            : null,
-                        borderRadius: br,
-                        border: Border.all(
-                          color: isActive
-                              ? Colors.transparent
-                              : const Color(0xFFD7DEEF),
-                        ),
-                        boxShadow: isActive
-                            ? [
-                                BoxShadow(
-                                  color: activeColors[1]
-                                      .withValues(alpha: 0.28),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: Stack(
-                        children: [
-                          Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  tab.icon,
-                                  size: 18,
-                                  color: isActive
-                                      ? Colors.white
-                                      : const Color(0xFF6D758D),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  tab.label,
-                                  style: GoogleFonts.lora(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: isActive
-                                        ? Colors.white
-                                        : const Color(0xFF6D758D),
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
+                    border: Border.all(
+                      color: isActive
+                          ? Colors.transparent
+                          : const Color(0xFFD7DEEF),
+                    ),
+                    boxShadow: isActive
+                        ? [
+                            BoxShadow(
+                              color: activeColors[1].withValues(alpha: 0.28),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
                             ),
-                          ),
-                          // Unread badge
-                          if (tab.unreadCount > 0)
-                            Positioned(
-                              top: 6,
-                              right: 6,
-                              child: Container(
-                                padding: const EdgeInsets.all(3),
-                                decoration: BoxDecoration(
+                          ]
+                        : null,
+                  ),
+                  child: Stack(
+                    children: [
+                      Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              tab.icon,
+                              size: 18,
+                              color: isActive
+                                  ? Colors.white
+                                  : const Color(0xFF6D758D),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              tab.label,
+                              style: GoogleFonts.lora(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: isActive
+                                    ? Colors.white
+                                    : const Color(0xFF6D758D),
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Unread badge
+                      if (tab.unreadCount > 0)
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              color: isActive
+                                  ? Colors.white
+                                  : const Color(0xFFE91E63),
+                              shape: BoxShape.circle,
+                            ),
+                            constraints: const BoxConstraints(
+                                minWidth: 16, minHeight: 16),
+                            child: Center(
+                              child: Text(
+                                tab.unreadCount > 99
+                                    ? '99+'
+                                    : '${tab.unreadCount}',
+                                style: TextStyle(
                                   color: isActive
-                                      ? Colors.white
-                                      : const Color(0xFFE91E63),
-                                  shape: BoxShape.circle,
-                                ),
-                                constraints: const BoxConstraints(
-                                    minWidth: 16, minHeight: 16),
-                                child: Center(
-                                  child: Text(
-                                    tab.unreadCount > 99
-                                        ? '99+'
-                                        : '${tab.unreadCount}',
-                                    style: TextStyle(
-                                      color: isActive
-                                          ? activeColors.first
-                                          : Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+                                      ? activeColors.first
+                                      : Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ),
-                        ],
-                      ),
-                    ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-              );
+              ),
+            ),
+          );
         }),
       ),
     );
@@ -783,7 +791,7 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
     }
     final chatId = _activeTab!.chatId;
 
-    final posCtrl = TextEditingController();
+    final posCtrl = TextEditingController(text: _offerLetterPrefillPosition);
     final compCtrl = TextEditingController();
     final locCtrl = TextEditingController();
     final dateCtrl = TextEditingController();
@@ -804,169 +812,241 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
           labelStyle: const TextStyle(fontSize: 13),
         );
 
-    final shouldSend = await showModalBottomSheet<bool>(
+    final shouldSend = await showDialog<bool>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Padding(
-        padding:
-            EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-        child: Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFF1A237E),
-                      Color(0xFF3949AB),
-                      Color(0xFF5C6BC0)
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+      barrierColor: Colors.black54,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 430),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x33000000),
+                    blurRadius: 28,
+                    offset: Offset(0, 16),
                   ),
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(10),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF1A237E), Color(0xFF3949AB)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                      child: const Icon(Icons.description_rounded,
-                          color: Colors.white, size: 22),
+                      borderRadius:
+                          BorderRadius.vertical(top: Radius.circular(24)),
                     ),
-                    const SizedBox(width: 14),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Send Offer Letter',
-                              style: TextStyle(
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.description_rounded,
+                              color: Colors.white, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Send Offer Letter',
+                                style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold)),
-                          SizedBox(height: 2),
-                          Text('Fill in the hiring details below',
-                              style:
-                                  TextStyle(color: Colors.white70, fontSize: 12)),
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Compact hiring details popup',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded,
+                              color: Colors.white70),
+                          onPressed: () => Navigator.of(ctx).pop(false),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(18, 18, 18, 10),
+                      child: Column(
+                        children: [
+                          TextField(
+                            controller: posCtrl,
+                            decoration: fieldDeco(
+                              'Position / Role *',
+                              _offerLetterPrefillPosition.isEmpty
+                                  ? 'e.g., Senior Tailor'
+                                  : 'Prefilled from the applied job role',
+                              Icons.work_outline_rounded,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: compCtrl,
+                            decoration: fieldDeco(
+                              'Compensation *',
+                              'e.g., 35000',
+                              Icons.currency_rupee_rounded,
+                            ),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [_moneyInputFormatter],
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: locCtrl,
+                            decoration: fieldDeco(
+                              'Work Location',
+                              'e.g., Chennai, Tamil Nadu',
+                              Icons.location_on_outlined,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: dateCtrl,
+                            readOnly: true,
+                            onTap: () async {
+                              final now = DateTime.now();
+                              final localizations =
+                                  MaterialLocalizations.of(dialogContext);
+                              final picked = await showDatePicker(
+                                context: dialogContext,
+                                initialDate: now,
+                                firstDate:
+                                    now.subtract(const Duration(days: 30)),
+                                lastDate: DateTime(now.year + 5),
+                                helpText: 'Select joining date',
+                              );
+                              if (picked == null) return;
+                              dateCtrl.text =
+                                  localizations.formatMediumDate(picked);
+                              setDialogState(() {});
+                            },
+                            decoration: fieldDeco(
+                              'Joining Date',
+                              'Select from calendar',
+                              Icons.calendar_today_outlined,
+                            ).copyWith(
+                              suffixIcon: IconButton(
+                                onPressed: () async {
+                                  final now = DateTime.now();
+                                  final localizations =
+                                      MaterialLocalizations.of(dialogContext);
+                                  final picked = await showDatePicker(
+                                    context: dialogContext,
+                                    initialDate: now,
+                                    firstDate: now.subtract(
+                                      const Duration(days: 30),
+                                    ),
+                                    lastDate: DateTime(now.year + 5),
+                                    helpText: 'Select joining date',
+                                  );
+                                  if (picked == null) return;
+                                  dateCtrl.text =
+                                      localizations.formatMediumDate(picked);
+                                  setDialogState(() {});
+                                },
+                                icon: const Icon(Icons.date_range_rounded),
+                                color: const Color(0xFF3949AB),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: notesCtrl,
+                            minLines: 2,
+                            maxLines: 4,
+                            decoration: fieldDeco(
+                              'Additional Terms',
+                              'e.g., probation period, benefits',
+                              Icons.notes_rounded,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '* Required fields',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey[500]),
+                          ),
                         ],
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white70),
-                      onPressed: () => Navigator.of(ctx).pop(false),
-                    ),
-                  ],
-                ),
-              ),
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
-                  child: Column(
-                    children: [
-                      TextField(
-                          controller: posCtrl,
-                          decoration: fieldDeco('Position / Role *',
-                              'e.g., Senior Tailor', Icons.work_outline_rounded)),
-                      const SizedBox(height: 12),
-                      TextField(
-                          controller: compCtrl,
-                          decoration: fieldDeco('Compensation *',
-                              'e.g., ₹35,000/month',
-                              Icons.currency_rupee_rounded),
-                          keyboardType: TextInputType.text),
-                      const SizedBox(height: 12),
-                      TextField(
-                          controller: locCtrl,
-                          decoration: fieldDeco('Work Location',
-                              'e.g., Chennai, Tamil Nadu',
-                              Icons.location_on_outlined)),
-                      const SizedBox(height: 12),
-                      TextField(
-                          controller: dateCtrl,
-                          decoration: fieldDeco('Joining Date',
-                              'e.g., 20 March 2026',
-                              Icons.calendar_today_outlined)),
-                      const SizedBox(height: 12),
-                      TextField(
-                          controller: notesCtrl,
-                          minLines: 2,
-                          maxLines: 4,
-                          decoration: fieldDeco(
-                              'Additional Terms',
-                              'e.g., probation period, benefits',
-                              Icons.notes_rounded)),
-                      const SizedBox(height: 8),
-                      Text('* Required fields',
-                          style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-                    ],
                   ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(ctx).pop(false),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                          side: const BorderSide(color: Color(0xFF3949AB)),
-                        ),
-                        child: const Text('Cancel',
-                            style: TextStyle(color: Color(0xFF3949AB))),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                              colors: [Color(0xFF1A237E), Color(0xFF3949AB)]),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: ElevatedButton.icon(
-                          onPressed: () => Navigator.of(ctx).pop(true),
-                          icon: const Icon(Icons.send_rounded,
-                              color: Colors.white, size: 18),
-                          label: const Text('Send Offer Letter',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 4, 18, 18),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(ctx).pop(false),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 13),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              side: const BorderSide(color: Color(0xFF3949AB)),
+                            ),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(color: Color(0xFF3949AB)),
+                            ),
                           ),
                         ),
-                      ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => Navigator.of(ctx).pop(true),
+                            icon: const Icon(Icons.send_rounded, size: 18),
+                            label: const Text('Send'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF3949AB),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 13),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
-
     final position = posCtrl.text.trim();
     final compensation = compCtrl.text.trim();
     if (shouldSend != true) {
@@ -988,28 +1068,57 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
       notesCtrl.dispose();
       return;
     }
+    if (double.tryParse(compensation) == null) {
+      if (mounted) {
+        AppDialog.error(context, 'Compensation must contain numbers only.');
+      }
+      posCtrl.dispose();
+      compCtrl.dispose();
+      locCtrl.dispose();
+      dateCtrl.dispose();
+      notesCtrl.dispose();
+      return;
+    }
 
     final buf = StringBuffer()
-      ..writeln('Offer Letter')
       ..writeln('Position: $position')
       ..writeln('Compensation: $compensation');
     if (locCtrl.text.trim().isNotEmpty) {
-      buf.writeln('Location: ${locCtrl.text.trim()}');
+      buf.writeln('Work Location: ${locCtrl.text.trim()}');
     }
     if (dateCtrl.text.trim().isNotEmpty) {
       buf.writeln('Joining Date: ${dateCtrl.text.trim()}');
     }
     if (notesCtrl.text.trim().isNotEmpty) {
-      buf.writeln('Terms: ${notesCtrl.text.trim()}');
+      buf.writeln('Additional Terms: ${notesCtrl.text.trim()}');
     }
+    buf
+      ..writeln()
+      ..writeln(
+          'You have been selected for this role. Please review the attached PDF offer letter for the complete details.');
 
     try {
+      final pdfUrl = await _offerLetterService.createAndUploadOfferLetterPdf(
+        companyId: _currentUserId!,
+        candidateName: widget.otherUserName,
+        position: position,
+        compensation: compensation,
+        location: locCtrl.text.trim(),
+        joiningDate: dateCtrl.text.trim(),
+        additionalTerms: notesCtrl.text.trim(),
+      );
+      if (pdfUrl == null || pdfUrl.trim().isEmpty) {
+        throw Exception('Could not generate the offer letter PDF.');
+      }
+
       await _chatService.sendMessage(
         chatId: chatId,
         senderId: _currentUserId!,
         receiverId: widget.otherUserId,
         text: buf.toString().trim(),
         type: 'offer_letter',
+        mediaUrl: pdfUrl,
+        attachmentName: 'Offer Letter - $position.pdf',
       );
       if (!mounted) return;
       AppDialog.success(context, 'Offer letter sent successfully!');
@@ -1055,8 +1164,7 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
         ..writeln('Category: ${(profile.category ?? 'Not specified').trim()}')
         ..writeln(
             'Skills: ${profile.skills.isEmpty ? 'Not specified' : profile.skills.join(', ')}')
-        ..writeln(
-            'Bio: ${profile.bio.isEmpty ? 'Not provided' : profile.bio}')
+        ..writeln('Bio: ${profile.bio.isEmpty ? 'Not provided' : profile.bio}')
         ..writeln(
             'Location: ${location.isEmpty ? 'Not provided' : location.join(', ')}')
         ..writeln(
@@ -1066,8 +1174,7 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
 
       if (profile.profilePicture != null &&
           profile.profilePicture!.trim().isNotEmpty) {
-        profileText
-            .writeln('Profile Photo: ${profile.profilePicture!.trim()}');
+        profileText.writeln('Profile Photo: ${profile.profilePicture!.trim()}');
       }
 
       await _chatService.sendMessage(
@@ -1083,8 +1190,7 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
           context, 'Your full profile has been shared with the company!');
     } catch (e) {
       if (!mounted) return;
-      AppDialog.error(context, 'Failed to share profile',
-          detail: e.toString());
+      AppDialog.error(context, 'Failed to share profile', detail: e.toString());
     }
   }
 }
@@ -1121,12 +1227,10 @@ class _NewChatPlaceholder extends StatelessWidget {
                     size: 64, color: Colors.grey[400]),
                 const SizedBox(height: 16),
                 Text('No messages yet',
-                    style:
-                        TextStyle(fontSize: 16, color: Colors.grey[600])),
+                    style: TextStyle(fontSize: 16, color: Colors.grey[600])),
                 const SizedBox(height: 8),
                 Text('Start the conversation!',
-                    style:
-                        TextStyle(fontSize: 14, color: Colors.grey[500])),
+                    style: TextStyle(fontSize: 14, color: Colors.grey[500])),
               ],
             ),
           ),
@@ -1147,7 +1251,10 @@ class _NewChatPlaceholder extends StatelessWidget {
                           currentUserId,
                           otherUserId,
                           {'name': '', 'photo': ''},
-                          {'name': otherUserName, 'photo': otherUserPhoto ?? ''},
+                          {
+                            'name': otherUserName,
+                            'photo': otherUserPhoto ?? ''
+                          },
                         );
                         await chatService.sendMessage(
                           chatId: cid,
@@ -1249,9 +1356,8 @@ class _ChatPaneState extends State<_ChatPane> {
     super.initState();
     _messageStream = _chatService.getMessages(widget.chatId, limit: 150);
 
-    _presenceSub = PresenceService.instance
-        .watchUser(widget.otherUserId)
-        .listen((p) {
+    _presenceSub =
+        PresenceService.instance.watchUser(widget.otherUserId).listen((p) {
       if (!mounted) return;
       if (p.isOnline != _otherUserOnline) {
         setState(() => _otherUserOnline = p.isOnline);
@@ -1311,8 +1417,7 @@ class _ChatPaneState extends State<_ChatPane> {
       _msgCtrl.clear();
       if (_scrollCtrl.hasClients) {
         _scrollCtrl.animateTo(0,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut);
+            duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
       }
     } catch (e) {
       if (mounted) {
@@ -1328,8 +1433,7 @@ class _ChatPaneState extends State<_ChatPane> {
     setState(() {
       _editingMsg = msg;
       _msgCtrl.text = msg.text;
-      _msgCtrl.selection =
-          TextSelection.collapsed(offset: msg.text.length);
+      _msgCtrl.selection = TextSelection.collapsed(offset: msg.text.length);
     });
   }
 
@@ -1344,11 +1448,9 @@ class _ChatPaneState extends State<_ChatPane> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Delete Message'),
-        content:
-            const Text('Delete this message? This cannot be undone.'),
+        content: const Text('Delete this message? This cannot be undone.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -1356,8 +1458,7 @@ class _ChatPaneState extends State<_ChatPane> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
-            child:
-                const Text('Delete', style: TextStyle(color: Colors.white)),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1397,14 +1498,13 @@ class _ChatPaneState extends State<_ChatPane> {
                   Navigator.pop(context);
                   Clipboard.setData(ClipboardData(text: msg.text));
                   AppPopup.show(context,
-                      message: 'Copied to clipboard',
-                      type: PopupType.info);
+                      message: 'Copied to clipboard', type: PopupType.info);
                 },
               ),
               if (isMe && msg.type == 'text')
                 ListTile(
-                  leading: const Icon(Icons.edit_outlined,
-                      color: Colors.deepPurple),
+                  leading:
+                      const Icon(Icons.edit_outlined, color: Colors.deepPurple),
                   title: const Text('Edit'),
                   onTap: () {
                     Navigator.pop(context);
@@ -1413,10 +1513,9 @@ class _ChatPaneState extends State<_ChatPane> {
                 ),
               if (isMe)
                 ListTile(
-                  leading: const Icon(Icons.delete_outline,
-                      color: Colors.red),
-                  title: const Text('Delete',
-                      style: TextStyle(color: Colors.red)),
+                  leading: const Icon(Icons.delete_outline, color: Colors.red),
+                  title:
+                      const Text('Delete', style: TextStyle(color: Colors.red)),
                   onTap: () {
                     Navigator.pop(context);
                     _deleteMessage(msg);
@@ -1431,8 +1530,8 @@ class _ChatPaneState extends State<_ChatPane> {
 
   Future<void> _markAsReadIfNeeded(List<MessageModel> messages) async {
     if (_markingRead) return;
-    final hasUnread = messages
-        .any((m) => !m.isRead && m.senderId != widget.currentUserId);
+    final hasUnread =
+        messages.any((m) => !m.isRead && m.senderId != widget.currentUserId);
     if (!hasUnread) return;
     _markingRead = true;
     try {
@@ -1460,8 +1559,7 @@ class _ChatPaneState extends State<_ChatPane> {
       if (url != null) await _sendMessage(imageUrl: url);
     } on Exception catch (e) {
       if (mounted && !e.toString().contains('cancel')) {
-        AppDialog.error(context, 'Error uploading image',
-            detail: e.toString());
+        AppDialog.error(context, 'Error uploading image', detail: e.toString());
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -1503,8 +1601,8 @@ class _ChatPaneState extends State<_ChatPane> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.photo_library,
-                    color: Color(0xFF9C27B0)),
+                leading:
+                    const Icon(Icons.photo_library, color: Color(0xFF9C27B0)),
                 title: const Text('Choose from Gallery'),
                 onTap: () {
                   Navigator.pop(context);
@@ -1512,8 +1610,7 @@ class _ChatPaneState extends State<_ChatPane> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.camera_alt,
-                    color: Color(0xFF9C27B0)),
+                leading: const Icon(Icons.camera_alt, color: Color(0xFF9C27B0)),
                 title: const Text('Take Photo'),
                 onTap: () {
                   Navigator.pop(context);
@@ -1557,12 +1654,12 @@ class _ChatPaneState extends State<_ChatPane> {
                           size: 64, color: Colors.grey[400]),
                       const SizedBox(height: 16),
                       Text('No messages yet',
-                          style: TextStyle(
-                              fontSize: 16, color: Colors.grey[600])),
+                          style:
+                              TextStyle(fontSize: 16, color: Colors.grey[600])),
                       const SizedBox(height: 8),
                       Text('Start the conversation!',
-                          style: TextStyle(
-                              fontSize: 14, color: Colors.grey[500])),
+                          style:
+                              TextStyle(fontSize: 14, color: Colors.grey[500])),
                     ],
                   ),
                 );
@@ -1580,8 +1677,7 @@ class _ChatPaneState extends State<_ChatPane> {
                   final msg = messages[index];
                   final isMe = msg.senderId == widget.currentUserId;
                   final showDate = index == messages.length - 1 ||
-                      !_isSameDay(
-                          msg.createdAt, messages[index + 1].createdAt);
+                      !_isSameDay(msg.createdAt, messages[index + 1].createdAt);
                   return Column(
                     children: [
                       if (showDate)
@@ -1627,8 +1723,7 @@ class _ChatPaneState extends State<_ChatPane> {
         if (_editingMsg != null)
           Container(
             color: Colors.deepPurple.withValues(alpha: 0.07),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Row(
               children: [
                 const Icon(Icons.edit_outlined,
@@ -1637,8 +1732,8 @@ class _ChatPaneState extends State<_ChatPane> {
                 Expanded(
                   child: Text(
                     'Editing: ${_editingMsg!.text}',
-                    style: const TextStyle(
-                        fontSize: 12, color: Colors.deepPurple),
+                    style:
+                        const TextStyle(fontSize: 12, color: Colors.deepPurple),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1703,14 +1798,10 @@ class _ChatPaneState extends State<_ChatPane> {
                             height: 20,
                             child: CircularProgressIndicator(
                                 color: Colors.white, strokeWidth: 2))
-                        : Icon(
-                            _editingMsg != null
-                                ? Icons.check
-                                : Icons.send,
+                        : Icon(_editingMsg != null ? Icons.check : Icons.send,
                             color: Colors.white),
-                    onPressed: _isLoading || _isSending
-                        ? null
-                        : () => _sendMessage(),
+                    onPressed:
+                        _isLoading || _isSending ? null : () => _sendMessage(),
                   ),
                 ),
               ],
@@ -1727,11 +1818,11 @@ class _ChatPaneState extends State<_ChatPane> {
     final isDeleted = msg.isDeleted;
     final isEdited = msg.editedAt != null && !isDeleted;
     final isHighlighted = _editingMsg?.id == msg.id;
-    final isStructured =
-        msg.type == 'offer_letter' || msg.type == 'profile_share';
-    final isCompanyMsg =
-        msg.senderId == widget.otherUserId &&
-            widget.otherUserRole == UserRoles.company;
+    final isStructured = msg.type == 'offer_letter' ||
+        msg.type == 'job_confirmation' ||
+        msg.type == 'profile_share';
+    final isCompanyMsg = msg.senderId == widget.otherUserId &&
+        widget.otherUserRole == UserRoles.company;
 
     return GestureDetector(
       onLongPress: () => _showMsgOptions(msg),
@@ -1766,8 +1857,7 @@ class _ChatPaneState extends State<_ChatPane> {
                     color: const Color(0xFF3949AB).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(999),
                     border: Border.all(
-                        color:
-                            const Color(0xFF3949AB).withValues(alpha: 0.25)),
+                        color: const Color(0xFF3949AB).withValues(alpha: 0.25)),
                   ),
                   child: const Text(
                     'COMPANY',
@@ -1780,8 +1870,8 @@ class _ChatPaneState extends State<_ChatPane> {
                   ),
                 ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
                   gradient: isMe && !isDeleted && !isStructured
                       ? const LinearGradient(
@@ -1836,9 +1926,7 @@ class _ChatPaneState extends State<_ChatPane> {
                             : Text(
                                 msg.text,
                                 style: TextStyle(
-                                    color: isMe
-                                        ? Colors.white
-                                        : Colors.black87,
+                                    color: isMe ? Colors.white : Colors.black87,
                                     fontSize: 15),
                               ),
               ),
@@ -1850,12 +1938,11 @@ class _ChatPaneState extends State<_ChatPane> {
                     Padding(
                       padding: const EdgeInsets.only(right: 4),
                       child: Text('edited',
-                          style: TextStyle(
-                              fontSize: 10, color: Colors.grey[400])),
+                          style:
+                              TextStyle(fontSize: 10, color: Colors.grey[400])),
                     ),
                   Text(AppHelpers.formatTime(msg.createdAt),
-                      style: TextStyle(
-                          fontSize: 11, color: Colors.grey[600])),
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600])),
                   if (isMe && !isDeleted) ...[
                     const SizedBox(width: 4),
                     Icon(
@@ -1883,8 +1970,7 @@ class _ChatPaneState extends State<_ChatPane> {
         .where((l) => l.isNotEmpty)
         .toList();
     final title = lines.isNotEmpty ? lines.first : 'Message';
-    final content =
-        lines.length > 1 ? lines.skip(1).join('\n') : '';
+    final content = lines.length > 1 ? lines.skip(1).join('\n') : '';
 
     if (msg.type == 'offer_letter') {
       return Column(
@@ -1904,7 +1990,7 @@ class _ChatPaneState extends State<_ChatPane> {
                   )),
             ],
           ),
-          if (title.toLowerCase() != 'offer letter') ...[
+          if (!title.toLowerCase().contains('offer letter')) ...[
             const SizedBox(height: 6),
             Text(title,
                 style: const TextStyle(
@@ -1916,9 +2002,60 @@ class _ChatPaneState extends State<_ChatPane> {
             const SizedBox(height: 6),
             Text(content,
                 style: const TextStyle(
+                    fontSize: 13, height: 1.35, color: Color(0xFF37474F))),
+          ],
+          if (msg.mediaUrl != null && msg.mediaUrl!.trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => _openOfferLetterAttachment(msg.mediaUrl!),
+              icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
+              label: const Text('Open PDF'),
+              style: OutlinedButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                foregroundColor: const Color(0xFF3949AB),
+                side: const BorderSide(color: Color(0xFF3949AB)),
+                textStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+
+    if (msg.type == 'job_confirmation') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.verified_rounded, size: 16, color: Color(0xFF2E7D32)),
+              SizedBox(width: 6),
+              Text('Application Selected',
+                  style: TextStyle(
                     fontSize: 13,
-                    height: 1.35,
-                    color: Color(0xFF37474F))),
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1B5E20),
+                  )),
+            ],
+          ),
+          if (title.toLowerCase() != 'application selected') ...[
+            const SizedBox(height: 6),
+            Text(title,
+                style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF263238))),
+          ],
+          if (content.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(content,
+                style: const TextStyle(
+                    fontSize: 13, height: 1.35, color: Color(0xFF37474F))),
           ],
         ],
       );
@@ -1962,21 +2099,36 @@ class _ChatPaneState extends State<_ChatPane> {
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
-                  builder: (_) =>
-                      ProfileScreen(userId: msg.senderId)),
+                  builder: (_) => ProfileScreen(userId: msg.senderId)),
             ),
             icon: const Icon(Icons.open_in_new_rounded, size: 15),
             label: const Text('Open Shared Profile'),
             style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 8),
-              textStyle: const TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w600),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              textStyle:
+                  const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ),
         ),
       ],
     );
+  }
+
+  Future<void> _openOfferLetterAttachment(String url) async {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null) {
+      AppDialog.error(context, 'Invalid offer letter attachment link.');
+      return;
+    }
+    final launched = await launchUrl(
+      uri,
+      mode:
+          kIsWeb ? LaunchMode.platformDefault : LaunchMode.externalApplication,
+      webOnlyWindowName: '_blank',
+    );
+    if (!launched && mounted) {
+      AppDialog.error(context, 'Could not open the attached offer letter PDF.');
+    }
   }
 
   bool _isSameDay(DateTime d1, DateTime d2) =>
@@ -2001,7 +2153,8 @@ class _ImagePreviewPage extends StatelessWidget {
       ),
       body: Center(
         child: InteractiveViewer(
-          child: WebImageLoader.loadImage(imageUrl: imageUrl, fit: BoxFit.contain),
+          child:
+              WebImageLoader.loadImage(imageUrl: imageUrl, fit: BoxFit.contain),
         ),
       ),
     );

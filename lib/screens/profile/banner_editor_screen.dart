@@ -193,6 +193,7 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
 
     if (kIsWeb) {
       final bytes = await xfile.readAsBytes();
+      if (!mounted) return;
       setState(() {
         _imageBytes = bytes;
         _uploadedImageUrl = null; // will upload on save
@@ -222,7 +223,7 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
       }
       return url;
     } finally {
-      setState(() => _isUploading = false);
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
@@ -705,64 +706,76 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
   // ─── Color picker ────────────────────────────────────────────────────────
 
   Widget _buildColorPicker() {
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: [
-        ..._colorPresets.map((c) {
-          final selected = _textColor == c;
-          final tickColor =
-              c.computeLuminance() > 0.6 ? Colors.black87 : Colors.white;
-          return GestureDetector(
-            onTap: () => setState(() => _textColor = c),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: c,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: selected ? const Color(0xFF6A11CB) : Colors.grey[300]!,
-                  width: selected ? 3 : 1.5,
+    return Scrollbar(
+      thumbVisibility: true,
+      radius: const Radius.circular(999),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            ..._colorPresets.map((c) {
+              final selected = _textColor == c;
+              final tickColor =
+                  c.computeLuminance() > 0.6 ? Colors.black87 : Colors.white;
+              return Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: GestureDetector(
+                  onTap: () => setState(() => _textColor = c),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: c,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: selected
+                            ? const Color(0xFF6A11CB)
+                            : Colors.grey[300]!,
+                        width: selected ? 3 : 1.5,
+                      ),
+                      boxShadow: selected
+                          ? [
+                              BoxShadow(
+                                color: c.withValues(alpha: 0.5),
+                                blurRadius: 8,
+                              )
+                            ]
+                          : [],
+                    ),
+                    child: selected
+                        ? Icon(Icons.check_rounded, color: tickColor, size: 18)
+                        : null,
+                  ),
                 ),
-                boxShadow: selected
-                    ? [
-                        BoxShadow(
-                            color: c.withValues(alpha: 0.5), blurRadius: 6)
-                      ]
-                    : [],
+              );
+            }),
+            GestureDetector(
+              onTap: _pickCustomColor,
+              child: Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  gradient: const SweepGradient(colors: [
+                    Colors.red,
+                    Colors.yellow,
+                    Colors.green,
+                    Colors.cyan,
+                    Colors.blue,
+                    Colors.purple,
+                    Colors.red,
+                  ]),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.grey[300]!, width: 1.5),
+                ),
+                child: const Icon(Icons.colorize_rounded,
+                    color: Colors.white, size: 18),
               ),
-              child: selected
-                  ? Icon(Icons.check_rounded, color: tickColor, size: 16)
-                  : null,
             ),
-          );
-        }),
-        // Custom color
-        GestureDetector(
-          onTap: _pickCustomColor,
-          child: Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              gradient: const SweepGradient(colors: [
-                Colors.red,
-                Colors.yellow,
-                Colors.green,
-                Colors.cyan,
-                Colors.blue,
-                Colors.purple,
-                Colors.red,
-              ]),
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.grey[300]!, width: 1.5),
-            ),
-            child: const Icon(Icons.colorize_rounded,
-                color: Colors.white, size: 16),
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -992,46 +1005,54 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
   // ─── Gradient picker ──────────────────────────────────────────────────────
 
   Widget _buildGradientPicker() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: List.generate(_gradients.length, (i) {
-          final selected = _gradientIndex == i;
-          return Padding(
-            padding: const EdgeInsets.only(right: 10),
-            child: GestureDetector(
-              onTap: () => setState(() => _gradientIndex = i),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: 72,
-                height: 40,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
+    return Scrollbar(
+      thumbVisibility: true,
+      radius: const Radius.circular(999),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: List.generate(_gradients.length, (i) {
+            final selected = _gradientIndex == i;
+            return Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: GestureDetector(
+                onTap: () => setState(() => _gradientIndex = i),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 78,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
                       colors: _gradients[i],
                       begin: Alignment.topLeft,
-                      end: Alignment.bottomRight),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: selected ? Colors.white : Colors.transparent,
-                    width: 2.5,
-                  ),
-                  boxShadow: selected
-                      ? [
-                          BoxShadow(
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: selected ? Colors.white : Colors.transparent,
+                      width: 2.5,
+                    ),
+                    boxShadow: selected
+                        ? [
+                            BoxShadow(
                               color: _gradients[i][0].withValues(alpha: 0.5),
-                              blurRadius: 8)
-                        ]
-                      : [],
+                              blurRadius: 10,
+                            )
+                          ]
+                        : [],
+                  ),
+                  child: selected
+                      ? const Center(
+                          child: Icon(Icons.check_rounded,
+                              color: Colors.white, size: 18),
+                        )
+                      : null,
                 ),
-                child: selected
-                    ? const Center(
-                        child: Icon(Icons.check_rounded,
-                            color: Colors.white, size: 18))
-                    : null,
               ),
-            ),
-          );
-        }),
+            );
+          }),
+        ),
       ),
     );
   }

@@ -83,7 +83,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
   @override
   void initState() {
     super.initState();
-    _loadProfile();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadProfile());
   }
 
   Future<void> _loadProfile() async {
@@ -187,6 +187,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
 
       if (kIsWeb) {
         final bytes = await image.readAsBytes();
+        if (!mounted) return;
         setState(() {
           _profileImageBytes = bytes;
         });
@@ -596,7 +597,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
 
       // Upload profile image if selected
       if (_profileImage != null || _profileImageBytes != null) {
-        setState(() => _uploadStatusMessage = 'Uploading profile photo...');
+        if (mounted) setState(() => _uploadStatusMessage = 'Uploading profile photo...');
         if (kIsWeb && _profileImageBytes != null) {
           finalProfileUrl = await _cloudinaryService.uploadImageBytes(
             _profileImageBytes!,
@@ -612,7 +613,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
 
       // Upload portfolio images if selected
       if (_portfolioImages.isNotEmpty || _portfolioImageBytes.isNotEmpty) {
-        setState(() => _uploadStatusMessage = 'Uploading portfolio images...');
+        if (mounted) setState(() => _uploadStatusMessage = 'Uploading portfolio images...');
         if (kIsWeb) {
           for (final bytes in _portfolioImageBytes) {
             final url = await _cloudinaryService.uploadImageBytes(
@@ -646,7 +647,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
         };
       }
 
-      setState(() => _uploadStatusMessage = 'Saving to database...');
+      if (mounted) setState(() => _uploadStatusMessage = 'Saving to database...');
 
       // Get user name to denormalize into skilled_users collection
       final userName = authProvider.currentUser?.name;
@@ -762,7 +763,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isEditing ? 'Edit Profile' : 'Setup Profile'),
+        title: Text(widget.isEditing ? 'Edit Profile' : 'Setup Profile', style: const TextStyle(color: Colors.white)),
         actions: [
           TextButton(
             onPressed: _saveProfile,

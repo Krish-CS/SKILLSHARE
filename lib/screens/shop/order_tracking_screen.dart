@@ -71,8 +71,7 @@ class OrderTrackingScreen extends StatelessWidget {
         ),
         title: const Text(
           'Track Order',
-          style: TextStyle(
-              color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
@@ -117,8 +116,7 @@ class OrderTrackingScreen extends StatelessWidget {
             // Timeline title
             const Text(
               'Delivery Timeline',
-              style: TextStyle(
-                  fontSize: 17, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
 
@@ -206,8 +204,7 @@ class _OrderSummaryCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       'Order #${order.id.substring(0, 8).toUpperCase()}',
-                      style: TextStyle(
-                          color: Colors.grey[600], fontSize: 12),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
                     ),
                   ],
                 ),
@@ -220,8 +217,7 @@ class _OrderSummaryCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _SummaryDetail(
-                  label: 'Qty', value: '${order.quantity}'),
+              _SummaryDetail(label: 'Qty', value: '${order.quantity}'),
               _SummaryDetail(
                   label: 'Total',
                   value: '₹${order.totalPrice.toStringAsFixed(2)}'),
@@ -229,10 +225,64 @@ class _OrderSummaryCard extends StatelessWidget {
                   label: 'Placed',
                   value: AppHelpers.formatDate(order.createdAt)),
               _SummaryDetail(
-                  label: 'Payment',
-                  value: order.paymentStatus.toUpperCase()),
+                  label: 'Payment', value: order.paymentStatus.toUpperCase()),
             ],
           ),
+          if ((order.deliveryAddress ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _SummaryInfo(
+              icon: Icons.home_outlined,
+              label: 'Address',
+              value: order.deliveryAddress!,
+            ),
+          ],
+          if ((order.deliveryLocation ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _SummaryInfo(
+              icon: Icons.location_on_outlined,
+              label: 'Location',
+              value: order.deliveryLocation!,
+            ),
+          ],
+          if ((order.deliveryVerificationCode ?? '').trim().isNotEmpty &&
+              order.status != 'delivered') ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1565C0).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Delivery Verification Code',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1565C0),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    order.deliveryVerificationCode!,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Share this only with the delivery person when they ask.',
+                    style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -248,12 +298,47 @@ class _SummaryDetail extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(label,
-            style: TextStyle(color: Colors.grey[500], fontSize: 11)),
+        Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 11)),
         const SizedBox(height: 2),
         Text(value,
-            style: const TextStyle(
-                fontWeight: FontWeight.w600, fontSize: 13)),
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+      ],
+    );
+  }
+}
+
+class _SummaryInfo extends StatelessWidget {
+  const _SummaryInfo({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: Colors.grey[700]),
+        const SizedBox(width: 8),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: DefaultTextStyle.of(context).style,
+              children: [
+                TextSpan(
+                  text: '$label: ',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                TextSpan(text: value),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -322,9 +407,8 @@ class _TimelineRow extends StatelessWidget {
                   Expanded(
                     child: Container(
                       width: 2,
-                      color: isDone
-                          ? const Color(0xFF4CAF50)
-                          : Colors.grey[200],
+                      color:
+                          isDone ? const Color(0xFF4CAF50) : Colors.grey[200],
                     ),
                   ),
               ],
@@ -334,8 +418,7 @@ class _TimelineRow extends StatelessWidget {
           // Right side: content
           Expanded(
             child: Padding(
-              padding: EdgeInsets.only(
-                  bottom: isLast ? 0 : 24, top: 6),
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 24, top: 6),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -346,8 +429,9 @@ class _TimelineRow extends StatelessWidget {
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
-                          color:
-                              isDone || isCurrent ? Colors.black87 : Colors.grey,
+                          color: isDone || isCurrent
+                              ? Colors.black87
+                              : Colors.grey,
                         ),
                       ),
                       if (isCurrent) ...[
@@ -356,8 +440,8 @@ class _TimelineRow extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFFF9800)
-                                .withValues(alpha: 0.15),
+                            color:
+                                const Color(0xFFFF9800).withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: const Text(
@@ -376,15 +460,13 @@ class _TimelineRow extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       AppHelpers.formatDateTime(time!),
-                      style: TextStyle(
-                          color: Colors.grey[500], fontSize: 12),
+                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
                     ),
                   ],
                   const SizedBox(height: 4),
                   Text(
                     step.description,
-                    style: TextStyle(
-                        color: Colors.grey[600], fontSize: 13),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
                   ),
                 ],
               ),
@@ -432,8 +514,7 @@ class _DeliveryPartnerCard extends StatelessWidget {
               children: [
                 const Text(
                   'Delivery Partner',
-                  style: TextStyle(
-                      color: Colors.white70, fontSize: 12),
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
                 ),
                 Text(
                   partnerName,
@@ -446,8 +527,7 @@ class _DeliveryPartnerCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     'Est. Delivery: ${AppHelpers.formatDateTime(estimatedDelivery!)}',
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 12),
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
                   ),
                 ],
               ],

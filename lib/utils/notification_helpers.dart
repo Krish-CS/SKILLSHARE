@@ -215,6 +215,7 @@ Future<List<NotificationItem>> loadNotificationsForUser(
     // ── Job application notifications ────────────────────────────────────
     const jobDecisionTypes = <String>{
       'jobApplication',
+      'jobReApplication',
       'jobAccepted',
       'jobRejected',
       'jobRevoked',

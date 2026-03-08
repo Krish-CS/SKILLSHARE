@@ -79,6 +79,87 @@ class CloudinaryService {
     }
   }
 
+  /// Upload PDF bytes through Cloudinary's image pipeline so browsers can
+  /// render the document inline instead of treating it as an opaque raw file.
+  Future<String?> uploadPdfBytes(
+    Uint8List bytes, {
+    String folder = 'uploads',
+    String? filename,
+  }) async {
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse(CloudinaryConfig.imageUploadUrl),
+      );
+      request.fields['upload_preset'] = CloudinaryConfig.uploadPreset;
+      request.fields['folder'] = folder;
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename:
+              filename ?? 'file_${DateTime.now().millisecondsSinceEpoch}.pdf',
+        ),
+      );
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return data['secure_url'] as String?;
+      }
+
+      debugPrint(
+          'Cloudinary PDF upload failed: ${response.statusCode} ${response.body}');
+      return null;
+    } catch (e) {
+      debugPrint('Error uploading PDF bytes to Cloudinary: $e');
+      return null;
+    }
+  }
+
+  /// Upload raw bytes like PDF files to Cloudinary.
+  Future<String?> uploadRawBytes(
+    Uint8List bytes, {
+    String folder = 'uploads',
+    String? filename,
+  }) async {
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse(CloudinaryConfig.rawUploadUrl),
+      );
+      request.fields['upload_preset'] = CloudinaryConfig.uploadPreset;
+      request.fields['folder'] = folder;
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename:
+              filename ?? 'file_${DateTime.now().millisecondsSinceEpoch}.pdf',
+        ),
+      );
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return data['secure_url'] as String?;
+      }
+
+      debugPrint(
+          'Cloudinary raw upload failed: ${response.statusCode} ${response.body}');
+      return null;
+    } catch (e) {
+      debugPrint('Error uploading raw bytes to Cloudinary: $e');
+      return null;
+    }
+  }
+
   /// Upload video to Cloudinary
   /// Returns the secure URL of the uploaded video or null if failed
   Future<String?> uploadVideo(File videoFile,
@@ -123,4 +204,3 @@ class CloudinaryService {
     return urls;
   }
 }
-

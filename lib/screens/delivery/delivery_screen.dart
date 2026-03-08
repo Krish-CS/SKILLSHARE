@@ -275,6 +275,11 @@ class _DeliveryCard extends StatelessWidget {
             // Details
             _InfoRow(Icons.person_outline, 'Buyer',
                 order.buyerName ?? order.buyerId),
+            if ((order.deliveryAddress ?? '').trim().isNotEmpty)
+              _InfoRow(Icons.home_outlined, 'Address', order.deliveryAddress!),
+            if ((order.deliveryLocation ?? '').trim().isNotEmpty)
+              _InfoRow(Icons.location_on_outlined, 'Location',
+                  order.deliveryLocation!),
             _InfoRow(Icons.payments_outlined, 'Amount',
                 '₹${order.totalPrice.toStringAsFixed(2)}'),
             _InfoRow(Icons.calendar_today_outlined, 'Ordered',
@@ -284,6 +289,20 @@ class _DeliveryCard extends StatelessWidget {
                 Icons.schedule,
                 'Est. Delivery',
                 AppHelpers.formatDateTime(order.estimatedDelivery!),
+              ),
+            if ((order.deliveryVerificationCode ?? '').trim().isNotEmpty &&
+                isAssigned &&
+                order.status == 'out_for_delivery')
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Text(
+                  'Ask the customer for their delivery code before marking this as delivered.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF1565C0),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             const SizedBox(height: 14),
             // Action buttons
@@ -352,14 +371,21 @@ class _DeliveryCard extends StatelessWidget {
     String status,
   ) async {
     try {
+      String? verificationCode;
+      if (status == 'delivered') {
+        verificationCode = await _promptDeliveryCode(context, order);
+        if (verificationCode == null) return;
+      }
       await FirestoreService().updateDeliveryStatus(
         orderId: order.id,
         deliveryPartnerId: partnerId,
         status: status,
+        deliveryVerificationCode: verificationCode,
       );
       if (context.mounted) {
         if (status == 'delivered') {
-          AppDialog.success(context, 'Marked as delivered!');
+          AppDialog.success(
+              context, 'Delivery code verified. Marked as delivered!');
         } else {
           AppDialog.error(context, 'Marked as failed delivery.');
         }
@@ -370,6 +396,55 @@ class _DeliveryCard extends StatelessWidget {
             detail: e.toString());
       }
     }
+  }
+
+  Future<String?> _promptDeliveryCode(
+    BuildContext context,
+    OrderModel order,
+  ) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Verify Delivery Code'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Ask ${order.buyerName ?? 'the customer'} for the delivery code before handing over the product.',
+              style: const TextStyle(fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              decoration: InputDecoration(
+                labelText: 'Customer code',
+                hintText: 'Enter 6-digit code',
+                prefixIcon: const Icon(Icons.password_rounded),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+            child: const Text('Verify'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
   }
 
   Future<void> _updateEstimatedDelivery(

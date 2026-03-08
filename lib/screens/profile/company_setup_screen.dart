@@ -83,7 +83,7 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
   @override
   void initState() {
     super.initState();
-    _loadProfile();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadProfile());
   }
 
   Future<void> _loadProfile() async {
@@ -137,6 +137,7 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
       if (image != null) {
         if (kIsWeb) {
           final bytes = await image.readAsBytes();
+          if (!mounted) return;
           setState(() {
             _logoImageBytes = bytes;
           });

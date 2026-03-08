@@ -35,10 +35,12 @@ class ChatModel {
     return ChatModel(
       id: id,
       participants: List<String>.from(map['participants'] ?? []),
-      participantDetails: Map<String, dynamic>.from(map['participantDetails'] ?? {}),
+      participantDetails:
+          Map<String, dynamic>.from(map['participantDetails'] ?? {}),
       lastMessage: map['lastMessage'] ?? '',
       lastMessageType: map['lastMessageType'] ?? 'text',
-      lastMessageTime: (map['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      lastMessageTime:
+          (map['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime.now(),
       unreadCount: Map<String, int>.from(map['unreadCount'] ?? {}),
       isWorkChat: map['isWorkChat'] == true,
       workRequestId: (map['workRequestId'] as String?)?.trim(),
@@ -75,6 +77,7 @@ class MessageModel {
   final String text;
   final String type; // text, image, video
   final String? mediaUrl;
+  final String? attachmentName;
   final bool isRead;
   final DateTime? readAt;
   final bool isDeleted;
@@ -88,6 +91,7 @@ class MessageModel {
     required this.text,
     this.type = 'text',
     this.mediaUrl,
+    this.attachmentName,
     this.isRead = false,
     this.readAt,
     this.isDeleted = false,
@@ -103,6 +107,7 @@ class MessageModel {
       text: map['text'] ?? '',
       type: map['type'] ?? 'text',
       mediaUrl: map['mediaUrl'],
+      attachmentName: (map['attachmentName'] as String?)?.trim(),
       isRead: map['isRead'] ?? false,
       readAt: (map['readAt'] as Timestamp?)?.toDate(),
       isDeleted: map['isDeleted'] ?? false,
@@ -118,6 +123,8 @@ class MessageModel {
       'text': text,
       'type': type,
       'mediaUrl': mediaUrl,
+      if (attachmentName != null && attachmentName!.isNotEmpty)
+        'attachmentName': attachmentName,
       'isRead': isRead,
       if (readAt != null) 'readAt': Timestamp.fromDate(readAt!),
       'isDeleted': isDeleted,

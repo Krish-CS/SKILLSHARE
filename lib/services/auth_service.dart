@@ -371,6 +371,22 @@ class AuthService {
     }
   }
 
+  /// Merge user profile fields WITHOUT overwriting the 'role' field.
+  /// Used when the user doc read failed but the doc may already exist
+  /// with the correct role — we don't want to corrupt it.
+  Future<void> mergeUserProfileWithoutRole(UserModel user) async {
+    try {
+      final data = user.toMap();
+      data.remove('role'); // never overwrite role
+      await _firestore
+          .collection(AppConstants.usersCollection)
+          .doc(user.uid)
+          .set(data, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('mergeUserProfileWithoutRole error: $e');
+    }
+  }
+
   // Reset password
   Future<void> resetPassword(String email) async {
     try {

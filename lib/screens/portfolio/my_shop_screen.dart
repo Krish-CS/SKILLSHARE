@@ -56,12 +56,14 @@ class _MyShopScreenState extends State<MyShopScreen>
       final userId = FirebaseAuth.instance.currentUser?.uid;
       if (userId != null) {
         final products = await _firestoreService.getUserProducts(userId);
+        if (!mounted) return;
         setState(() {
           _products = products;
           _isLoading = false;
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'Error loading products: $e';
         _isLoading = false;
@@ -522,36 +524,18 @@ class _MyShopScreenState extends State<MyShopScreen>
     // Check verification status
     if (userProvider.currentProfile?.isVerified != true) {
       if (!context.mounted) return;
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.security, color: Colors.orange),
-              SizedBox(width: 8),
-              Text('Verification Required'),
-            ],
-          ),
-          content: const Text(
-            'You must verify your Aadhaar to open a shop and sell products. This ensures buyer safety and platform integrity.\n\n'
-            'Please complete your identity verification from your profile setup.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                // Navigate to verification screen
-                Navigator.pushNamed(context, '/skilled-setup');
-              },
-              child: const Text('Verify Now'),
-            ),
-          ],
-        ),
+      final shouldVerify = await AppDialog.confirm(
+        context,
+        title: 'Verification Required',
+        message:
+            'You must verify your Aadhaar to open a shop and sell products. This keeps buyer trust and platform safety intact.\n\nPlease complete identity verification from your profile setup.',
+        confirmText: 'Verify Now',
+        gradientColors: const [Color(0xFFFF9800), Color(0xFFE91E63)],
+        icon: Icons.security_rounded,
       );
+      if (shouldVerify == true && context.mounted) {
+        Navigator.pushNamed(context, '/skilled-setup');
+      }
       return;
     }
 
@@ -589,23 +573,13 @@ class _MyShopScreenState extends State<MyShopScreen>
   }
 
   Future<void> _deleteProduct(ProductModel product) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Product'),
-        content: Text('Are you sure you want to delete "${product.name}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirm = await AppDialog.confirm(
+      context,
+      title: 'Delete Product',
+      message: 'Are you sure you want to delete "${product.name}"?',
+      confirmText: 'Delete',
+      gradientColors: const [Color(0xFFE53935), Color(0xFFFF7043)],
+      icon: Icons.delete_forever_rounded,
     );
 
     if (confirm == true) {
@@ -638,37 +612,17 @@ class _MyShopScreenState extends State<MyShopScreen>
 
     if (!isDeliveryWorkflowEnabled) {
       if (!context.mounted) return;
-      final result = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.settings_suggest, color: Color(0xFFE91E63)),
-              SizedBox(width: 8),
-              Text('Enable Delivery Workflow'),
-            ],
-          ),
-          content: const Text(
-            'Shop delivery settings are disabled in your profile settings.\n\n'
-            'Enable it to manage delivery controls in My Shop.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 'cancel'),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, 'enable_now'),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFE91E63)),
-              child: const Text('Enable Now',
-                  style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
+      final shouldEnable = await AppDialog.confirm(
+        context,
+        title: 'Enable Delivery Workflow',
+        message:
+            'Shop delivery settings are disabled in your profile settings.\n\nEnable them now to manage delivery controls in My Shop.',
+        confirmText: 'Enable Now',
+        gradientColors: const [Color(0xFFE91E63), Color(0xFFFF9800)],
+        icon: Icons.settings_suggest_rounded,
       );
 
-      if (result == 'enable_now') {
+      if (shouldEnable == true) {
         await _firestoreService.updateUserSettings(userId, {
           ...userSettings,
           'enableShopDeliveryWorkflow': true,

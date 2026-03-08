@@ -252,11 +252,13 @@ class _JobsScreenState extends State<JobsScreen> {
     return _currentUser?.role == AppConstants.roleCompany;
   }
 
-  /// Returns true if the company is verified (or about to be — submitted).
+  /// Returns true only if the company is fully verified.
   bool get _isCompanyVerified {
     if (_companyProfile == null) return false;
+    final status = _companyProfile!.verificationStatus.toLowerCase().trim();
     return _companyProfile!.isVerified ||
-        _companyProfile!.verificationStatus == 'submitted';
+        status == AppConstants.verificationApproved ||
+        status == 'verified';
   }
 
   /// Shows a gate dialog if company is not verified; navigates to

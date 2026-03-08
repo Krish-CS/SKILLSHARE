@@ -48,6 +48,7 @@ dependencies:
   url_launcher: ^6.2.2
   share_plus: ^10.0.3
   matrix_gesture_detector: ^0.2.0-nullsafety.1
+  pdf: ^3.11.3
 
 dev_dependencies:
   flutter_test:

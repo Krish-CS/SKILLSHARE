@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:typed_data';
 import '../../models/product_model.dart';
 import '../../services/firestore_service.dart';
 import '../../services/cloudinary_service.dart';
@@ -21,6 +21,15 @@ class AddProductScreen extends StatefulWidget {
 }
 
 class _AddProductScreenState extends State<AddProductScreen> {
+  static final TextInputFormatter _moneyInputFormatter =
+      TextInputFormatter.withFunction((oldValue, newValue) {
+    if (newValue.text.isEmpty ||
+        RegExp(r'^\d*\.?\d{0,2}$').hasMatch(newValue.text)) {
+      return newValue;
+    }
+    return oldValue;
+  });
+
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -496,13 +505,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           TextFormField(
                             controller: _priceController,
                             decoration: InputDecoration(
-                              hintText: '₹ 0.00',
+                              hintText: '0.00',
+                              prefixText: 'Rs ',
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              prefixIcon: const Icon(Icons.currency_rupee),
                             ),
-                            keyboardType: TextInputType.number,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [_moneyInputFormatter],
                             validator: (value) {
                               if (value == null || value.isEmpty) {
                                 return 'Enter price';

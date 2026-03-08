@@ -4,6 +4,7 @@ import '../../models/cart_item_model.dart';
 import '../../models/order_model.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/app_helpers.dart';
+import '../../utils/app_dialog.dart';
 import '../../utils/web_image_loader.dart';
 import '../../widgets/app_popup.dart';
 import '../../widgets/gpay_simulation_dialog.dart';
@@ -85,13 +86,14 @@ class _CartScreenState extends State<CartScreen>
     }
 
     final total = _calculateTotal(items);
+    final checkoutDetails = await _collectCheckoutDetails();
+    if (checkoutDetails == null || !mounted) return;
 
-    // Show payment dialog
     final txnId = await GPaySimulationDialog.show(
       context,
       amount: total,
       recipientName: 'SkillShare Shop',
-      description: 'Cart Checkout – ${items.length} item(s)',
+      description: 'Cart Checkout - ${items.length} item(s)',
     );
 
     if (txnId == null || !mounted) return;
@@ -102,14 +104,25 @@ class _CartScreenState extends State<CartScreen>
         _currentUserId!,
         paymentMethod: 'gpay_simulation',
         paymentReference: txnId,
+        deliveryAddress: checkoutDetails.address,
+        deliveryLocation: checkoutDetails.location,
       );
       if (mounted) {
-        AppPopup.show(
+        final codeLines = orders
+            .map((order) =>
+                '${order.productName}: ${order.deliveryVerificationCode ?? 'N/A'}')
+            .join('\n');
+        await AppDialog.success(
           context,
-          message:
-              '${orders.length} order(s) placed! Total: ₹${total.toStringAsFixed(2)}',
-          type: PopupType.success,
-          duration: const Duration(seconds: 4),
+          '${orders.length} order(s) placed.\n'
+          'Total: ₹${total.toStringAsFixed(2)}\n\n'
+          'Delivery address:\n'
+          '${checkoutDetails.address}\n'
+          '${checkoutDetails.location}\n\n'
+          'Share this delivery code with the delivery person only when asked:\n'
+          '$codeLines',
+          title: 'Order Placed',
+          buttonText: 'OK',
         );
       }
     } catch (e) {
@@ -122,13 +135,102 @@ class _CartScreenState extends State<CartScreen>
     }
   }
 
+  Future<_CheckoutDetails?> _collectCheckoutDetails() async {
+    if (_currentUserId == null) return null;
+
+    final profile = await _firestoreService.getCustomerProfile(_currentUserId!);
+    if (!mounted) return null;
+    final addressController = TextEditingController(
+      text: (profile?.location ?? '').trim(),
+    );
+    final locationController = TextEditingController(
+      text: [
+        (profile?.city ?? '').trim(),
+        (profile?.state ?? '').trim(),
+      ].where((part) => part.isNotEmpty).join(', '),
+    );
+
+    final result = await showDialog<_CheckoutDetails>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('Confirm Delivery Address'),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Please confirm this address before Google Pay. You can change it for this order.',
+                style: TextStyle(fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: addressController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'Address',
+                  hintText: 'House / street / area',
+                  prefixIcon: const Icon(Icons.home_outlined),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: locationController,
+                decoration: InputDecoration(
+                  labelText: 'Location',
+                  hintText: 'City, State',
+                  prefixIcon: const Icon(Icons.location_on_outlined),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final address = addressController.text.trim();
+              final location = locationController.text.trim();
+              if (address.isEmpty || location.isEmpty) {
+                AppPopup.show(
+                  ctx,
+                  message: 'Address and location are required',
+                  type: PopupType.warning,
+                );
+                return;
+              }
+              Navigator.of(ctx).pop(
+                _CheckoutDetails(address: address, location: location),
+              );
+            },
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+
+    addressController.dispose();
+    locationController.dispose();
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_currentUserId == null) {
       return Scaffold(
         appBar: AppBar(
-          title:
-              const Text('My Cart', style: TextStyle(color: Colors.white)),
+          title: const Text('My Cart', style: TextStyle(color: Colors.white)),
           flexibleSpace: _buildGradient(),
         ),
         body: const Center(child: Text('Please sign in to view your cart')),
@@ -163,96 +265,91 @@ class _CartScreenState extends State<CartScreen>
 
   Widget _buildCartTabBody() {
     return StreamBuilder<List<CartItemModel>>(
-        stream: _firestoreService.streamCartItems(_currentUserId!),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      stream: _firestoreService.streamCartItems(_currentUserId!),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
 
-          final items = snapshot.data ?? [];
+        final items = snapshot.data ?? [];
 
-          if (items.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.shopping_cart_outlined,
-                      size: 80, color: Colors.grey[400]),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Your cart is empty',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[600],
-                    ),
+        if (items.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.shopping_cart_outlined,
+                    size: 80, color: Colors.grey[400]),
+                const SizedBox(height: 16),
+                Text(
+                  'Your cart is empty',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[600],
                   ),
-                  const SizedBox(height: 8),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Browse the shop and add products to your cart',
+                  style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final total = _calculateTotal(items);
+
+        return Column(
+          children: [
+            // Item count header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              color: Colors.grey[100],
+              child: Row(
+                children: [
+                  Icon(Icons.shopping_cart, size: 18, color: Colors.grey[600]),
+                  const SizedBox(width: 8),
                   Text(
-                    'Browse the shop and add products to your cart',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                    '${items.length} item${items.length == 1 ? '' : 's'} in cart',
+                    style: TextStyle(fontSize: 14, color: Colors.grey[700]),
                   ),
                 ],
               ),
-            );
-          }
+            ),
 
-          final total = _calculateTotal(items);
-
-          return Column(
-            children: [
-              // Item count header
-              Container(
+            // Cart Items
+            Expanded(
+              child: ListView.builder(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                color: Colors.grey[100],
-                child: Row(
-                  children: [
-                    Icon(Icons.shopping_cart,
-                        size: 18, color: Colors.grey[600]),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${items.length} item${items.length == 1 ? '' : 's'} in cart',
-                      style: TextStyle(
-                          fontSize: 14, color: Colors.grey[700]),
-                    ),
-                  ],
-                ),
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                itemCount: items.length,
+                itemBuilder: (context, index) {
+                  final item = items[index];
+                  return _buildCartItemCard(item);
+                },
               ),
+            ),
 
-              // Cart Items
-              Expanded(
-                child: ListView.builder(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  itemCount: items.length,
-                  itemBuilder: (context, index) {
-                    final item = items[index];
-                    return _buildCartItemCard(item);
-                  },
-                ),
-              ),
-
-              // Bottom summary
-              _buildSummarySection(items, total),
-            ],
-          );
-        },
+            // Bottom summary
+            _buildSummarySection(items, total),
+          ],
+        );
+      },
     );
   }
 
   Widget _buildCartItemCard(CartItemModel item) {
-    final isUnavailable =
-        !item.isAvailable || item.availableStock <= 0;
+    final isUnavailable = !item.isAvailable || item.availableStock <= 0;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -311,8 +408,7 @@ class _CartScreenState extends State<CartScreen>
                   const SizedBox(height: 4),
                   Text(
                     '₹${item.price.toStringAsFixed(2)} each',
-                    style: TextStyle(
-                        color: Colors.grey[600], fontSize: 13),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
                   ),
                   if (isUnavailable) ...[
                     const SizedBox(height: 4),
@@ -325,8 +421,7 @@ class _CartScreenState extends State<CartScreen>
                       ),
                       child: const Text(
                         'Out of stock',
-                        style:
-                            TextStyle(color: Colors.red, fontSize: 12),
+                        style: TextStyle(color: Colors.red, fontSize: 12),
                       ),
                     ),
                   ],
@@ -343,8 +438,8 @@ class _CartScreenState extends State<CartScreen>
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             InkWell(
-                              onTap: () => _updateQuantity(
-                                  item, item.quantity - 1),
+                              onTap: () =>
+                                  _updateQuantity(item, item.quantity - 1),
                               borderRadius: const BorderRadius.only(
                                 topLeft: Radius.circular(8),
                                 bottomLeft: Radius.circular(8),
@@ -375,11 +470,10 @@ class _CartScreenState extends State<CartScreen>
                               ),
                             ),
                             InkWell(
-                              onTap: item.quantity >=
-                                      item.availableStock
+                              onTap: item.quantity >= item.availableStock
                                   ? null
-                                  : () => _updateQuantity(
-                                      item, item.quantity + 1),
+                                  : () =>
+                                      _updateQuantity(item, item.quantity + 1),
                               borderRadius: const BorderRadius.only(
                                 topRight: Radius.circular(8),
                                 bottomRight: Radius.circular(8),
@@ -389,8 +483,7 @@ class _CartScreenState extends State<CartScreen>
                                 child: Icon(
                                   Icons.add,
                                   size: 16,
-                                  color: item.quantity >=
-                                          item.availableStock
+                                  color: item.quantity >= item.availableStock
                                       ? Colors.grey[400]
                                       : Colors.grey[700],
                                 ),
@@ -420,8 +513,7 @@ class _CartScreenState extends State<CartScreen>
     );
   }
 
-  Widget _buildSummarySection(
-      List<CartItemModel> items, double total) {
+  Widget _buildSummarySection(List<CartItemModel> items, double total) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -433,8 +525,7 @@ class _CartScreenState extends State<CartScreen>
             offset: const Offset(0, -4),
           ),
         ],
-        borderRadius:
-            const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: SafeArea(
         child: Column(
@@ -459,8 +550,7 @@ class _CartScreenState extends State<CartScreen>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Delivery', style: TextStyle(color: Colors.grey[600])),
-                const Text('Free',
-                    style: TextStyle(color: Colors.green)),
+                const Text('Free', style: TextStyle(color: Colors.green)),
               ],
             ),
             const Divider(height: 16),
@@ -469,8 +559,7 @@ class _CartScreenState extends State<CartScreen>
               children: [
                 const Text(
                   'Total',
-                  style: TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 Text(
                   '₹${total.toStringAsFixed(2)}',
@@ -493,9 +582,7 @@ class _CartScreenState extends State<CartScreen>
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: ElevatedButton.icon(
-                  onPressed: _isCheckingOut
-                      ? null
-                      : () => _checkout(items),
+                  onPressed: _isCheckingOut ? null : () => _checkout(items),
                   icon: _isCheckingOut
                       ? const SizedBox(
                           width: 20,
@@ -644,11 +731,10 @@ class _OrderHistoryCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _statusColor(order.status)
-                        .withValues(alpha: 0.12),
+                    color: _statusColor(order.status).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -674,6 +760,25 @@ class _OrderHistoryCard extends StatelessWidget {
               AppHelpers.formatDateTime(order.createdAt),
               style: TextStyle(color: Colors.grey[500], fontSize: 11),
             ),
+            if ((order.deliveryAddress ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Address: ${order.deliveryAddress}',
+                style: TextStyle(color: Colors.grey[700], fontSize: 12),
+              ),
+            ],
+            if ((order.deliveryVerificationCode ?? '').trim().isNotEmpty &&
+                order.status != 'delivered') ...[
+              const SizedBox(height: 6),
+              Text(
+                'Delivery Code: ${order.deliveryVerificationCode}',
+                style: const TextStyle(
+                  color: Color(0xFF1565C0),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
             // Track button - only for non-cancelled orders
             if (order.status != 'cancelled')
@@ -683,8 +788,7 @@ class _OrderHistoryCard extends StatelessWidget {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) =>
-                            OrderTrackingScreen(order: order)),
+                        builder: (_) => OrderTrackingScreen(order: order)),
                   ),
                   icon: const Icon(Icons.timeline, size: 16),
                   label: const Text('Track Order'),
@@ -702,4 +806,14 @@ class _OrderHistoryCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _CheckoutDetails {
+  const _CheckoutDetails({
+    required this.address,
+    required this.location,
+  });
+
+  final String address;
+  final String location;
 }

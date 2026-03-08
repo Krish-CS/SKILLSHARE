@@ -197,6 +197,7 @@ class _NotificationBellState extends State<NotificationBell> {
     if (jobNotifSnap != null) {
       const jobTypes = <String>{
         'jobApplication',
+        'jobReApplication',
         'jobAccepted',
         'jobRejected',
         'jobRevoked',
@@ -216,7 +217,10 @@ class _NotificationBellState extends State<NotificationBell> {
 
   @override
   void dispose() {
-    _closeDropdown();
+    // Clean up overlay directly — do NOT call _closeDropdown() which
+    // invokes setState and triggers a lifecycle assertion crash.
+    _overlayEntry?.remove();
+    _overlayEntry = null;
     _userSub?.cancel();
     _requestSub?.cancel();
     _buyerOrderSub?.cancel();
