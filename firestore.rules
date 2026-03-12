@@ -12,28 +12,34 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    function isAdmin() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     // Users collection - basic user info
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
-      allow delete: if isOwner(userId);
+      allow create: if isOwner(userId) || isAdmin();
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
     }
     
     // Skilled users profiles collection
     match /skilled_users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isOwner(userId);
+      allow create: if isOwner(userId) || isAdmin();
       // Owner can update anything; other authenticated users can only update
       // rating/reviewCount (review flow), profileViews (analytics flow), or
       // projectCount (updated by the company when accepting a job application).
       allow update: if isAuthenticated() && (
+        isAdmin() ||
         isOwner(userId) ||
         request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['rating', 'reviewCount', 'updatedAt', 'profileViews',
                     'projectCount'])
       );
-      allow delete: if isOwner(userId);
+      allow delete: if isOwner(userId) || isAdmin();
 
       match /profile_viewers/{viewerId} {
         allow read: if isAuthenticated() &&
@@ -49,15 +55,15 @@ service cloud.firestore {
     // Customer profiles collection
     match /customer_profiles/{userId} {
       allow read: if isAuthenticated();
-      allow create, update: if isOwner(userId);
-      allow delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
     }
 
     // Company profiles collection
     match /company_profiles/{userId} {
       allow read: if isAuthenticated();
-      allow create, update: if isOwner(userId);
-      allow delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
     }
 
     // Portfolio collection
@@ -253,8 +259,8 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
         request.resource.data.reporterId == request.auth.uid;
       allow read: if isAuthenticated() &&
-        resource.data.reporterId == request.auth.uid;
-      allow update, delete: if false;
+        (resource.data.reporterId == request.auth.uid || isAdmin());
+      allow update, delete: if isAdmin();
     }
 
     // Blocked users

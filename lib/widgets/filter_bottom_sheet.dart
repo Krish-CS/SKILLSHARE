@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../utils/app_constants.dart';
 
 /// Reusable filter bottom sheet for Home, Shop, and Explore screens.
@@ -57,6 +58,8 @@ class FilterBottomSheet extends StatefulWidget {
 }
 
 class _FilterBottomSheetState extends State<FilterBottomSheet> {
+  static const double _productPriceCeiling = 1000000;
+
   late String? _category;
   late String _sortBy;
   late double _minRating;
@@ -92,11 +95,10 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
   void initState() {
     super.initState();
     _category = widget.initialCategory;
-    _sortBy = widget.initialSortBy ??
-        (_isProductMode ? 'newest' : 'rating');
+    _sortBy = widget.initialSortBy ?? (_isProductMode ? 'newest' : 'rating');
     _minRating = widget.initialMinRating ?? 0;
     _minPrice = widget.initialMinPrice ?? 0;
-    _maxPrice = widget.initialMaxPrice ?? 50000;
+    _maxPrice = widget.initialMaxPrice ?? _productPriceCeiling;
     _viewMode = widget.initialViewMode ?? 'list';
   }
 
@@ -106,7 +108,7 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
       _sortBy = _isProductMode ? 'newest' : 'rating';
       _minRating = 0;
       _minPrice = 0;
-      _maxPrice = 50000;
+      _maxPrice = _productPriceCeiling;
       _viewMode = 'list';
     });
   }
@@ -128,6 +130,7 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
   @override
   Widget build(BuildContext context) {
     final bottomPad = MediaQuery.of(context).viewInsets.bottom;
+
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.85,
@@ -171,18 +174,31 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                 const SizedBox(width: 12),
                 const Text(
                   'Filters & Sort',
-                  style: TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
                 TextButton(
                   onPressed: _reset,
-                  child: Text('Reset',
-                      style: TextStyle(color: _primaryColor)),
+                  style: _isProductMode
+                      ? TextButton.styleFrom(
+                          foregroundColor: _primaryColor,
+                          splashFactory: NoSplash.splashFactory,
+                          textStyle: const TextStyle(),
+                        )
+                      : null,
+                  child: Text(
+                    'Reset',
+                    style: GoogleFonts.lora(
+                      textStyle: TextStyle(color: _primaryColor),
+                    ),
+                  ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 22),
-                  onPressed: () => Navigator.pop(context),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: const Padding(
+                    padding: EdgeInsets.all(4.0),
+                    child: Icon(Icons.close, size: 22),
+                  ),
                 ),
               ],
             ),
@@ -222,8 +238,8 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                     spacing: 8,
                     runSpacing: 8,
                     children: _categories.map((cat) {
-                      final selected =
-                          (_category == cat) || (_category == null && cat == 'All');
+                      final selected = (_category == cat) ||
+                          (_category == null && cat == 'All');
                       return _filterChip(
                         label: cat,
                         selected: selected,
@@ -261,8 +277,12 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Any', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-                      Text('5.0', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                      Text('Any',
+                          style:
+                              TextStyle(fontSize: 11, color: Colors.grey[500])),
+                      Text('5.0',
+                          style:
+                              TextStyle(fontSize: 11, color: Colors.grey[500])),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -285,8 +305,8 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                       child: RangeSlider(
                         values: RangeValues(_minPrice, _maxPrice),
                         min: 0,
-                        max: 50000,
-                        divisions: 100,
+                        max: _productPriceCeiling,
+                        divisions: 200,
                         labels: RangeLabels(
                           '₹${_minPrice.round()}',
                           '₹${_maxPrice.round()}',
@@ -303,7 +323,7 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                         Text('₹0',
                             style: TextStyle(
                                 fontSize: 11, color: Colors.grey[500])),
-                        Text('₹50,000',
+                        Text('₹10,00,000',
                             style: TextStyle(
                                 fontSize: 11, color: Colors.grey[500])),
                       ],
@@ -373,11 +393,16 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
+                    ).copyWith(
+                      overlayColor: WidgetStateProperty.all(
+                        _secondaryColor.withValues(alpha: 0.12),
+                      ),
                     ),
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.check_rounded, size: 20, color: Colors.white),
+                        Icon(Icons.check_rounded,
+                            size: 20, color: Colors.white),
                         SizedBox(width: 8),
                         Text('Apply Filters',
                             style: TextStyle(
@@ -433,6 +458,7 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
           borderRadius: BorderRadius.circular(22),
           border: Border.all(
             color: selected ? _primaryColor : Colors.grey[300]!,
+            width: 1.0,
           ),
           boxShadow: selected
               ? [
@@ -449,8 +475,7 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
           children: [
             if (icon != null) ...[
               Icon(icon,
-                  size: 15,
-                  color: selected ? Colors.white : Colors.grey[600]),
+                  size: 15, color: selected ? Colors.white : Colors.grey[600]),
               const SizedBox(width: 5),
             ],
             Text(

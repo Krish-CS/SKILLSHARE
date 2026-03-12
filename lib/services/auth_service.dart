@@ -44,15 +44,18 @@ class AuthService {
 
       while (retries > 0 && userCredential == null) {
         try {
-          userCredential = await _auth.createUserWithEmailAndPassword(
+          userCredential = await _auth
+              .createUserWithEmailAndPassword(
             email: email,
             password: password,
-          ).timeout(
+          )
+              .timeout(
             const Duration(seconds: 15),
             onTimeout: () {
               throw FirebaseAuthException(
                 code: 'network-error',
-                message: 'Network timeout. Please check your internet connection.',
+                message:
+                    'Network timeout. Please check your internet connection.',
               );
             },
           );
@@ -85,7 +88,8 @@ class AuthService {
         updatedAt: DateTime.now(),
       );
 
-      debugPrint('Attempting to write to Firestore collection: ${AppConstants.usersCollection}');
+      debugPrint(
+          'Attempting to write to Firestore collection: ${AppConstants.usersCollection}');
       try {
         await _firestore
             .collection(AppConstants.usersCollection)
@@ -168,12 +172,12 @@ class AuthService {
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         );
-        
+
         await _firestore
             .collection(AppConstants.usersCollection)
             .doc(user.uid)
             .set(userModel.toMap());
-            
+
         return userModel;
       }
 
@@ -334,7 +338,7 @@ class AuthService {
             .collection(AppConstants.usersCollection)
             .doc(uid)
             .get(const GetOptions(source: Source.cache));
-        
+
         if (!doc.exists) return null;
         return UserModel.fromMap(doc.data()!, uid);
       } catch (cacheError) {
@@ -390,7 +394,11 @@ class AuthService {
   // Reset password
   Future<void> resetPassword(String email) async {
     try {
-      await _auth.sendPasswordResetEmail(email: email);
+      final normalizedEmail = email.trim().toLowerCase();
+      if (normalizedEmail.isEmpty) {
+        throw 'Email address is required';
+      }
+      await _auth.sendPasswordResetEmail(email: normalizedEmail);
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
     }
@@ -418,4 +426,3 @@ class AuthService {
     }
   }
 }
-

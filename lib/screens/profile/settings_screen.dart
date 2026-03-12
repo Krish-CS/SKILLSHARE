@@ -363,12 +363,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               final email = emailController.text.trim();
               if (email.isEmpty) return;
               try {
-                await FirebaseAuth.instance
-                    .sendPasswordResetEmail(email: email);
+                await AuthService().resetPassword(email);
                 if (!mounted || !ctx.mounted) return;
                 Navigator.pop(ctx);
                 AppDialog.success(
-                    context, 'Password reset email sent! Check your inbox.');
+                  context,
+                  'If $email is registered as an email/password account, Firebase will send a reset link. Check the inbox and spam folder.',
+                );
               } catch (e) {
                 if (!mounted || !ctx.mounted) return;
                 AppDialog.error(context, 'Error sending reset email',

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/user_model.dart';
+import '../../services/delivery_partner_admin_service.dart';
 import '../../services/firestore_service.dart';
+import '../../utils/app_dialog.dart';
 import '../../utils/user_roles.dart';
 import '../../widgets/universal_avatar.dart';
 import '../../widgets/app_popup.dart';
@@ -95,12 +97,15 @@ class _DashboardTab extends StatelessWidget {
             (snapshot.data?[1] as List<Map<String, dynamic>>? ?? []);
         final pendingVerifs = (snapshot.data?[2] as List? ?? []);
 
-        final customers = users.where((u) => u.role == UserRoles.customer).length;
+        final customers =
+            users.where((u) => u.role == UserRoles.customer).length;
         final skilledPersons =
             users.where((u) => u.role == UserRoles.skilledPerson).length;
-        final companies = users.where((u) => u.role == UserRoles.company).length;
-        final suspended =
-            users.where((u) => u.isSuspended == true).length;
+        final companies =
+            users.where((u) => u.role == UserRoles.company).length;
+        final deliveryPartners =
+            users.where((u) => u.role == UserRoles.deliveryPartner).length;
+        final suspended = users.where((u) => u.isSuspended == true).length;
         final pendingReports =
             reports.where((r) => r['status'] == 'pending').length;
 
@@ -124,25 +129,20 @@ class _DashboardTab extends StatelessWidget {
                 mainAxisSpacing: 12,
                 childAspectRatio: 1.4,
                 children: [
-                  _StatCard(
-                      'Total Users', '${users.length}', Icons.people,
+                  _StatCard('Total Users', '${users.length}', Icons.people,
                       const Color(0xFF1565C0)),
-                  _StatCard(
-                      'Customers', '$customers', Icons.person,
+                  _StatCard('Customers', '$customers', Icons.person,
                       const Color(0xFF2E7D32)),
-                  _StatCard(
-                      'Skilled Persons', '$skilledPersons', Icons.build,
+                  _StatCard('Skilled Persons', '$skilledPersons', Icons.build,
                       const Color(0xFFE65100)),
-                  _StatCard(
-                      'Companies', '$companies', Icons.business,
+                  _StatCard('Companies', '$companies', Icons.business,
                       const Color(0xFF4A148C)),
-                  _StatCard(
-                      'Suspended', '$suspended', Icons.block, Colors.red),
-                  _StatCard(
-                      'Pending Reports', '$pendingReports', Icons.flag,
+                  _StatCard('Delivery Partners', '$deliveryPartners',
+                      Icons.local_shipping, const Color(0xFF00838F)),
+                  _StatCard('Suspended', '$suspended', Icons.block, Colors.red),
+                  _StatCard('Pending Reports', '$pendingReports', Icons.flag,
                       Colors.orange),
-                  _StatCard(
-                      'Pending Verifications', '${pendingVerifs.length}',
+                  _StatCard('Pending Verifications', '${pendingVerifs.length}',
                       Icons.verified_user, const Color(0xFF00695C)),
                 ],
               ),
@@ -285,6 +285,8 @@ class _UsersTab extends StatefulWidget {
 }
 
 class _UsersTabState extends State<_UsersTab> {
+  final DeliveryPartnerAdminService _deliveryPartnerAdminService =
+      DeliveryPartnerAdminService();
   List<UserModel> _allUsers = [];
   List<UserModel> _filteredUsers = [];
   bool _isLoading = true;
@@ -310,11 +312,47 @@ class _UsersTabState extends State<_UsersTab> {
         final matchesSearch = _searchQuery.isEmpty ||
             u.name.toLowerCase().contains(_searchQuery) ||
             u.email.toLowerCase().contains(_searchQuery);
-        final matchesRole =
-            _roleFilter == null || u.role == _roleFilter;
+        final matchesRole = _roleFilter == null || u.role == _roleFilter;
         return matchesSearch && matchesRole;
       }).toList();
     });
+  }
+
+  Future<void> _createDeliveryPartner() async {
+    final formData = await showDialog<_DeliveryPartnerFormData>(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => const _DeliveryPartnerDialog(),
+    );
+
+    if (formData == null) return;
+
+    try {
+      final created = await _deliveryPartnerAdminService.createDeliveryPartner(
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        phone: formData.phone,
+      );
+      await _loadUsers();
+      if (!mounted) return;
+      await AppDialog.success(
+        context,
+        'Delivery partner account created.\n\n'
+        'Name: ${created.name}\n'
+        'Email: ${created.email}\n'
+        'Password: ${created.password}',
+        title: 'Login Details Ready',
+        buttonText: 'Close',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      await AppDialog.error(
+        context,
+        'Could not create the delivery partner account.',
+        detail: e.toString().replaceFirst('Exception: ', ''),
+      );
+    }
   }
 
   Future<void> _toggleSuspend(UserModel user) async {
@@ -328,32 +366,21 @@ class _UsersTabState extends State<_UsersTab> {
 
     final newSuspend = !(user.isSuspended ?? false);
     final action = newSuspend ? 'suspend' : 'reactivate';
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text('${newSuspend ? 'Suspend' : 'Reactivate'} Account'),
-        content: Text(
-            'Are you sure you want to $action ${user.name}\'s account?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: newSuspend ? Colors.red : Colors.green),
-            child: Text(newSuspend ? 'Suspend' : 'Reactivate',
-                style: const TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
+    final confirmed = await AppDialog.confirm(
+      context,
+      title: newSuspend ? 'Suspend Account' : 'Reactivate Account',
+      message: 'Are you sure you want to $action ${user.name}\'s account?',
+      confirmText: newSuspend ? 'Suspend' : 'Reactivate',
+      gradientColors: newSuspend
+          ? const [Color(0xFFD32F2F), Color(0xFFF57C00)]
+          : const [Color(0xFF2E7D32), Color(0xFF00ACC1)],
+      icon: newSuspend ? Icons.block : Icons.verified_user,
     );
 
     if (confirmed != true) return;
 
     try {
-      await widget.firestoreService
-          .suspendUser(user.uid, suspend: newSuspend);
+      await widget.firestoreService.suspendUser(user.uid, suspend: newSuspend);
       await _loadUsers();
       if (mounted) {
         AppPopup.show(
@@ -365,8 +392,7 @@ class _UsersTabState extends State<_UsersTab> {
       }
     } catch (e) {
       if (mounted) {
-        AppPopup.show(context,
-            message: 'Error: $e', type: PopupType.error);
+        AppPopup.show(context, message: 'Error: $e', type: PopupType.error);
       }
     }
   }
@@ -375,29 +401,18 @@ class _UsersTabState extends State<_UsersTab> {
     final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
     if (currentAdminId == user.uid) {
       AppPopup.show(context,
-          message: 'You cannot delete your own account',
-          type: PopupType.error);
+          message: 'You cannot delete your own account', type: PopupType.error);
       return;
     }
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete Account'),
-        content: Text(
-            'This will permanently delete ${user.name}\'s account and all associated data. This cannot be undone.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style:
-                ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
+    final confirmed = await AppDialog.confirm(
+      context,
+      title: 'Delete Account',
+      message:
+          'This will permanently delete ${user.name}\'s account and all associated data. This cannot be undone.',
+      confirmText: 'Delete',
+      gradientColors: const [Color(0xFFD32F2F), Color(0xFFFF7043)],
+      icon: Icons.delete_forever_rounded,
     );
 
     if (confirmed != true) return;
@@ -407,13 +422,11 @@ class _UsersTabState extends State<_UsersTab> {
       await _loadUsers();
       if (mounted) {
         AppPopup.show(context,
-            message: 'Account deleted successfully',
-            type: PopupType.success);
+            message: 'Account deleted successfully', type: PopupType.success);
       }
     } catch (e) {
       if (mounted) {
-        AppPopup.show(context,
-            message: 'Error: $e', type: PopupType.error);
+        AppPopup.show(context, message: 'Error: $e', type: PopupType.error);
       }
     }
   }
@@ -428,6 +441,36 @@ class _UsersTabState extends State<_UsersTab> {
           padding: const EdgeInsets.all(12),
           child: Column(
             children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Manage user accounts and provision delivery partners.',
+                      style: TextStyle(
+                        color: Colors.grey[700],
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: _createDeliveryPartner,
+                    icon: const Icon(Icons.person_add_alt_1, size: 18),
+                    label: const Text('Add Delivery'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1565C0),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
               TextField(
                 onChanged: (v) {
                   _searchQuery = v.toLowerCase();
@@ -438,8 +481,8 @@ class _UsersTabState extends State<_UsersTab> {
                   prefixIcon: const Icon(Icons.search),
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 10),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 ),
               ),
               const SizedBox(height: 8),
@@ -447,14 +490,46 @@ class _UsersTabState extends State<_UsersTab> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _filterChip('All', null, _roleFilter,
-                        (v) => setState(() { _roleFilter = v; _applyFilter(); })),
-                    _filterChip('Customers', UserRoles.customer, _roleFilter,
-                        (v) => setState(() { _roleFilter = v; _applyFilter(); })),
-                    _filterChip('Skilled', UserRoles.skilledPerson, _roleFilter,
-                        (v) => setState(() { _roleFilter = v; _applyFilter(); })),
-                    _filterChip('Companies', UserRoles.company, _roleFilter,
-                        (v) => setState(() { _roleFilter = v; _applyFilter(); })),
+                    _filterChip(
+                        'All',
+                        null,
+                        _roleFilter,
+                        (v) => setState(() {
+                              _roleFilter = v;
+                              _applyFilter();
+                            })),
+                    _filterChip(
+                        'Customers',
+                        UserRoles.customer,
+                        _roleFilter,
+                        (v) => setState(() {
+                              _roleFilter = v;
+                              _applyFilter();
+                            })),
+                    _filterChip(
+                        'Skilled',
+                        UserRoles.skilledPerson,
+                        _roleFilter,
+                        (v) => setState(() {
+                              _roleFilter = v;
+                              _applyFilter();
+                            })),
+                    _filterChip(
+                        'Companies',
+                        UserRoles.company,
+                        _roleFilter,
+                        (v) => setState(() {
+                              _roleFilter = v;
+                              _applyFilter();
+                            })),
+                    _filterChip(
+                        'Delivery',
+                        UserRoles.deliveryPartner,
+                        _roleFilter,
+                        (v) => setState(() {
+                              _roleFilter = v;
+                              _applyFilter();
+                            })),
                   ],
                 ),
               ),
@@ -535,6 +610,8 @@ class _UserCard extends StatelessWidget {
         return const Color(0xFFE65100);
       case UserRoles.company:
         return const Color(0xFF4A148C);
+      case UserRoles.deliveryPartner:
+        return const Color(0xFF00838F);
       default:
         return Colors.grey;
     }
@@ -550,8 +627,7 @@ class _UserCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -599,14 +675,13 @@ class _UserCard extends StatelessWidget {
                     ],
                   ),
                   Text(user.email,
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.grey[600]),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
                       color: _roleColor.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(10),
@@ -633,9 +708,7 @@ class _UserCard extends StatelessWidget {
                   child: Row(
                     children: [
                       Icon(
-                        isSuspended
-                            ? Icons.check_circle_outline
-                            : Icons.block,
+                        isSuspended ? Icons.check_circle_outline : Icons.block,
                         color: isSuspended ? Colors.green : Colors.orange,
                         size: 18,
                       ),
@@ -666,6 +739,271 @@ class _UserCard extends StatelessWidget {
 
 // ─────────────────────────── REPORTS TAB ───────────────────────────
 
+class _DeliveryPartnerFormData {
+  final String name;
+  final String email;
+  final String password;
+  final String? phone;
+
+  const _DeliveryPartnerFormData({
+    required this.name,
+    required this.email,
+    required this.password,
+    this.phone,
+  });
+}
+
+class _DeliveryPartnerDialog extends StatefulWidget {
+  const _DeliveryPartnerDialog();
+
+  @override
+  State<_DeliveryPartnerDialog> createState() => _DeliveryPartnerDialogState();
+}
+
+class _DeliveryPartnerDialogState extends State<_DeliveryPartnerDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _phoneController = TextEditingController();
+  bool _obscurePassword = true;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            gradient: const LinearGradient(
+              colors: [Color(0xFFFFFFFF), Color(0xFFF6F8FF)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x331565C0),
+                blurRadius: 28,
+                offset: Offset(0, 16),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF0D47A1), Color(0xFF26A69A)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: const Column(
+                    children: [
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: Color(0x33FFFFFF),
+                        child: Icon(Icons.local_shipping,
+                            color: Colors.white, size: 28),
+                      ),
+                      SizedBox(height: 10),
+                      Text(
+                        'Add Delivery Partner',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        'Create login details for a new delivery account.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextFormField(
+                          controller: _nameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Partner Name',
+                            prefixIcon: Icon(Icons.person_outline),
+                            border: OutlineInputBorder(),
+                          ),
+                          textInputAction: TextInputAction.next,
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Enter the delivery partner name';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _emailController,
+                          decoration: const InputDecoration(
+                            labelText: 'Login Email',
+                            prefixIcon: Icon(Icons.email_outlined),
+                            border: OutlineInputBorder(),
+                            helperText:
+                                'Use a real inbox-backed email if you want password reset emails to work.',
+                          ),
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          validator: (value) {
+                            final email = value?.trim() ?? '';
+                            if (email.isEmpty) {
+                              return 'Enter the login email';
+                            }
+                            if (!email.contains('@') || !email.contains('.')) {
+                              return 'Enter a valid email address';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          decoration: InputDecoration(
+                            labelText: 'Temporary Password',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            border: const OutlineInputBorder(),
+                            suffixIcon: IconButton(
+                              onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              ),
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                              ),
+                            ),
+                          ),
+                          textInputAction: TextInputAction.next,
+                          validator: (value) {
+                            final password = value?.trim() ?? '';
+                            if (password.length < 6) {
+                              return 'Use at least 6 characters';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _phoneController,
+                          decoration: const InputDecoration(
+                            labelText: 'Phone Number (Optional)',
+                            prefixIcon: Icon(Icons.phone_outlined),
+                            border: OutlineInputBorder(),
+                          ),
+                          keyboardType: TextInputType.phone,
+                          textInputAction: TextInputAction.done,
+                        ),
+                        const SizedBox(height: 18),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => Navigator.of(context).pop(),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF1565C0),
+                                  side: const BorderSide(
+                                      color: Color(0xFF1565C0)),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 13),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                child: const Text('Cancel'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFF0D47A1),
+                                      Color(0xFF26A69A)
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: ElevatedButton(
+                                  onPressed: () {
+                                    if (!_formKey.currentState!.validate()) {
+                                      return;
+                                    }
+                                    Navigator.of(context).pop(
+                                      _DeliveryPartnerFormData(
+                                        name: _nameController.text.trim(),
+                                        email: _emailController.text.trim(),
+                                        password:
+                                            _passwordController.text.trim(),
+                                        phone: _phoneController.text.trim(),
+                                      ),
+                                    );
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.transparent,
+                                    shadowColor: Colors.transparent,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 13),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Create Account',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ReportsTab extends StatefulWidget {
   final FirestoreService firestoreService;
   const _ReportsTab({required this.firestoreService});
@@ -693,9 +1031,7 @@ class _ReportsTabState extends State<_ReportsTab> {
 
   List<Map<String, dynamic>> get _filteredReports {
     if (_statusFilter == 'all') return _reports;
-    return _reports
-        .where((r) => r['status'] == _statusFilter)
-        .toList();
+    return _reports.where((r) => r['status'] == _statusFilter).toList();
   }
 
   Future<void> _resolveReport(
@@ -821,8 +1157,7 @@ class _ReportCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -869,8 +1204,7 @@ class _ReportCard extends StatelessWidget {
             if (timeStr.isNotEmpty) ...[
               const SizedBox(height: 4),
               Text('Reported: $timeStr',
-                  style:
-                      TextStyle(fontSize: 11, color: Colors.grey[500])),
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500])),
             ],
             if (isPending) ...[
               const SizedBox(height: 10),
@@ -889,19 +1223,20 @@ class _ReportCard extends StatelessWidget {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () => onResolve('suspend_user'),
-                      icon:
-                          const Icon(Icons.block, size: 16, color: Colors.white),
+                      icon: const Icon(Icons.block,
+                          size: 16, color: Colors.white),
                       label: const Text('Suspend User',
                           style: TextStyle(color: Colors.white)),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red),
+                      style:
+                          ElevatedButton.styleFrom(backgroundColor: Colors.red),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () => onResolve('resolve'),
-                      icon: const Icon(Icons.check, size: 16, color: Colors.white),
+                      icon: const Icon(Icons.check,
+                          size: 16, color: Colors.white),
                       label: const Text('Resolve',
                           style: TextStyle(color: Colors.white)),
                       style: ElevatedButton.styleFrom(

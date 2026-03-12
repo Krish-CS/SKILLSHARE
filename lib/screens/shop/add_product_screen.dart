@@ -1,15 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:super_clipboard/super_clipboard.dart';
 import '../../models/product_model.dart';
+import '../../models/skilled_user_profile.dart';
 import '../../services/firestore_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../providers/user_provider.dart';
-import '../../utils/app_constants.dart';
 import '../../utils/app_dialog.dart';
 
 class AddProductScreen extends StatefulWidget {
@@ -35,26 +37,30 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _descriptionController = TextEditingController();
   final _priceController = TextEditingController();
   final _stockController = TextEditingController();
+  final FocusNode _imagePasteFocusNode = FocusNode();
   final FirestoreService _firestoreService = FirestoreService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
   final ImagePicker _picker = ImagePicker();
 
   String? _selectedCategory;
   final List<String> _imageUrls = [];
-  final List<XFile> _selectedImages = [];
-  final List<Uint8List> _selectedImageBytes = [];
+  final List<Uint8List> _pendingImageBytes = [];
   int _stockIncrease = 0;
   bool _isLoading = false;
   bool _isUploading = false;
+  bool _isPreparingCategories = true;
   bool get _isEditing => widget.existingProduct != null;
+  void Function(ClipboardReadEvent event)? _webPasteListener;
 
-  late final List<String> _categories;
+  List<String> _categories = [];
+
+  int get _selectedImageCount => _pendingImageBytes.length;
+  int get _totalImageCount => _selectedImageCount + _imageUrls.length;
+  int get _remainingImageSlots => 5 - _totalImageCount;
 
   @override
   void initState() {
     super.initState();
-    // Build category list, including the product's existing category if missing
-    final base = List<String>.from(AppConstants.categories);
     if (_isEditing) {
       final p = widget.existingProduct!;
       _nameController.text = p.name;
@@ -64,11 +70,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
       _stockIncrease = 0;
       _selectedCategory = p.category;
       _imageUrls.addAll(p.images);
-      if (_selectedCategory != null && !base.contains(_selectedCategory)) {
-        base.insert(0, _selectedCategory!);
-      }
     }
-    _categories = base;
+    _configureWebPasteListener();
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _loadAllowedCategories());
   }
 
   @override
@@ -77,12 +82,17 @@ class _AddProductScreenState extends State<AddProductScreen> {
     _descriptionController.dispose();
     _priceController.dispose();
     _stockController.dispose();
+    _imagePasteFocusNode.dispose();
+    final events = ClipboardEvents.instance;
+    if (_webPasteListener != null && events != null) {
+      events.unregisterPasteEventListener(_webPasteListener!);
+    }
     super.dispose();
   }
 
   Future<void> _pickImages() async {
     try {
-      if (_selectedImages.length + _imageUrls.length >= 5) {
+      if (_remainingImageSlots <= 0) {
         AppDialog.info(context, 'Maximum 5 images allowed',
             title: 'Limit Reached');
         return;
@@ -97,18 +107,24 @@ class _AddProductScreenState extends State<AddProductScreen> {
       // User cancelled - do nothing
       if (images.isEmpty) return;
 
+      final newImages = images.take(_remainingImageSlots).toList();
+      final newBytes = await Future.wait(
+        newImages.map((image) => image.readAsBytes()),
+      );
+
+      if (!mounted) return;
+
       setState(() {
-        final remaining = 5 - (_selectedImages.length + _imageUrls.length);
-        final newImages = images.take(remaining).toList();
-        _selectedImages.addAll(newImages);
+        _pendingImageBytes.addAll(newBytes);
       });
-      // Read bytes for preview and web upload
-      for (final img in images
-          .take(5 - (_selectedImageBytes.length + _imageUrls.length))) {
-        final bytes = await img.readAsBytes();
-        _selectedImageBytes.add(bytes);
+
+      if (images.length > newImages.length && mounted) {
+        AppDialog.info(
+          context,
+          'Only the first $_remainingImageSlots image slots were available.',
+          title: 'Image Limit Reached',
+        );
       }
-      if (mounted) setState(() {});
     } on Exception catch (e) {
       // Only show error for actual errors, not cancellations
       if (mounted &&
@@ -119,12 +135,198 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
   }
 
+  void _configureWebPasteListener() {
+    final events = ClipboardEvents.instance;
+    if (events == null) return;
+
+    _webPasteListener = (event) async {
+      if (!mounted || !_imagePasteFocusNode.hasFocus) return;
+      try {
+        final reader = await event.getClipboardReader();
+        await _pasteImageFromClipboard(
+            reader: reader, showSuccessDialog: false);
+      } catch (e) {
+        if (!mounted) return;
+        AppDialog.error(
+          context,
+          'Could not paste image',
+          detail: e.toString(),
+        );
+      }
+    };
+
+    events.registerPasteEventListener(_webPasteListener!);
+  }
+
+  Future<void> _loadAllowedCategories() async {
+    final authProvider =
+        Provider.of<app_auth.AuthProvider>(context, listen: false);
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final userId =
+        authProvider.currentUser?.uid ?? FirebaseAuth.instance.currentUser?.uid;
+
+    if (userId == null) {
+      if (!mounted) return;
+      setState(() => _isPreparingCategories = false);
+      return;
+    }
+
+    if (userProvider.currentProfile?.userId != userId) {
+      await userProvider.loadProfile(userId);
+    }
+
+    final allowedCategories =
+        _buildAllowedCategories(userProvider.currentProfile);
+
+    if (_isEditing &&
+        _selectedCategory != null &&
+        !_containsIgnoreCase(allowedCategories, _selectedCategory!)) {
+      allowedCategories.insert(0, _selectedCategory!);
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _categories = allowedCategories;
+      if (_selectedCategory == null && _categories.length == 1) {
+        _selectedCategory = _categories.first;
+      }
+      _isPreparingCategories = false;
+    });
+  }
+
+  List<String> _buildAllowedCategories(SkilledUserProfile? profile) {
+    final allowed = <String>[];
+
+    void addOption(String? value) {
+      final normalized = value?.trim() ?? '';
+      if (normalized.isEmpty) return;
+      if (_containsIgnoreCase(allowed, normalized)) return;
+      allowed.add(normalized);
+    }
+
+    addOption(profile?.category);
+    for (final skill in profile?.skills ?? const <String>[]) {
+      addOption(skill);
+    }
+
+    return allowed;
+  }
+
+  bool _containsIgnoreCase(List<String> values, String candidate) {
+    final normalizedCandidate = candidate.trim().toLowerCase();
+    return values
+        .any((value) => value.trim().toLowerCase() == normalizedCandidate);
+  }
+
+  Future<void> _pasteImageFromClipboard({
+    ClipboardReader? reader,
+    bool showSuccessDialog = true,
+  }) async {
+    if (_remainingImageSlots <= 0) {
+      if (mounted) {
+        AppDialog.info(context, 'Maximum 5 images allowed',
+            title: 'Limit Reached');
+      }
+      return;
+    }
+
+    try {
+      final clipboardReader = reader ?? await SystemClipboard.instance?.read();
+      if (clipboardReader == null) {
+        if (mounted) {
+          AppDialog.info(
+            context,
+            'Clipboard image paste is not available on this device.',
+            title: 'Clipboard Unavailable',
+          );
+        }
+        return;
+      }
+
+      final bytes = await _readImageBytesFromReader(clipboardReader);
+      if (bytes == null || bytes.isEmpty) {
+        if (mounted) {
+          AppDialog.info(
+            context,
+            'Copy an image first, then use Paste Image or Ctrl+V in the image area.',
+            title: 'No Image Found',
+          );
+        }
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _pendingImageBytes.add(bytes);
+      });
+
+      if (showSuccessDialog && mounted) {
+        AppDialog.success(context, 'Image pasted successfully!');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      AppDialog.error(
+        context,
+        'Could not paste image',
+        detail: e.toString(),
+      );
+    }
+  }
+
+  Future<Uint8List?> _readImageBytesFromReader(ClipboardReader reader) async {
+    const imageFormats = <FileFormat>[
+      Formats.png,
+      Formats.jpeg,
+      Formats.gif,
+      Formats.webp,
+      Formats.bmp,
+      Formats.tiff,
+    ];
+
+    for (final format in imageFormats) {
+      if (!reader.canProvide(format)) continue;
+      final file = await _readClipboardFile(reader, format);
+      if (file == null) continue;
+      final bytes = await file.readAll();
+      file.close();
+      if (bytes.isNotEmpty) {
+        return bytes;
+      }
+    }
+    return null;
+  }
+
+  Future<DataReaderFile?> _readClipboardFile(
+      ClipboardReader reader, FileFormat format) async {
+    final completer = Completer<DataReaderFile?>();
+    final progress = reader.getFile(
+      format,
+      (file) {
+        if (!completer.isCompleted) {
+          completer.complete(file);
+        }
+      },
+      onError: (error) {
+        if (!completer.isCompleted) {
+          completer.completeError(error);
+        }
+      },
+    );
+
+    if (progress == null) {
+      return null;
+    }
+
+    return completer.future.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () => null,
+    );
+  }
+
   void _removeImage(int index) {
     setState(() {
-      _selectedImages.removeAt(index);
-      if (index < _selectedImageBytes.length) {
-        _selectedImageBytes.removeAt(index);
-      }
+      _pendingImageBytes.removeAt(index);
     });
   }
 
@@ -142,7 +344,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       return;
     }
 
-    if (_selectedImages.isEmpty && _imageUrls.isEmpty) {
+    if (_pendingImageBytes.isEmpty && _imageUrls.isEmpty) {
       AppDialog.info(context, 'Please add at least one product image');
       return;
     }
@@ -162,21 +364,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
           : int.parse(_stockController.text.trim());
 
       // Upload selected images
-      if (_selectedImages.isNotEmpty) {
-        for (int i = 0; i < _selectedImages.length; i++) {
-          String? url;
-          if (kIsWeb && i < _selectedImageBytes.length) {
-            url = await _cloudinaryService.uploadImageBytes(
-              _selectedImageBytes[i],
-              folder: 'products',
-            );
-          } else {
-            final bytes = await _selectedImages[i].readAsBytes();
-            url = await _cloudinaryService.uploadImageBytes(
-              bytes,
-              folder: 'products',
-            );
-          }
+      if (_pendingImageBytes.isNotEmpty) {
+        for (final bytes in _pendingImageBytes) {
+          final url = await _cloudinaryService.uploadImageBytes(
+            bytes,
+            folder: 'products',
+          );
           if (url != null) {
             finalImageUrls.add(url);
           }
@@ -276,6 +469,25 @@ class _AddProductScreenState extends State<AddProductScreen> {
     if (userProvider.currentProfile == null &&
         authProvider.currentUser != null) {
       userProvider.loadProfile(authProvider.currentUser!.uid);
+    }
+    if (userProvider.isLoading || userProvider.currentProfile == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(_isEditing ? 'Edit Product' : 'Add Product',
+              style: const TextStyle(color: Colors.white)),
+          iconTheme: const IconThemeData(color: Colors.white),
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFFE91E63), Color(0xFFFF9800)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
     final isVerified = userProvider.currentProfile?.isVerified ?? false;
     if (!isVerified) {
@@ -409,33 +621,62 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _selectedCategory,
-                      decoration: InputDecoration(
-                        hintText: 'Select category',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
+                    if (_isPreparingCategories)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 20),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (_categories.isEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF3E0),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFFFB74D)),
                         ),
-                        prefixIcon: const Icon(Icons.category),
+                        child: const Text(
+                          'No product categories are available yet. Update your skilled profile category or skills first, then add products.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF8D4E00),
+                            height: 1.45,
+                          ),
+                        ),
+                      )
+                    else
+                      DropdownButtonFormField<String>(
+                        value: _selectedCategory,
+                        decoration: InputDecoration(
+                          hintText: 'Select category',
+                          helperText:
+                              'Shown only from your skilled profile category and skills.',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          prefixIcon: const Icon(Icons.category),
+                        ),
+                        items: _categories.map((category) {
+                          return DropdownMenuItem(
+                            value: category,
+                            child: Text(category),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedCategory = value;
+                          });
+                        },
+                        validator: (value) {
+                          if (_categories.isEmpty) {
+                            return 'Add categories in your profile first';
+                          }
+                          if (value == null) {
+                            return 'Please select a category';
+                          }
+                          return null;
+                        },
                       ),
-                      items: _categories.map((category) {
-                        return DropdownMenuItem(
-                          value: category,
-                          child: Text(category),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedCategory = value;
-                        });
-                      },
-                      validator: (value) {
-                        if (value == null) {
-                          return 'Please select a category';
-                        }
-                        return null;
-                      },
-                    ),
                   ],
                 ),
               ),
@@ -461,12 +702,27 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _descriptionController,
+                      textAlignVertical: TextAlignVertical.top,
                       decoration: InputDecoration(
                         hintText: 'Describe your product',
+                        alignLabelWithHint: true,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        prefixIcon: const Icon(Icons.description),
+                        contentPadding: const EdgeInsets.fromLTRB(
+                          14,
+                          18,
+                          14,
+                          16,
+                        ),
+                        prefixIconConstraints: const BoxConstraints(
+                          minWidth: 44,
+                          minHeight: 44,
+                        ),
+                        prefixIcon: const Padding(
+                          padding: EdgeInsets.only(left: 12, right: 8, top: 14),
+                          child: Icon(Icons.description),
+                        ),
                       ),
                       maxLines: 4,
                       validator: (value) {
@@ -506,7 +762,28 @@ class _AddProductScreenState extends State<AddProductScreen> {
                             controller: _priceController,
                             decoration: InputDecoration(
                               hintText: '0.00',
-                              prefixText: 'Rs ',
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 16,
+                              ),
+                              prefixIconConstraints: const BoxConstraints(
+                                minWidth: 44,
+                                minHeight: 44,
+                              ),
+                              prefixIcon: const Padding(
+                                padding: EdgeInsets.only(left: 14, right: 8),
+                                child: Center(
+                                  widthFactor: 1,
+                                  child: Text(
+                                    '₹',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF424242),
+                                    ),
+                                  ),
+                                ),
+                              ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8),
                               ),
@@ -677,7 +954,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           ),
                         ),
                         Text(
-                          '${_selectedImages.length + _imageUrls.length}/5',
+                          '$_totalImageCount/5',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey[600],
@@ -688,12 +965,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     const SizedBox(height: 12),
 
                     // Image Preview Grid
-                    if (_selectedImages.isNotEmpty || _imageUrls.isNotEmpty)
+                    if (_selectedImageCount > 0 || _imageUrls.isNotEmpty)
                       SizedBox(
                         height: 120,
                         child: ListView.builder(
                           scrollDirection: Axis.horizontal,
-                          itemCount: _imageUrls.length + _selectedImages.length,
+                          itemCount: _imageUrls.length + _selectedImageCount,
                           itemBuilder: (context, index) {
                             if (index < _imageUrls.length) {
                               // Display uploaded URLs
@@ -749,7 +1026,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                           Border.all(color: Colors.grey[300]!),
                                       image: DecorationImage(
                                         image: MemoryImage(
-                                            _selectedImageBytes[fileIndex]),
+                                            _pendingImageBytes[fileIndex]),
                                         fit: BoxFit.cover,
                                       ),
                                     ),
@@ -780,56 +1057,103 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         ),
                       ),
 
-                    if (_selectedImages.isNotEmpty || _imageUrls.isNotEmpty)
+                    if (_selectedImageCount > 0 || _imageUrls.isNotEmpty)
                       const SizedBox(height: 12),
 
-                    // Add Images Button
-                    InkWell(
-                      onTap: (_selectedImages.length + _imageUrls.length < 5)
-                          ? _pickImages
-                          : null,
-                      child: Container(
-                        height: 100,
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color:
-                                (_selectedImages.length + _imageUrls.length < 5)
-                                    ? const Color(0xFFE91E63)
-                                    : Colors.grey[400]!,
-                            width: 2,
-                            style: BorderStyle.solid,
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                          color: Colors.grey[50],
+                    FocusableActionDetector(
+                      focusNode: _imagePasteFocusNode,
+                      shortcuts: const <ShortcutActivator, Intent>{
+                        SingleActivator(LogicalKeyboardKey.keyV, control: true):
+                            ActivateIntent(),
+                        SingleActivator(LogicalKeyboardKey.keyV, meta: true):
+                            ActivateIntent(),
+                      },
+                      actions: <Type, Action<Intent>>{
+                        ActivateIntent: CallbackAction<ActivateIntent>(
+                          onInvoke: (intent) {
+                            _pasteImageFromClipboard(showSuccessDialog: false);
+                            return null;
+                          },
                         ),
-                        child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.add_photo_alternate,
-                                size: 40,
-                                color: (_selectedImages.length +
-                                            _imageUrls.length <
-                                        5)
-                                    ? const Color(0xFFE91E63)
-                                    : Colors.grey,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                (_selectedImages.length + _imageUrls.length < 5)
-                                    ? 'Tap to add images'
-                                    : 'Maximum 5 images',
-                                style: TextStyle(
-                                  color: (_selectedImages.length +
-                                              _imageUrls.length <
-                                          5)
+                      },
+                      child: InkWell(
+                        onTap: _remainingImageSlots > 0
+                            ? () {
+                                _imagePasteFocusNode.requestFocus();
+                                _pickImages();
+                              }
+                            : null,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          height: 116,
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: _remainingImageSlots > 0
+                                  ? const Color(0xFFE91E63)
+                                  : Colors.grey[400]!,
+                              width: 2,
+                              style: BorderStyle.solid,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                            color: _imagePasteFocusNode.hasFocus
+                                ? const Color(0xFFFFEBEE)
+                                : Colors.grey[50],
+                          ),
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.add_photo_alternate,
+                                  size: 40,
+                                  color: _remainingImageSlots > 0
                                       ? const Color(0xFFE91E63)
                                       : Colors.grey,
-                                  fontWeight: FontWeight.w500,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 8),
+                                Text(
+                                  _remainingImageSlots > 0
+                                      ? 'Tap to choose files'
+                                      : 'Maximum 5 images',
+                                  style: TextStyle(
+                                    color: _remainingImageSlots > 0
+                                        ? const Color(0xFFE91E63)
+                                        : Colors.grey,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Or copy an image and press Ctrl+V here',
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _remainingImageSlots > 0
+                            ? () {
+                                _imagePasteFocusNode.requestFocus();
+                                _pasteImageFromClipboard();
+                              }
+                            : null,
+                        icon: const Icon(Icons.content_paste),
+                        label: const Text('Paste Image From Clipboard'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFE91E63),
+                          side: const BorderSide(color: Color(0xFFE91E63)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
                           ),
                         ),
                       ),

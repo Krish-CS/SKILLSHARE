@@ -28,13 +28,16 @@ class ShopScreen extends StatefulWidget {
 }
 
 class _ShopScreenState extends State<ShopScreen> {
+  static const double _productPriceCeiling = 1000000;
+
   final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
   StreamSubscription<List<ProductModel>>? _productsSub;
   final Map<String, StreamSubscription<UserModel?>> _sellerUserSubs = {};
-  final Map<String, StreamSubscription<Map<String, dynamic>>> _sellerShopSubs = {};
+  final Map<String, StreamSubscription<Map<String, dynamic>>> _sellerShopSubs =
+      {};
 
   List<ProductModel> _allProducts = [];
   List<ProductModel> _filteredProducts = [];
@@ -46,6 +49,8 @@ class _ShopScreenState extends State<ShopScreen> {
   String _searchQuery = '';
   String _selectedCategory = 'All';
   String _sortBy = 'newest';
+  double _minPrice = 0;
+  double _maxPrice = _productPriceCeiling;
 
   // Amazon-style category icons
   static const Map<String, IconData> _categoryIcons = {
@@ -100,11 +105,15 @@ class _ShopScreenState extends State<ShopScreen> {
       initialCategory: _selectedCategory == 'All' ? null : _selectedCategory,
       initialSortBy: _sortBy,
       initialMinRating: 0,
+      initialMinPrice: _minPrice,
+      initialMaxPrice: _maxPrice,
     );
     if (result == null || !mounted) return;
     setState(() {
       _selectedCategory = result.category ?? 'All';
       _sortBy = result.sortBy ?? 'newest';
+      _minPrice = result.minPrice ?? 0;
+      _maxPrice = result.maxPrice ?? _productPriceCeiling;
     });
     _applyFilters();
   }
@@ -142,9 +151,8 @@ class _ShopScreenState extends State<ShopScreen> {
         .toSet();
 
     // Cancel subscriptions for sellers no longer present
-    final removedIds = _sellerUserSubs.keys
-        .where((id) => !sellerIds.contains(id))
-        .toList();
+    final removedIds =
+        _sellerUserSubs.keys.where((id) => !sellerIds.contains(id)).toList();
     for (final id in removedIds) {
       _sellerUserSubs.remove(id)?.cancel();
       _sellerShopSubs.remove(id)?.cancel();
@@ -153,9 +161,8 @@ class _ShopScreenState extends State<ShopScreen> {
     for (final sellerId in sellerIds) {
       // Stream user model (name, photo)
       if (!_sellerUserSubs.containsKey(sellerId)) {
-        _sellerUserSubs[sellerId] = _firestoreService
-            .streamUserModel(sellerId)
-            .listen((user) {
+        _sellerUserSubs[sellerId] =
+            _firestoreService.streamUserModel(sellerId).listen((user) {
           if (!mounted) return;
           if (user != null) {
             _sellerById[sellerId] = user;
@@ -166,12 +173,10 @@ class _ShopScreenState extends State<ShopScreen> {
 
       // Stream shop settings (shop name)
       if (!_sellerShopSubs.containsKey(sellerId)) {
-        _sellerShopSubs[sellerId] = _firestoreService
-            .streamShopSettings(sellerId)
-            .listen((settings) {
+        _sellerShopSubs[sellerId] =
+            _firestoreService.streamShopSettings(sellerId).listen((settings) {
           if (!mounted) return;
-          final rawShopName =
-              (settings['shopName'] as String?)?.trim() ?? '';
+          final rawShopName = (settings['shopName'] as String?)?.trim() ?? '';
           if (rawShopName.isNotEmpty) {
             _shopNameBySellerId[sellerId] = rawShopName;
           } else {
@@ -225,7 +230,9 @@ class _ShopScreenState extends State<ShopScreen> {
                 .contains(_searchQuery.toLowerCase());
         final matchesCategory =
             _selectedCategory == 'All' || product.category == _selectedCategory;
-        return matchesSearch && matchesCategory;
+        final matchesPrice =
+            product.price >= _minPrice && product.price <= _maxPrice;
+        return matchesSearch && matchesCategory && matchesPrice;
       }).toList();
 
       switch (_sortBy) {
