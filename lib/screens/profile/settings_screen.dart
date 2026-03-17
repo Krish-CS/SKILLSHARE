@@ -340,7 +340,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-                'Enter your email address to receive a password reset link.'),
+                'Enter your email address to receive a Firebase password reset link. This works for email/password accounts.'),
             const SizedBox(height: 16),
             TextField(
               controller: emailController,
@@ -368,7 +368,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Navigator.pop(ctx);
                 AppDialog.success(
                   context,
-                  'If $email is registered as an email/password account, Firebase will send a reset link. Check the inbox and spam folder.',
+                  'If $email is an email/password account, Firebase will send a reset link. Check the inbox and spam folder. Google-only accounts should sign in with Google.',
                 );
               } catch (e) {
                 if (!mounted || !ctx.mounted) return;

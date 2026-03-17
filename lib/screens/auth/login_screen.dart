@@ -433,7 +433,7 @@ class _LoginScreenState extends State<LoginScreen>
                                           if (email.isEmpty) {
                                             AppDialog.info(
                                               context,
-                                              'Enter your email first to request a password reset link.',
+                                              'Enter your email address first. Password reset works for email/password accounts.',
                                             );
                                             return;
                                           }
@@ -443,7 +443,7 @@ class _LoginScreenState extends State<LoginScreen>
                                             if (context.mounted) {
                                               AppDialog.success(
                                                 context,
-                                                'If $email is registered as an email/password account, Firebase will send a reset link. Check the inbox and spam folder.',
+                                                'If $email is an email/password account, Firebase will send a reset link. Check the inbox and spam folder. Google-only accounts should sign in with Google.',
                                               );
                                             }
                                           } catch (e) {
