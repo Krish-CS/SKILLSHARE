@@ -22,11 +22,30 @@ class CreatedDeliveryPartnerAccount {
   });
 }
 
+class CreatedManagedUserAccount {
+  final String uid;
+  final String name;
+  final String email;
+  final String password;
+  final String role;
+  final String? phone;
+
+  const CreatedManagedUserAccount({
+    required this.uid,
+    required this.name,
+    required this.email,
+    required this.password,
+    required this.role,
+    this.phone,
+  });
+}
+
 class DeliveryPartnerAdminService {
-  Future<CreatedDeliveryPartnerAccount> createDeliveryPartner({
+  Future<CreatedManagedUserAccount> createManagedUser({
     required String name,
     required String email,
     required String password,
+    required String role,
     String? phone,
   }) async {
     final normalizedName = name.trim();
@@ -34,19 +53,23 @@ class DeliveryPartnerAdminService {
     final normalizedPassword = password.trim();
     final normalizedPhone =
         phone != null && phone.trim().isNotEmpty ? phone.trim() : null;
+    final normalizedRole = UserRoles.normalizeRole(role);
 
     if (normalizedName.isEmpty) {
-      throw Exception('Delivery partner name is required.');
+      throw Exception('User name is required.');
     }
     if (normalizedEmail.isEmpty) {
-      throw Exception('Delivery partner email is required.');
+      throw Exception('User email is required.');
     }
     if (normalizedPassword.length < 6) {
       throw Exception('Password must be at least 6 characters.');
     }
+    if (normalizedRole == null || !UserRoles.isValidRole(normalizedRole)) {
+      throw Exception('Invalid role "$role".');
+    }
 
     final tempAppName =
-        'delivery-partner-admin-${DateTime.now().microsecondsSinceEpoch}';
+        'managed-user-admin-${DateTime.now().microsecondsSinceEpoch}';
     FirebaseApp? tempApp;
     FirebaseAuth? tempAuth;
     User? createdUser;
@@ -66,14 +89,14 @@ class DeliveryPartnerAdminService {
 
       createdUser = credential.user;
       if (createdUser == null) {
-        throw Exception('Could not create the delivery partner account.');
+        throw Exception('Could not create the user account.');
       }
 
       final userModel = UserModel(
         uid: createdUser.uid,
         email: normalizedEmail,
         name: normalizedName,
-        role: UserRoles.deliveryPartner,
+        role: normalizedRole,
         phone: normalizedPhone,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -86,14 +109,15 @@ class DeliveryPartnerAdminService {
             .set(userModel.toMap());
       } catch (e) {
         await createdUser.delete();
-        throw Exception('Failed to save delivery partner profile: $e');
+        throw Exception('Failed to save user profile: $e');
       }
 
-      return CreatedDeliveryPartnerAccount(
+      return CreatedManagedUserAccount(
         uid: createdUser.uid,
         name: normalizedName,
         email: normalizedEmail,
         password: normalizedPassword,
+        role: normalizedRole,
         phone: normalizedPhone,
       );
     } on FirebaseAuthException catch (e) {
@@ -106,6 +130,29 @@ class DeliveryPartnerAdminService {
         await tempApp?.delete();
       } catch (_) {}
     }
+  }
+
+  Future<CreatedDeliveryPartnerAccount> createDeliveryPartner({
+    required String name,
+    required String email,
+    required String password,
+    String? phone,
+  }) async {
+    final created = await createManagedUser(
+      name: name,
+      email: email,
+      password: password,
+      role: UserRoles.deliveryPartner,
+      phone: phone,
+    );
+
+    return CreatedDeliveryPartnerAccount(
+      uid: created.uid,
+      name: created.name,
+      email: created.email,
+      password: created.password,
+      phone: created.phone,
+    );
   }
 
   String _mapAuthError(FirebaseAuthException e) {
@@ -121,7 +168,7 @@ class DeliveryPartnerAdminService {
       case 'network-request-failed':
         return 'Network error while creating the account.';
       default:
-        return e.message ?? 'Could not create the delivery partner account.';
+        return e.message ?? 'Could not create the account.';
     }
   }
 }

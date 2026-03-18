@@ -3,6 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class ProductModel {
   final String id;
   final String userId;
+  final String sourceType; // seller, skillshare
+  final String? displayShopName;
+  final String? assignedByAdminId;
   final String name;
   final String description;
   final double price;
@@ -18,6 +21,9 @@ class ProductModel {
   ProductModel({
     required this.id,
     required this.userId,
+    this.sourceType = 'seller',
+    this.displayShopName,
+    this.assignedByAdminId,
     required this.name,
     required this.description,
     required this.price,
@@ -44,10 +50,17 @@ class ProductModel {
             : ownerId.isNotEmpty
                 ? ownerId
                 : uid;
+    final rawSourceType = (map['sourceType'] as String?)?.trim().toLowerCase();
+    final sourceType = rawSourceType != null && rawSourceType.isNotEmpty
+        ? rawSourceType
+        : (map['isSkillShareProduct'] == true ? 'skillshare' : 'seller');
 
     return ProductModel(
       id: id,
       userId: resolvedUserId,
+      sourceType: sourceType,
+      displayShopName: (map['displayShopName'] as String?)?.trim(),
+      assignedByAdminId: (map['assignedByAdminId'] as String?)?.trim(),
       name: map['name'] ?? '',
       description: map['description'] ?? '',
       price: (map['price'] ?? 0).toDouble(),
@@ -65,6 +78,11 @@ class ProductModel {
   Map<String, dynamic> toMap() {
     return {
       'userId': userId,
+      'sourceType': sourceType,
+      if (displayShopName != null && displayShopName!.isNotEmpty)
+        'displayShopName': displayShopName,
+      if (assignedByAdminId != null && assignedByAdminId!.isNotEmpty)
+        'assignedByAdminId': assignedByAdminId,
       'name': name,
       'description': description,
       'price': price,

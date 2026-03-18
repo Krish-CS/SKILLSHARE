@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -16,6 +17,18 @@ import '../models/appeal_model.dart';
 import '../models/user_model.dart';
 import '../utils/app_constants.dart';
 import '../utils/user_roles.dart';
+
+class AdminDashboardData {
+  final List<UserModel> users;
+  final List<Map<String, dynamic>> reports;
+  final List<SkilledUserProfile> pendingVerifications;
+
+  const AdminDashboardData({
+    required this.users,
+    required this.reports,
+    required this.pendingVerifications,
+  });
+}
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -362,6 +375,51 @@ class FirestoreService {
       debugPrint('Error updating user role: $e');
       rethrow;
     }
+  }
+
+  Future<void> updateUserByAdmin({
+    required String userId,
+    String? name,
+    String? phone,
+    String? role,
+    bool? isActive,
+    bool? isSuspended,
+  }) async {
+    final payload = <String, dynamic>{
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    if (name != null) {
+      final normalized = name.trim();
+      if (normalized.isNotEmpty) {
+        payload['name'] = normalized;
+      }
+    }
+
+    if (phone != null) {
+      final normalizedPhone = phone.trim();
+      payload['phone'] = normalizedPhone.isEmpty ? null : normalizedPhone;
+    }
+
+    if (role != null) {
+      final normalizedRole = UserRoles.normalizeRole(role);
+      if (normalizedRole != null && UserRoles.isValidRole(normalizedRole)) {
+        payload['role'] = normalizedRole;
+      }
+    }
+
+    if (isActive != null) {
+      payload['isActive'] = isActive;
+    }
+    if (isSuspended != null) {
+      payload['isSuspended'] = isSuspended;
+      payload['suspendedAt'] = isSuspended ? FieldValue.serverTimestamp() : null;
+    }
+
+    await _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(userId)
+        .set(payload, SetOptions(merge: true));
   }
 
   Future<Map<String, dynamic>> getUserSettings(String userId) async {
@@ -1299,11 +1357,16 @@ class FirestoreService {
 
   // ===== Products =====
 
-  Future<String> createProduct(ProductModel product) async {
-    final canSell = await isSkilledUserAadhaarVerified(product.userId);
-    if (!canSell) {
-      throw Exception(
-          'Aadhaar verification is required before publishing products.');
+  Future<String> createProduct(
+    ProductModel product, {
+    bool bypassSellerVerification = false,
+  }) async {
+    if (!bypassSellerVerification && product.sourceType != 'skillshare') {
+      final canSell = await isSkilledUserAadhaarVerified(product.userId);
+      if (!canSell) {
+        throw Exception(
+            'Aadhaar verification is required before publishing products.');
+      }
     }
 
     final docRef = await _firestore
@@ -1412,9 +1475,10 @@ class FirestoreService {
         }
       }
 
-      final visibleProducts = products
-          .where((product) => verifiedSellerIds.contains(product.userId))
-          .toList();
+      final visibleProducts = products.where((product) {
+        if (product.sourceType == 'skillshare') return true;
+        return verifiedSellerIds.contains(product.userId);
+      }).toList();
 
       // Sort by createdAt descending
       visibleProducts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -1433,6 +1497,21 @@ class FirestoreService {
         .limit(limit)
         .snapshots()
         .asyncMap((_) => getAllProducts(limit: limit));
+  }
+
+  /// Admin stream with no public-visibility filtering.
+  Stream<List<ProductModel>> streamAllProductsForAdmin({int limit = 300}) {
+    return _firestore
+        .collection(AppConstants.productsCollection)
+        .limit(limit)
+        .snapshots()
+        .map((snapshot) {
+      final products = snapshot.docs
+          .map((doc) => ProductModel.fromMap(doc.data(), doc.id))
+          .toList();
+      products.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return products;
+    });
   }
 
   /// Real-time stream of the base [UserModel] for a given uid.
@@ -3198,6 +3277,20 @@ class FirestoreService {
         .toList();
   }
 
+  Stream<List<SkilledUserProfile>> streamPendingVerifications() {
+    return _firestore
+        .collection(AppConstants.skilledUsersCollection)
+        .where('verificationStatus',
+            isEqualTo: AppConstants.verificationPending)
+        .orderBy('createdAt', descending: false)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => SkilledUserProfile.fromMap(doc.data(), doc.id))
+          .toList();
+    });
+  }
+
   Future<void> approveVerification(String userId) async {
     await _firestore
         .collection(AppConstants.skilledUsersCollection)
@@ -3269,6 +3362,26 @@ class FirestoreService {
     }
   }
 
+  Stream<List<Map<String, dynamic>>> streamAllReports({int limit = 100}) {
+    return _firestore
+        .collection(AppConstants.reportsCollection)
+        .limit(limit)
+        .snapshots()
+        .map((snapshot) {
+      final reports =
+          snapshot.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList();
+      reports.sort((a, b) {
+        final aTime = a['createdAt'];
+        final bTime = b['createdAt'];
+        if (aTime is Timestamp && bTime is Timestamp) {
+          return bTime.compareTo(aTime);
+        }
+        return 0;
+      });
+      return reports;
+    });
+  }
+
   Future<void> updateReportStatus(
     String reportId,
     String status, {
@@ -3302,6 +3415,118 @@ class FirestoreService {
       debugPrint('getAllUsers error: $e');
       return [];
     }
+  }
+
+  Stream<List<UserModel>> streamAllUsers({int limit = 100}) {
+    return _firestore
+        .collection(AppConstants.usersCollection)
+        .limit(limit)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => UserModel.fromMap(doc.data(), doc.id))
+          .toList();
+    });
+  }
+
+  Stream<AdminDashboardData> streamAdminDashboardData({int limit = 500}) {
+    final controller = StreamController<AdminDashboardData>();
+
+    List<UserModel> users = const [];
+    List<Map<String, dynamic>> reports = const [];
+    List<SkilledUserProfile> pendingVerifications = const [];
+
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? usersSub;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? reportsSub;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? pendingSub;
+
+    void emit() {
+      if (controller.isClosed) return;
+      controller.add(
+        AdminDashboardData(
+          users: users,
+          reports: reports,
+          pendingVerifications: pendingVerifications,
+        ),
+      );
+    }
+
+    controller.onListen = () {
+      // Emit immediately so UI is never blocked waiting for all streams.
+      emit();
+
+      usersSub = _firestore
+          .collection(AppConstants.usersCollection)
+          .limit(limit)
+          .snapshots()
+          .listen(
+        (snapshot) {
+          users = snapshot.docs
+              .map((doc) => UserModel.fromMap(doc.data(), doc.id))
+              .toList();
+          emit();
+        },
+        onError: (Object e, StackTrace st) {
+          debugPrint('streamAdminDashboardData users stream error: $e');
+          users = const [];
+          emit();
+        },
+      );
+
+      reportsSub = _firestore
+          .collection(AppConstants.reportsCollection)
+          .limit(limit)
+          .snapshots()
+          .listen(
+        (snapshot) {
+          reports =
+              snapshot.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList();
+          reports.sort((a, b) {
+            final aTime = a['createdAt'];
+            final bTime = b['createdAt'];
+            if (aTime is Timestamp && bTime is Timestamp) {
+              return bTime.compareTo(aTime);
+            }
+            return 0;
+          });
+          emit();
+        },
+        onError: (Object e, StackTrace st) {
+          debugPrint('streamAdminDashboardData reports stream error: $e');
+          reports = const [];
+          emit();
+        },
+      );
+
+      pendingSub = _firestore
+          .collection(AppConstants.skilledUsersCollection)
+          .where('verificationStatus',
+              isEqualTo: AppConstants.verificationPending)
+          .orderBy('createdAt', descending: false)
+          .snapshots()
+          .listen(
+        (snapshot) {
+          pendingVerifications = snapshot.docs
+              .map((doc) => SkilledUserProfile.fromMap(doc.data(), doc.id))
+              .toList();
+          emit();
+        },
+        onError: (Object e, StackTrace st) {
+          debugPrint(
+              'streamAdminDashboardData pending verification stream error: $e');
+          pendingVerifications = const [];
+          emit();
+        },
+      );
+    };
+
+    controller.onCancel = () async {
+      await usersSub?.cancel();
+      await reportsSub?.cancel();
+      await pendingSub?.cancel();
+    };
+
+    return controller.stream;
   }
 
   Future<void> suspendUser(String userId, {required bool suspend}) async {

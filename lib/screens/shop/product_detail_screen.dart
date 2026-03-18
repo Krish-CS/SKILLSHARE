@@ -48,6 +48,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   void _subscribeToSeller() {
+    if (widget.product.sourceType == 'skillshare') {
+      _shopName = (widget.product.displayShopName != null &&
+              widget.product.displayShopName!.trim().isNotEmpty)
+          ? widget.product.displayShopName!.trim()
+          : 'SkillShare Official';
+    }
+
     final sellerId = widget.product.userId;
     _sellerUserSub = _firestoreService.streamUserModel(sellerId).listen((user) {
       if (!mounted) return;

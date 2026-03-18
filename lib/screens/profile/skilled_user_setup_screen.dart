@@ -12,6 +12,7 @@ import '../../utils/app_constants.dart';
 import '../../utils/app_dialog.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/firestore_service.dart';
+import '../../widgets/app_popup.dart';
 import '../../widgets/universal_avatar.dart';
 import '../../screens/avatar/avatar_builder_screen.dart';
 import '../../services/biometric_service.dart';
@@ -557,7 +558,16 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
   }
 
   Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_isUploading) return;
+
+    if (!_formKey.currentState!.validate()) {
+      AppPopup.show(
+        context,
+        message: 'Please complete all required fields before saving.',
+        type: PopupType.warning,
+      );
+      return;
+    }
 
     if (_selectedCategory == null) {
       AppDialog.info(context, 'Please select a category');
@@ -727,14 +737,26 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
 
         if (!mounted) return;
         if (widget.isEditing) {
-          AppDialog.success(context, 'Profile updated successfully!',
-              onDismiss: () => nav.pop());
+          AppPopup.show(
+            context,
+            message: 'Profile updated successfully!',
+            type: PopupType.success,
+          );
+          await Future.delayed(const Duration(milliseconds: 900));
+          if (mounted) nav.pop();
         } else {
-          AppDialog.success(context, 'Profile saved successfully!',
-              onDismiss: () => nav.pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const MainNavigation()),
-                (route) => false,
-              ));
+          AppPopup.show(
+            context,
+            message: 'Profile saved successfully!',
+            type: PopupType.success,
+          );
+          await Future.delayed(const Duration(milliseconds: 900));
+          if (mounted) {
+            nav.pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const MainNavigation()),
+              (route) => false,
+            );
+          }
         }
         
       } else {

@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/user_provider.dart';
+import 'services/admin_bootstrap_service.dart';
 import 'screens/splash_screen.dart';
 import 'utils/app_theme.dart';
 import 'firebase_options.dart';
@@ -46,6 +47,11 @@ void main() async {
       );
       debugPrint('✅ Firestore configured for mobile with offline persistence');
     }
+
+    // Ensure default admin account exists in Firebase Auth + Firestore.
+    // This runs in an isolated temporary Firebase app so it won't
+    // interrupt the active session.
+    await AdminBootstrapService().ensureDefaultAdminAccount();
   } catch (e, stackTrace) {
     debugPrint('❌ Firebase initialization error: $e');
     debugPrint('Stack trace: $stackTrace');

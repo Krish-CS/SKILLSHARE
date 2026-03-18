@@ -203,6 +203,12 @@ class _ShopScreenState extends State<ShopScreen> {
   }
 
   String _resolveShopName(ProductModel product) {
+    if (product.sourceType == 'skillshare') {
+      return (product.displayShopName != null &&
+              product.displayShopName!.trim().isNotEmpty)
+          ? product.displayShopName!.trim()
+          : 'SkillShare Official';
+    }
     final sellerId = product.userId.trim();
     if (sellerId.isEmpty) return 'Shop';
     return _shopNameBySellerId[sellerId] ?? 'Shop';

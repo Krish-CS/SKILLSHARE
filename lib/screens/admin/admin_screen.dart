@@ -1,13 +1,19 @@
+import 'dart:convert';
+
+import 'package:csv/csv.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/user_model.dart';
 import '../../services/delivery_partner_admin_service.dart';
 import '../../services/firestore_service.dart';
+import '../splash_screen.dart';
 import '../../utils/app_dialog.dart';
 import '../../utils/user_roles.dart';
 import '../../widgets/universal_avatar.dart';
 import '../../widgets/app_popup.dart';
+import 'admin_products_tab.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -24,7 +30,7 @@ class _AdminScreenState extends State<AdminScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -36,27 +42,68 @@ class _AdminScreenState extends State<AdminScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF4F6FB),
       appBar: AppBar(
-        title: const Text('Admin Panel',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        toolbarHeight: 72,
+        titleSpacing: 12,
+        title: const Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: Color(0x26FFFFFF),
+              child: Icon(Icons.admin_panel_settings,
+                  color: Colors.white, size: 20),
+            ),
+            SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Admin Control Center',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                  ),
+                ),
+                Text(
+                  'Manage users, products and reports',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ],
+        ),
         flexibleSpace: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
-              colors: [Color(0xFF1A237E), Color(0xFF7B1FA2)],
+              colors: [Color(0xFF0F1B5B), Color(0xFF5E2CA5), Color(0xFF8E24AA)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
           ),
         ),
-        elevation: 0,
+        elevation: 2,
+        actions: [
+          IconButton(
+            tooltip: 'Logout',
+            onPressed: _logout,
+            icon: const Icon(Icons.logout_rounded, color: Colors.white),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.amberAccent,
+          indicatorSize: TabBarIndicatorSize.label,
+          indicator: const UnderlineTabIndicator(
+            borderSide: BorderSide(color: Color(0xFFFFD54F), width: 3),
+          ),
           labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
+          unselectedLabelColor: const Color(0xFFCEBFE8),
           tabs: const [
             Tab(icon: Icon(Icons.dashboard), text: 'Dashboard'),
             Tab(icon: Icon(Icons.people), text: 'Users'),
+            Tab(icon: Icon(Icons.inventory_2), text: 'Products'),
             Tab(icon: Icon(Icons.report), text: 'Reports'),
           ],
         ),
@@ -65,10 +112,61 @@ class _AdminScreenState extends State<AdminScreen>
         controller: _tabController,
         children: [
           _DashboardTab(firestoreService: _firestoreService),
-          _UsersTab(firestoreService: _firestoreService),
-          _ReportsTab(firestoreService: _firestoreService),
+          _TabGradientShell(
+            colors: const [Color(0xFFEFF7FF), Color(0xFFF6F1FF)],
+            child: _UsersTab(firestoreService: _firestoreService),
+          ),
+          _TabGradientShell(
+            colors: const [Color(0xFFFFF4EE), Color(0xFFF8F2FF)],
+            child: AdminProductsTab(firestoreService: _firestoreService),
+          ),
+          _TabGradientShell(
+            colors: const [Color(0xFFFFF6EF), Color(0xFFFFF1F7)],
+            child: _ReportsTab(firestoreService: _firestoreService),
+          ),
         ],
       ),
+    );
+  }
+
+  Future<void> _logout() async {
+    final confirmed = await AppDialog.confirm(
+      context,
+      title: 'Logout Admin',
+      message: 'Do you want to logout from admin account?',
+      confirmText: 'Logout',
+      gradientColors: const [Color(0xFFD32F2F), Color(0xFFF57C00)],
+      icon: Icons.logout,
+    );
+    if (confirmed != true) return;
+
+    await FirebaseAuth.instance.signOut();
+    if (!mounted) return;
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const SplashScreen()),
+      (route) => false,
+    );
+  }
+}
+
+class _TabGradientShell extends StatelessWidget {
+  final Widget child;
+  final List<Color> colors;
+
+  const _TabGradientShell({required this.child, required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: child,
     );
   }
 }
@@ -81,156 +179,203 @@ class _DashboardTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<dynamic>>(
-      future: Future.wait([
-        firestoreService.getAllUsers(limit: 500),
-        firestoreService.getAllReports(limit: 500),
-        firestoreService.getPendingVerifications(),
-      ]),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+    return StreamBuilder<AdminDashboardData>(
+      stream: firestoreService.streamAdminDashboardData(limit: 500),
+      builder: (context, dashboardSnapshot) {
+        if (!dashboardSnapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final users = (snapshot.data?[0] as List<UserModel>? ?? []);
-        final reports =
-            (snapshot.data?[1] as List<Map<String, dynamic>>? ?? []);
-        final pendingVerifs = (snapshot.data?[2] as List? ?? []);
+        final dashboard = dashboardSnapshot.data!;
+        final users = dashboard.users;
+        final reports = dashboard.reports;
+        final pendingVerifs = dashboard.pendingVerifications;
 
-        final customers =
-            users.where((u) => u.role == UserRoles.customer).length;
+        final customers = users.where((u) => u.role == UserRoles.customer).length;
         final skilledPersons =
             users.where((u) => u.role == UserRoles.skilledPerson).length;
-        final companies =
-            users.where((u) => u.role == UserRoles.company).length;
+        final companies = users.where((u) => u.role == UserRoles.company).length;
         final deliveryPartners =
             users.where((u) => u.role == UserRoles.deliveryPartner).length;
         final suspended = users.where((u) => u.isSuspended == true).length;
         final pendingReports =
             reports.where((r) => r['status'] == 'pending').length;
 
-        return RefreshIndicator(
-          onRefresh: () async {
-            (context as Element).markNeedsBuild();
-          },
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              const Text(
-                'Platform Overview',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.4,
-                children: [
-                  _StatCard('Total Users', '${users.length}', Icons.people,
-                      const Color(0xFF1565C0)),
-                  _StatCard('Customers', '$customers', Icons.person,
-                      const Color(0xFF2E7D32)),
-                  _StatCard('Skilled Persons', '$skilledPersons', Icons.build,
-                      const Color(0xFFE65100)),
-                  _StatCard('Companies', '$companies', Icons.business,
-                      const Color(0xFF4A148C)),
-                  _StatCard('Delivery Partners', '$deliveryPartners',
-                      Icons.local_shipping, const Color(0xFF00838F)),
-                  _StatCard('Suspended', '$suspended', Icons.block, Colors.red),
-                  _StatCard('Pending Reports', '$pendingReports', Icons.flag,
-                      Colors.orange),
-                  _StatCard('Pending Verifications', '${pendingVerifs.length}',
-                      Icons.verified_user, const Color(0xFF00695C)),
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1B2A73), Color(0xFF512DA8)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
                 ],
               ),
-              const SizedBox(height: 24),
-              const Text(
-                'Quick Actions',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              child: Row(
+                children: [
+                  const Icon(Icons.insights_rounded,
+                      color: Colors.white, size: 26),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Platform Overview',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  _TopCounter(
+                    label: 'Users',
+                    value: '${users.length}',
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              _QuickActionTile(
-                icon: Icons.pending_actions,
-                title: 'Pending Verifications',
-                subtitle: '${pendingVerifs.length} skilled user(s) pending',
-                color: const Color(0xFF00695C),
-                onTap: () {
-                  // Navigate to users tab and filter pending
-                },
+            ),
+            const SizedBox(height: 12),
+            Card(
+              elevation: 1.5,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
               ),
-              _QuickActionTile(
-                icon: Icons.report_problem,
-                title: 'Open Reports',
-                subtitle: '$pendingReports report(s) need attention',
-                color: Colors.orange,
-                onTap: () {
-                  // Navigate to reports tab
-                },
+              child: Column(
+                children: [
+                  _MetricListRow('Total Users', '${users.length}', Icons.people,
+                      const Color(0xFF1565C0)),
+                  _MetricListRow('Customers', '$customers', Icons.person,
+                      const Color(0xFF2E7D32)),
+                  _MetricListRow('Skilled Persons', '$skilledPersons', Icons.build,
+                      const Color(0xFFE65100)),
+                  _MetricListRow('Companies', '$companies', Icons.business,
+                      const Color(0xFF4A148C)),
+                  _MetricListRow('Delivery Partners', '$deliveryPartners',
+                      Icons.local_shipping, const Color(0xFF00838F)),
+                  _MetricListRow(
+                      'Suspended', '$suspended', Icons.block, Colors.red),
+                  _MetricListRow('Pending Reports', '$pendingReports', Icons.flag,
+                      Colors.orange),
+                  _MetricListRow('Pending Verifications',
+                      '${pendingVerifs.length}', Icons.verified_user,
+                      const Color(0xFF00695C)),
+                ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Quick Actions',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            _QuickActionTile(
+              icon: Icons.pending_actions,
+              title: 'Pending Verifications',
+              subtitle: '${pendingVerifs.length} skilled user(s) pending',
+              color: const Color(0xFF00695C),
+              onTap: () {
+                // Navigate to users tab and filter pending
+              },
+            ),
+            _QuickActionTile(
+              icon: Icons.flag_outlined,
+              title: 'Open Reports',
+              subtitle: '$pendingReports report(s) need attention',
+              color: Colors.orange,
+              onTap: () {
+                // Navigate to reports tab
+              },
+            ),
+          ],
         );
       },
     );
   }
 }
 
-class _StatCard extends StatelessWidget {
+class _TopCounter extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _TopCounter({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricListRow extends StatelessWidget {
   final String title;
   final String value;
   final IconData icon;
   final Color color;
 
-  const _StatCard(this.title, this.value, this.icon, this.color);
+  const _MetricListRow(this.title, this.value, this.icon, this.color);
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(icon, color: color, size: 20),
-                ),
-                const Spacer(),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                  ),
-                ),
-              ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
             ),
-            const SizedBox(height: 8),
-            Text(
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
               title,
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.grey[700],
-                fontWeight: FontWeight.w500,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
-          ],
-        ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -290,6 +435,7 @@ class _UsersTabState extends State<_UsersTab> {
   List<UserModel> _allUsers = [];
   List<UserModel> _filteredUsers = [];
   bool _isLoading = true;
+  bool _isBulkCreatingUsers = false;
   String _searchQuery = '';
   String? _roleFilter;
 
@@ -351,6 +497,284 @@ class _UsersTabState extends State<_UsersTab> {
         context,
         'Could not create the delivery partner account.',
         detail: e.toString().replaceFirst('Exception: ', ''),
+      );
+    }
+  }
+
+  Future<void> _createUserWithRole() async {
+    final formData = await showDialog<_AdminUserFormData>(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => const _AdminUserDialog(),
+    );
+
+    if (formData == null) return;
+
+    try {
+      final created = await _deliveryPartnerAdminService.createManagedUser(
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
+        phone: formData.phone,
+      );
+
+      await _loadUsers();
+      if (!mounted) return;
+
+      await AppDialog.success(
+        context,
+        'User account created successfully.\n\n'
+        'Name: ${created.name}\n'
+        'Email: ${created.email}\n'
+        'Role: ${UserRoles.getDisplayName(created.role)}\n'
+        'Password: ${created.password}',
+        title: 'User Created',
+        buttonText: 'Close',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      await AppDialog.error(
+        context,
+        'Could not create the user account.',
+        detail: e.toString().replaceFirst('Exception: ', ''),
+      );
+    }
+  }
+
+  Future<void> _bulkCreateUsersFromCsv() async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['csv'],
+      withData: true,
+    );
+
+    if (picked == null || picked.files.isEmpty) return;
+    final file = picked.files.single;
+    final bytes = file.bytes;
+
+    if (bytes == null || bytes.isEmpty) {
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'Could not read CSV file bytes.',
+        type: PopupType.error,
+      );
+      return;
+    }
+
+    setState(() => _isBulkCreatingUsers = true);
+
+    int successCount = 0;
+    final failures = <String>[];
+
+    try {
+      final raw = utf8.decode(bytes, allowMalformed: true);
+      final rows = const CsvToListConverter(
+        shouldParseNumbers: false,
+        eol: '\n',
+      ).convert(raw);
+
+      if (rows.length < 2) {
+        throw Exception('CSV needs a header and at least one data row.');
+      }
+
+      final headers = rows.first.map((e) => e.toString().trim().toLowerCase()).toList();
+      int idx(String key) => headers.indexOf(key);
+
+      final nameIdx = idx('name');
+      final emailIdx = idx('email');
+      final passwordIdx = idx('password');
+      final roleIdx = idx('role');
+      final phoneIdx = idx('phone');
+
+      if (nameIdx == -1 || emailIdx == -1 || passwordIdx == -1 || roleIdx == -1) {
+        throw Exception('CSV columns required: name,email,password,role (phone optional).');
+      }
+
+      for (var i = 1; i < rows.length; i++) {
+        final row = rows[i];
+        final rowNumber = i + 1;
+
+        String cell(int index) {
+          if (index < 0 || index >= row.length) return '';
+          return row[index].toString().trim();
+        }
+
+        final name = cell(nameIdx);
+        final email = cell(emailIdx);
+        final password = cell(passwordIdx);
+        final role = cell(roleIdx);
+        final phone = phoneIdx == -1 ? '' : cell(phoneIdx);
+
+        if (name.isEmpty && email.isEmpty && password.isEmpty && role.isEmpty) {
+          continue;
+        }
+
+        try {
+          await _deliveryPartnerAdminService.createManagedUser(
+            name: name,
+            email: email,
+            password: password,
+            role: role,
+            phone: phone,
+          );
+          successCount++;
+        } catch (e) {
+          failures.add('Row $rowNumber: ${e.toString().replaceFirst('Exception: ', '')}');
+        }
+      }
+
+      await _loadUsers();
+      if (!mounted) return;
+
+      final summary = StringBuffer()
+        ..writeln('Bulk user creation finished.')
+        ..writeln()
+        ..writeln('Success: $successCount')
+        ..writeln('Failed: ${failures.length}');
+
+      if (failures.isNotEmpty) {
+        summary.writeln();
+        summary.writeln('Errors (first 8):');
+        for (final failure in failures.take(8)) {
+          summary.writeln('- $failure');
+        }
+      }
+
+      await AppDialog.info(
+        context,
+        summary.toString(),
+        title: 'Bulk Users Result',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      await AppDialog.error(
+        context,
+        'Bulk user import failed.',
+        detail: e.toString().replaceFirst('Exception: ', ''),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isBulkCreatingUsers = false);
+      }
+    }
+  }
+
+  Future<void> _editUser(UserModel user) async {
+    final nameController = TextEditingController(text: user.name);
+    final phoneController = TextEditingController(text: user.phone ?? '');
+    var selectedRole = UserRoles.normalizeRole(user.role) ?? UserRoles.customer;
+    var isActive = user.isActive;
+
+    final updated = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocalState) {
+          return AlertDialog(
+            title: const Text('Edit User'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(labelText: 'Name'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: phoneController,
+                    decoration: const InputDecoration(labelText: 'Phone'),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: selectedRole,
+                    decoration: const InputDecoration(labelText: 'Role'),
+                    items: UserRoles.allRoles
+                        .map(
+                          (role) => DropdownMenuItem(
+                            value: role,
+                            child: Text(UserRoles.getDisplayName(role)),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setLocalState(() => selectedRole = value);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: isActive,
+                    title: const Text('Active account'),
+                    onChanged: (value) => setLocalState(() => isActive = value),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (updated != true) {
+      nameController.dispose();
+      phoneController.dispose();
+      return;
+    }
+
+    final updatedName = nameController.text.trim();
+    final updatedPhone = phoneController.text.trim();
+
+    nameController.dispose();
+    phoneController.dispose();
+
+    final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
+    if (currentAdminId == user.uid && selectedRole != UserRoles.admin) {
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'You cannot remove your own admin role.',
+        type: PopupType.error,
+      );
+      return;
+    }
+
+    try {
+      await widget.firestoreService.updateUserByAdmin(
+        userId: user.uid,
+        name: updatedName,
+        phone: updatedPhone,
+        role: selectedRole,
+        isActive: isActive,
+      );
+
+      await _loadUsers();
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'User updated successfully',
+        type: PopupType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'Update failed: $e',
+        type: PopupType.error,
       );
     }
   }
@@ -437,6 +861,49 @@ class _UsersTabState extends State<_UsersTab> {
 
     return Column(
       children: [
+        Container(
+          margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF1565C0), Color(0xFF5E35B1)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.groups_rounded, color: Colors.white),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Users Management',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              Text(
+                'Live',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -445,7 +912,7 @@ class _UsersTabState extends State<_UsersTab> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Manage user accounts and provision delivery partners.',
+                      'Manage user profiles, roles, status and bulk user creation.',
                       style: TextStyle(
                         color: Colors.grey[700],
                         fontSize: 13,
@@ -453,20 +920,43 @@ class _UsersTabState extends State<_UsersTab> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    onPressed: _createDeliveryPartner,
-                    icon: const Icon(Icons.person_add_alt_1, size: 18),
-                    label: const Text('Add Delivery'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1565C0),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                  const SizedBox(width: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: _createUserWithRole,
+                        icon: const Icon(Icons.person_add, size: 18),
+                        label: const Text('Add User'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1565C0),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
                       ),
-                    ),
+                      OutlinedButton.icon(
+                        onPressed:
+                            _isBulkCreatingUsers ? null : _bulkCreateUsersFromCsv,
+                        icon: _isBulkCreatingUsers
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.upload_file, size: 18),
+                        label: const Text('Bulk CSV'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _createDeliveryPartner,
+                        icon: const Icon(Icons.local_shipping, size: 18),
+                        label: const Text('Add Delivery'),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -479,8 +969,11 @@ class _UsersTabState extends State<_UsersTab> {
                 decoration: InputDecoration(
                   hintText: 'Search users...',
                   prefixIcon: const Icon(Icons.search),
+                  filled: true,
+                  fillColor: Colors.white,
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 ),
@@ -494,6 +987,7 @@ class _UsersTabState extends State<_UsersTab> {
                         'All',
                         null,
                         _roleFilter,
+                        const [Color(0xFF1565C0), Color(0xFF5E35B1)],
                         (v) => setState(() {
                               _roleFilter = v;
                               _applyFilter();
@@ -502,6 +996,7 @@ class _UsersTabState extends State<_UsersTab> {
                         'Customers',
                         UserRoles.customer,
                         _roleFilter,
+                        const [Color(0xFF1565C0), Color(0xFF5E35B1)],
                         (v) => setState(() {
                               _roleFilter = v;
                               _applyFilter();
@@ -510,6 +1005,7 @@ class _UsersTabState extends State<_UsersTab> {
                         'Skilled',
                         UserRoles.skilledPerson,
                         _roleFilter,
+                        const [Color(0xFF1565C0), Color(0xFF5E35B1)],
                         (v) => setState(() {
                               _roleFilter = v;
                               _applyFilter();
@@ -518,6 +1014,7 @@ class _UsersTabState extends State<_UsersTab> {
                         'Companies',
                         UserRoles.company,
                         _roleFilter,
+                        const [Color(0xFF1565C0), Color(0xFF5E35B1)],
                         (v) => setState(() {
                               _roleFilter = v;
                               _applyFilter();
@@ -526,6 +1023,7 @@ class _UsersTabState extends State<_UsersTab> {
                         'Delivery',
                         UserRoles.deliveryPartner,
                         _roleFilter,
+                        const [Color(0xFF1565C0), Color(0xFF5E35B1)],
                         (v) => setState(() {
                               _roleFilter = v;
                               _applyFilter();
@@ -555,6 +1053,7 @@ class _UsersTabState extends State<_UsersTab> {
                       final user = _filteredUsers[index];
                       return _UserCard(
                         user: user,
+                        onEdit: () => _editUser(user),
                         onSuspend: () => _toggleSuspend(user),
                         onDelete: () => _deleteAccount(user),
                       );
@@ -567,8 +1066,13 @@ class _UsersTabState extends State<_UsersTab> {
   }
 }
 
-Widget _filterChip(String label, String? value, String? current,
-    ValueChanged<String?> onSelected) {
+Widget _filterChip(
+  String label,
+  String? value,
+  String? current,
+  List<Color> gradient,
+  ValueChanged<String?> onSelected,
+) {
   final selected = current == value;
   return GestureDetector(
     onTap: () => onSelected(value),
@@ -576,8 +1080,27 @@ Widget _filterChip(String label, String? value, String? current,
       margin: const EdgeInsets.only(right: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: BoxDecoration(
-        color: selected ? const Color(0xFF512DA8) : Colors.grey[200],
+        gradient: selected
+            ? LinearGradient(
+                colors: gradient,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              )
+            : null,
+        color: selected ? null : Colors.white,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: selected ? Colors.transparent : const Color(0xFFDADDE8),
+        ),
+        boxShadow: selected
+            ? [
+                BoxShadow(
+                  color: gradient.first.withValues(alpha: 0.28),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ]
+            : null,
       ),
       child: Text(
         label,
@@ -593,11 +1116,13 @@ Widget _filterChip(String label, String? value, String? current,
 
 class _UserCard extends StatelessWidget {
   final UserModel user;
+  final VoidCallback onEdit;
   final VoidCallback onSuspend;
   final VoidCallback onDelete;
 
   const _UserCard({
     required this.user,
+    required this.onEdit,
     required this.onSuspend,
     required this.onDelete,
   });
@@ -624,6 +1149,7 @@ class _UserCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSuspended = user.isSuspended ?? false;
+    final isActive = user.isActive;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -679,30 +1205,70 @@ class _UserCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 4),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: _roleColor.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      _roleLabel,
-                      style: TextStyle(
-                          color: _roleColor,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600),
-                    ),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _roleColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          _roleLabel,
+                          style: TextStyle(
+                              color: _roleColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isActive
+                              ? Colors.green.withValues(alpha: 0.14)
+                              : Colors.grey.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          isActive ? 'ACTIVE' : 'INACTIVE',
+                          style: TextStyle(
+                            color: isActive ? Colors.green[700] : Colors.grey[700],
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
             PopupMenuButton<String>(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              color: Colors.white,
+              elevation: 8,
               onSelected: (v) {
+                if (v == 'edit') onEdit();
                 if (v == 'suspend') onSuspend();
                 if (v == 'delete') onDelete();
               },
               itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit, color: Color(0xFF1565C0), size: 18),
+                      SizedBox(width: 8),
+                      Text('Edit User'),
+                    ],
+                  ),
+                ),
                 PopupMenuItem(
                   value: 'suspend',
                   child: Row(
@@ -738,6 +1304,150 @@ class _UserCard extends StatelessWidget {
 }
 
 // ─────────────────────────── REPORTS TAB ───────────────────────────
+
+class _AdminUserFormData {
+  final String name;
+  final String email;
+  final String password;
+  final String role;
+  final String? phone;
+
+  const _AdminUserFormData({
+    required this.name,
+    required this.email,
+    required this.password,
+    required this.role,
+    this.phone,
+  });
+}
+
+class _AdminUserDialog extends StatefulWidget {
+  const _AdminUserDialog();
+
+  @override
+  State<_AdminUserDialog> createState() => _AdminUserDialogState();
+}
+
+class _AdminUserDialogState extends State<_AdminUserDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _phoneController = TextEditingController();
+  String _role = UserRoles.customer;
+  bool _obscurePassword = true;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Create User Account'),
+      content: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: 'Name'),
+                validator: (value) =>
+                    (value == null || value.trim().isEmpty) ? 'Name required' : null,
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'Email'),
+                validator: (value) {
+                  final text = value?.trim() ?? '';
+                  if (text.isEmpty) return 'Email required';
+                  if (!text.contains('@')) return 'Enter valid email';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  suffixIcon: IconButton(
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
+                    icon: Icon(
+                      _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                    ),
+                  ),
+                ),
+                validator: (value) {
+                  final text = value?.trim() ?? '';
+                  if (text.length < 6) return 'Min 6 characters';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                value: _role,
+                decoration: const InputDecoration(labelText: 'Role'),
+                items: UserRoles.allRoles
+                    .map(
+                      (role) => DropdownMenuItem(
+                        value: role,
+                        child: Text(UserRoles.getDisplayName(role)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _role = value);
+                  }
+                },
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(labelText: 'Phone (optional)'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            if (!_formKey.currentState!.validate()) return;
+            Navigator.of(context).pop(
+              _AdminUserFormData(
+                name: _nameController.text.trim(),
+                email: _emailController.text.trim(),
+                password: _passwordController.text.trim(),
+                role: _role,
+                phone: _phoneController.text.trim().isEmpty
+                    ? null
+                    : _phoneController.text.trim(),
+              ),
+            );
+          },
+          child: const Text('Create'),
+        ),
+      ],
+    );
+  }
+}
 
 class _DeliveryPartnerFormData {
   final String name;
@@ -1069,6 +1779,50 @@ class _ReportsTabState extends State<_ReportsTab> {
 
     return Column(
       children: [
+        Container(
+          margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFFFF8F00), Color(0xFFD81B60)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.report_gmailerrorred,
+                  color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Reports Center',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              Text(
+                '${_filteredReports.length}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.all(12),
           child: SingleChildScrollView(
@@ -1076,12 +1830,16 @@ class _ReportsTabState extends State<_ReportsTab> {
             child: Row(
               children: [
                 _filterChip('Pending', 'pending', _statusFilter,
+                  const [Color(0xFFFF8F00), Color(0xFFD81B60)],
                     (v) => setState(() => _statusFilter = v ?? 'pending')),
                 _filterChip('Resolved', 'resolved', _statusFilter,
+                  const [Color(0xFFFF8F00), Color(0xFFD81B60)],
                     (v) => setState(() => _statusFilter = v ?? 'resolved')),
                 _filterChip('Dismissed', 'dismissed', _statusFilter,
+                  const [Color(0xFFFF8F00), Color(0xFFD81B60)],
                     (v) => setState(() => _statusFilter = v ?? 'dismissed')),
                 _filterChip('All', 'all', _statusFilter,
+                  const [Color(0xFFFF8F00), Color(0xFFD81B60)],
                     (v) => setState(() => _statusFilter = v ?? 'all')),
               ],
             ),
@@ -1158,7 +1916,8 @@ class _ReportCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 2,
+      elevation: 1.5,
+      color: Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
