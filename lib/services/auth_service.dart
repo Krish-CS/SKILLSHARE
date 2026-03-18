@@ -155,13 +155,11 @@ class AuthService {
         throw 'Authentication failed';
       }
 
-      // Get user data from Firestore
-      final doc = await _firestore
-          .collection(AppConstants.usersCollection)
-          .doc(user.uid)
-          .get();
+      // Get user data from Firestore. On mobile, permission/cache propagation
+      // can briefly fail right after auth success, so retry before failing.
+      final doc = await _getUserDocWithRetry(user.uid);
 
-      if (!doc.exists) {
+      if (doc != null && !doc.exists) {
         // User authenticated but no Firestore doc - create one
         debugPrint('Creating user document for ${user.uid}');
         final userModel = UserModel(
@@ -181,6 +179,21 @@ class AuthService {
         return userModel;
       }
 
+      if (doc == null) {
+        // Auth succeeded but Firestore read is temporarily unavailable.
+        // Return a lightweight in-memory user and let auth-state/profile
+        // refresh complete in the background.
+        return UserModel(
+          uid: user.uid,
+          email: user.email ?? email,
+          name: user.displayName ?? email.split('@').first,
+          role: AppConstants.roleCustomer,
+          profilePhoto: user.photoURL,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+      }
+
       // Check if data exists
       final data = doc.data();
       if (data == null) {
@@ -197,6 +210,38 @@ class AuthService {
       debugPrint('Stack trace: $stackTrace');
       throw 'Login failed: ${e.toString()}';
     }
+  }
+
+  Future<DocumentSnapshot<Map<String, dynamic>>?> _getUserDocWithRetry(
+    String uid,
+  ) async {
+    const maxAttempts = 4;
+    Object? lastError;
+
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await _firestore
+            .collection(AppConstants.usersCollection)
+            .doc(uid)
+            .get(const GetOptions(source: Source.serverAndCache));
+      } on FirebaseException catch (e) {
+        lastError = e;
+        final retryable = e.code == 'permission-denied' ||
+            e.code == 'unavailable' ||
+            e.code == 'aborted' ||
+            e.code == 'deadline-exceeded';
+        if (!retryable || attempt == maxAttempts) {
+          break;
+        }
+        await Future.delayed(Duration(milliseconds: 250 * attempt));
+      } catch (e) {
+        lastError = e;
+        break;
+      }
+    }
+
+    debugPrint('Transient user doc read failure after login: $lastError');
+    return null;
   }
 
   // Sign out

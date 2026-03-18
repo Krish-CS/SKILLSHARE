@@ -33,6 +33,7 @@ class _ShopScreenState extends State<ShopScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  Timer? _searchDebounce;
 
   StreamSubscription<List<ProductModel>>? _productsSub;
   final Map<String, StreamSubscription<UserModel?>> _sellerUserSubs = {};
@@ -86,6 +87,7 @@ class _ShopScreenState extends State<ShopScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _productsSub?.cancel();
     for (final sub in _sellerUserSubs.values) {
       sub.cancel();
@@ -96,6 +98,12 @@ class _ShopScreenState extends State<ShopScreen> {
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() => _searchQuery = value);
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 220), _applyFilters);
   }
 
   Future<void> _openFilterSheet() async {
@@ -299,6 +307,7 @@ class _ShopScreenState extends State<ShopScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
+    final isCompact = MediaQuery.of(context).size.width < 380;
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       body: CustomScrollView(
@@ -342,6 +351,8 @@ class _ShopScreenState extends State<ShopScreen> {
                                     color: Colors.white,
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             IconButton(
@@ -356,7 +367,7 @@ class _ShopScreenState extends State<ShopScreen> {
                               constraints: const BoxConstraints(),
                             ),
                             if (authProvider.isSkilledPerson) ...[
-                              const SizedBox(width: 10),
+                              const SizedBox(width: 6),
                               GestureDetector(
                                 onTap: () => _handleAddProduct(context),
                                 child: Container(
@@ -401,12 +412,11 @@ class _ShopScreenState extends State<ShopScreen> {
                           ),
                           child: TextField(
                             controller: _searchController,
-                            onChanged: (v) {
-                              setState(() => _searchQuery = v);
-                              _applyFilters();
-                            },
+                            onChanged: _onSearchChanged,
                             decoration: InputDecoration(
-                              hintText: 'Search products, skills & more...',
+                              hintText: isCompact
+                                  ? 'Search products...'
+                                  : 'Search products, skills & more...',
                               hintStyle: TextStyle(
                                   color: Colors.grey[500], fontSize: 14),
                               prefixIcon: const Icon(Icons.search_rounded,
@@ -421,11 +431,12 @@ class _ShopScreenState extends State<ShopScreen> {
                                         _applyFilters();
                                       },
                                     )
-                                  : GestureDetector(
-                                      onTap: _openFilterSheet,
-                                      child: Container(
-                                        margin: const EdgeInsets.all(6),
-                                        padding: const EdgeInsets.all(5),
+                                  : IconButton(
+                                      onPressed: _openFilterSheet,
+                                      tooltip: 'Filters',
+                                      icon: Container(
+                                        width: 28,
+                                        height: 28,
                                         decoration: BoxDecoration(
                                           gradient: const LinearGradient(
                                             colors: [
@@ -528,6 +539,7 @@ class _ShopScreenState extends State<ShopScreen> {
   }
 
   Widget _buildSortChips() {
+    final isCompact = MediaQuery.of(context).size.width < 380;
     final sortOptions = [
       ('newest', 'New Arrivals'),
       ('rating', 'Top Rated'),
@@ -567,7 +579,7 @@ class _ShopScreenState extends State<ShopScreen> {
                 sortOptions[i].$2,
                 style: TextStyle(
                   color: isSelected ? Colors.white : Colors.white70,
-                  fontSize: 12,
+                  fontSize: isCompact ? 11 : 12,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                 ),
               ),

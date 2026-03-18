@@ -19,6 +19,7 @@ import '../../utils/app_constants.dart';
 import '../../utils/app_dialog.dart';
 import '../../utils/download_file.dart' as file_downloader;
 import '../../utils/user_roles.dart';
+import '../../utils/xlsx_embedded_image_parser.dart';
 import '../../widgets/app_popup.dart';
 
 class AdminProductsTab extends StatefulWidget {
@@ -49,6 +50,8 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
   bool _isCreatingOfficial = false;
   bool _isBulkSubmitting = false;
   bool _isImportingBulk = false;
+  _BulkImportSummary? _lastImportSummary;
+  final List<_BulkImportSummary> _importHistory = [];
 
   List<UserModel> _skilledUsers = [];
   bool _isLoadingUsers = true;
@@ -579,10 +582,15 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
     }
 
     final ext = (file.extension ?? '').toLowerCase();
+    final isXlsx = ext == 'xlsx';
 
     setState(() => _isImportingBulk = true);
     try {
-      final rows = ext == 'xlsx' ? _parseExcelRows(bytes) : _parseCsvRows(bytes);
+      final rows = isXlsx ? _parseExcelRows(bytes) : _parseCsvRows(bytes);
+      final excelRowImages = isXlsx
+          ? XlsxEmbeddedImageParser.extractFirstSheetRowImages(bytes)
+          : const <int, Uint8List>{};
+
       if (rows.length < 2) {
         throw Exception('File must contain header row + at least one data row.');
       }
@@ -606,6 +614,7 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
       final priceIdx = idxFor(const ['price', 'amount', 'mrp']);
       final qtyIdx = idxFor(const ['quantity', 'qty', 'stock']);
       final categoryIdx = idxFor(const ['category', 'productcategory']);
+      final imageUrlIdx = idxFor(const ['imageurl', 'imagelink', 'image']);
 
       if (nameIdx == null || descIdx == null || priceIdx == null || qtyIdx == null) {
         throw Exception(
@@ -614,10 +623,21 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
       }
 
       final imported = <_BulkProductDraft>[];
+      var extractedImageCount = 0;
+      var imageUrlProvidedCount = 0;
+      var missingImageCount = 0;
+      var unmappedAssigneeCount = 0;
+      var skippedEmptyRowCount = 0;
+      var invalidPriceRowCount = 0;
+      var invalidStockRowCount = 0;
+      var processedRowCount = 0;
 
       for (var r = 1; r < rows.length; r++) {
         final row = rows[r];
-        if (row.isEmpty) continue;
+        if (row.isEmpty) {
+          skippedEmptyRowCount++;
+          continue;
+        }
 
         final name = nameIdx < row.length ? _cellToText(row[nameIdx]) : '';
         final desc = descIdx < row.length ? _cellToText(row[descIdx]) : '';
@@ -626,10 +646,16 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
         final category = categoryIdx != null && categoryIdx < row.length
             ? _cellToText(row[categoryIdx])
             : '';
+        final imageUrl = imageUrlIdx != null && imageUrlIdx < row.length
+          ? _cellToText(row[imageUrlIdx])
+          : '';
 
         if (name.isEmpty && desc.isEmpty && priceText.isEmpty && qtyText.isEmpty) {
+          skippedEmptyRowCount++;
           continue;
         }
+
+        processedRowCount++;
 
         final draft = _BulkProductDraft();
         draft.nameController.text = name;
@@ -639,8 +665,45 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
         if (category.isNotEmpty && AppConstants.categories.contains(category)) {
           draft.category = category;
         }
+        if (imageUrl.isNotEmpty) {
+          draft.imageUrl = imageUrl;
+          imageUrlProvidedCount++;
+        }
+
+        if ((draft.imageUrl == null || draft.imageUrl!.isEmpty) &&
+            excelRowImages.containsKey(r)) {
+          final extractedBytes = excelRowImages[r]!;
+          final uploaded = await _cloudinaryService.uploadImageBytes(
+            extractedBytes,
+            folder: 'assigned_products',
+            filename:
+                'assigned_xlsx_row_${r + 1}_${DateTime.now().millisecondsSinceEpoch}.png',
+          );
+          if (uploaded != null && uploaded.isNotEmpty) {
+            draft.imageUrl = uploaded;
+            extractedImageCount++;
+          }
+        }
 
         draft.assigneeUserId = _findAssigneeId(headerIndex, row);
+        if (draft.assigneeUserId == null || draft.assigneeUserId!.isEmpty) {
+          unmappedAssigneeCount++;
+        }
+
+        final parsedPrice = double.tryParse(priceText);
+        if (parsedPrice == null || parsedPrice <= 0) {
+          invalidPriceRowCount++;
+        }
+
+        final parsedStock = int.tryParse(draft.stockController.text.trim()) ?? 0;
+        if (parsedStock <= 0) {
+          invalidStockRowCount++;
+        }
+
+        if (draft.imageUrl == null || draft.imageUrl!.trim().isEmpty) {
+          missingImageCount++;
+        }
+
         imported.add(draft);
       }
 
@@ -653,16 +716,36 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
       }
 
       if (!mounted) return;
+      final summary = _BulkImportSummary(
+        fileName: file.name,
+        isXlsx: isXlsx,
+        processedRows: processedRowCount,
+        importedRows: imported.length,
+        skippedEmptyRows: skippedEmptyRowCount,
+        imageUrlProvidedRows: imageUrlProvidedCount,
+        extractedImageRows: extractedImageCount,
+        missingImageRows: missingImageCount,
+        unmappedAssigneeRows: unmappedAssigneeCount,
+        invalidPriceRows: invalidPriceRowCount,
+        invalidStockRows: invalidStockRowCount,
+        importedAt: DateTime.now(),
+      );
+
       setState(() {
         _bulkDrafts
           ..clear()
           ..addAll(imported);
+
+        _lastImportSummary = summary;
+        _recordImportSummary(summary);
       });
 
       AppPopup.show(
         context,
         message:
-            'Imported ${imported.length} draft product(s). Add images, review rows, then click Assign Bulk Products.',
+            'Imported ${imported.length} draft product(s). '
+            '${extractedImageCount > 0 ? 'Auto-attached $extractedImageCount image(s) from XLSX. ' : ''}'
+            'Add/review images, then click Assign Bulk Products.',
         type: PopupType.success,
       );
     } catch (e) {
@@ -687,6 +770,7 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
           'quantity',
           'category',
           'assigneeEmail',
+          'imageUrl',
         ],
         const [
           'Premium Hammer Set',
@@ -695,6 +779,7 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
           '25',
           'Carpentry',
           'skilled1@example.com',
+          'https://example.com/images/hammer.jpg',
         ],
         const [
           'Designer Tailoring Kit',
@@ -703,6 +788,7 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
           '12',
           'Tailoring',
           'skilled2@example.com',
+          'https://example.com/images/tailoring.jpg',
         ],
       ];
 
@@ -852,6 +938,233 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
     } finally {
       if (mounted) setState(() => _isBulkSubmitting = false);
     }
+  }
+
+  bool _isDraftValid(_BulkProductDraft d) {
+    return _draftValidationIssues(d).isEmpty;
+  }
+
+  List<String> _draftValidationIssues(_BulkProductDraft d) {
+    final name = d.nameController.text.trim();
+    final desc = d.descController.text.trim();
+    final price = double.tryParse(d.priceController.text.trim());
+    final stock = int.tryParse(d.stockController.text.trim()) ?? 0;
+    final issues = <String>[];
+
+    if (d.assigneeUserId == null || d.assigneeUserId!.isEmpty) {
+      issues.add('Assignee is required');
+    }
+    if (name.isEmpty) {
+      issues.add('Name is required');
+    }
+    if (desc.isEmpty) {
+      issues.add('Description is required');
+    }
+    if (price == null || price <= 0) {
+      issues.add('Price must be greater than 0');
+    }
+    if (stock <= 0) {
+      issues.add('Stock must be greater than 0');
+    }
+    if (d.imageUrl == null || d.imageUrl!.trim().isEmpty) {
+      issues.add('Image is required');
+    }
+
+    return issues;
+  }
+
+  void _recordImportSummary(_BulkImportSummary summary) {
+    _importHistory.insert(0, summary);
+    if (_importHistory.length > 10) {
+      _importHistory.removeRange(10, _importHistory.length);
+    }
+  }
+
+  String _csvSafeFileTimestamp(DateTime dt) {
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${dt.year}${two(dt.month)}${two(dt.day)}_${two(dt.hour)}${two(dt.minute)}${two(dt.second)}';
+  }
+
+  Future<void> _exportInvalidRowsCsv() async {
+    if (_bulkDrafts.isEmpty) {
+      AppPopup.show(
+        context,
+        message: 'No rows available for export.',
+        type: PopupType.info,
+      );
+      return;
+    }
+
+    final rows = <List<dynamic>>[
+      const [
+        'rowNumber',
+        'issues',
+        'name',
+        'description',
+        'price',
+        'quantity',
+        'category',
+        'assigneeUserId',
+        'imageUrl',
+      ],
+    ];
+
+    for (var i = 0; i < _bulkDrafts.length; i++) {
+      final draft = _bulkDrafts[i];
+      final issues = _draftValidationIssues(draft);
+      if (issues.isEmpty) continue;
+
+      rows.add([
+        i + 1,
+        issues.join(' | '),
+        draft.nameController.text.trim(),
+        draft.descController.text.trim(),
+        draft.priceController.text.trim(),
+        draft.stockController.text.trim(),
+        draft.category,
+        draft.assigneeUserId ?? '',
+        draft.imageUrl ?? '',
+      ]);
+    }
+
+    if (rows.length == 1) {
+      AppPopup.show(
+        context,
+        message: 'No invalid rows found to export.',
+        type: PopupType.info,
+      );
+      return;
+    }
+
+    final csv = const ListToCsvConverter().convert(rows);
+
+    try {
+      if (kIsWeb) {
+        await file_downloader.downloadTextFile(
+          fileName:
+              'skillshare_failed_rows_${_csvSafeFileTimestamp(DateTime.now())}.csv',
+          content: csv,
+        );
+      } else {
+        final bytes = Uint8List.fromList(utf8.encode(csv));
+        final savedPath = await FilePicker.platform.saveFile(
+          dialogTitle: 'Save Failed Bulk Rows CSV',
+          fileName:
+              'skillshare_failed_rows_${_csvSafeFileTimestamp(DateTime.now())}.csv',
+          type: FileType.custom,
+          allowedExtensions: const ['csv'],
+          bytes: bytes,
+        );
+
+        if (savedPath == null || savedPath.trim().isEmpty) {
+          if (!mounted) return;
+          AppPopup.show(
+            context,
+            message: 'Export cancelled.',
+            type: PopupType.warning,
+          );
+          return;
+        }
+      }
+
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'Failed rows CSV exported successfully.',
+        type: PopupType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'Failed rows export failed: $e',
+        type: PopupType.error,
+      );
+    }
+  }
+
+  void _clearRowImage(int index) {
+    setState(() => _bulkDrafts[index].imageUrl = null);
+  }
+
+  void _duplicateRow(int index) {
+    final source = _bulkDrafts[index];
+    final copy = _BulkProductDraft();
+    copy.assigneeUserId = source.assigneeUserId;
+    copy.nameController.text = source.nameController.text;
+    copy.descController.text = source.descController.text;
+    copy.priceController.text = source.priceController.text;
+    copy.stockController.text = source.stockController.text;
+    copy.category = source.category;
+    copy.imageUrl = source.imageUrl;
+
+    setState(() {
+      _bulkDrafts.insert(index + 1, copy);
+    });
+  }
+
+  void _validateRowsAndShowSummary() {
+    final invalidRows = <String>[];
+    for (var i = 0; i < _bulkDrafts.length; i++) {
+      final issues = _draftValidationIssues(_bulkDrafts[i]);
+      if (issues.isNotEmpty) {
+        invalidRows.add('R${i + 1}: ${issues.join(' | ')}');
+      }
+    }
+
+    if (invalidRows.isEmpty) {
+      AppPopup.show(
+        context,
+        message: 'All ${_bulkDrafts.length} row(s) are valid for publish.',
+        type: PopupType.success,
+      );
+      return;
+    }
+
+    final preview = invalidRows.take(5).join(' | ');
+    AppPopup.show(
+      context,
+      message:
+          'Invalid rows (${invalidRows.length}): $preview${invalidRows.length > 5 ? ' ...' : ''}',
+      type: PopupType.warning,
+    );
+  }
+
+  void _removeInvalidRows() {
+    if (_bulkDrafts.isEmpty) return;
+
+    final invalidIndexes = <int>[];
+    for (var i = 0; i < _bulkDrafts.length; i++) {
+      if (!_isDraftValid(_bulkDrafts[i])) {
+        invalidIndexes.add(i);
+      }
+    }
+
+    if (invalidIndexes.isEmpty) {
+      AppPopup.show(
+        context,
+        message: 'No invalid rows found.',
+        type: PopupType.info,
+      );
+      return;
+    }
+
+    setState(() {
+      for (var i = invalidIndexes.length - 1; i >= 0; i--) {
+        final idx = invalidIndexes[i];
+        final draft = _bulkDrafts.removeAt(idx);
+        draft.dispose();
+      }
+      if (_bulkDrafts.isEmpty) {
+        _bulkDrafts.add(_BulkProductDraft());
+      }
+    });
+
+    AppPopup.show(
+      context,
+      message: 'Removed ${invalidIndexes.length} invalid row(s).',
+      type: PopupType.success,
+    );
   }
 
   Future<void> _deleteProduct(ProductModel product) async {
@@ -1251,7 +1564,7 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Import columns: name, description, price, quantity (or stock), category, and one assignee column (assigneeEmail or assigneeUserId or assigneeName). Images are added manually after import and before publish.',
+              'Import columns: name, description, price, quantity (or stock), category, one assignee column (assigneeEmail or assigneeUserId or assigneeName), and optional imageUrl. If imageUrl is not provided, add images manually before publish.',
               style: TextStyle(fontSize: 12, color: Colors.black54),
             ),
             const SizedBox(height: 10),
@@ -1295,13 +1608,23 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                       ],
                     ),
                   ),
+                  if (_lastImportSummary != null) ...[
+                    const SizedBox(height: 10),
+                    _buildImportSummaryCard(_lastImportSummary!),
+                  ],
+                  if (_importHistory.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    _buildImportHistoryCard(),
+                  ],
                   const SizedBox(height: 8),
                   ...List.generate(_bulkDrafts.length, (index) {
                     final draft = _bulkDrafts[index];
                     return _buildBulkRow(index, draft);
                   }),
                   const SizedBox(height: 6),
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
                       OutlinedButton.icon(
                         onPressed: () {
@@ -1310,18 +1633,21 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                         icon: const Icon(Icons.add),
                         label: const Text('Add row'),
                       ),
-                      const SizedBox(width: 8),
-                      if (_bulkDrafts.length > 1)
-                        OutlinedButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              final draft = _bulkDrafts.removeLast();
-                              draft.dispose();
-                            });
-                          },
-                          icon: const Icon(Icons.remove),
-                          label: const Text('Remove row'),
-                        ),
+                      OutlinedButton.icon(
+                        onPressed: _validateRowsAndShowSummary,
+                        icon: const Icon(Icons.rule),
+                        label: const Text('Validate rows'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _removeInvalidRows,
+                        icon: const Icon(Icons.cleaning_services_outlined),
+                        label: const Text('Remove invalid'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _exportInvalidRowsCsv,
+                        icon: const Icon(Icons.file_download_outlined),
+                        label: const Text('Export failed rows'),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -1349,6 +1675,9 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
   }
 
   Widget _buildBulkRow(int index, _BulkProductDraft draft) {
+    final issues = _draftValidationIssues(draft);
+    final isValid = issues.isEmpty;
+
     return GestureDetector(
       onTap: () => draft.imagePasteFocusNode.requestFocus(),
       child: Focus(
@@ -1379,120 +1708,316 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-          Text(
-            'Product ${index + 1}',
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Tip: click this row and press Ctrl+V to paste product image',
-            style: TextStyle(fontSize: 11, color: Colors.black54),
-          ),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            value: draft.assigneeUserId,
-            decoration: const InputDecoration(
-              labelText: 'Assign to skilled person',
-              border: OutlineInputBorder(),
-            ),
-            items: _skilledUsers
-                .map(
-                  (u) => DropdownMenuItem<String>(
-                    value: u.uid,
-                    child: Text('${u.name} (${u.email})'),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Product ${index + 1}',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
-                )
-                .toList(),
-            onChanged: (v) => setState(() => draft.assigneeUserId = v),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: draft.nameController,
-            decoration: const InputDecoration(
-              labelText: 'Name',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: draft.descController,
-            minLines: 2,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Description',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: draft.priceController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+                  Tooltip(
+                    message: isValid
+                        ? 'Row is valid'
+                        : 'Issues: ${issues.join(' • ')}',
+                    child: Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isValid
+                            ? const Color(0xFFE8F5E9)
+                            : const Color(0xFFFFEBEE),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isValid
+                              ? const Color(0xFF66BB6A)
+                              : const Color(0xFFE57373),
+                        ),
+                      ),
+                      child: Text(
+                        isValid ? 'Ready' : '${issues.length} issue(s)',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isValid
+                              ? const Color(0xFF2E7D32)
+                              : const Color(0xFFC62828),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                   ),
-                  decoration: const InputDecoration(
-                    labelText: 'Price',
-                    border: OutlineInputBorder(),
+                  IconButton(
+                    tooltip: 'Duplicate this row',
+                    onPressed: () => _duplicateRow(index),
+                    icon: const Icon(Icons.copy, color: Color(0xFF1565C0)),
+                  ),
+                  IconButton(
+                    tooltip: 'Remove this row',
+                    onPressed: _bulkDrafts.length > 1
+                        ? () {
+                            setState(() {
+                              final removed = _bulkDrafts.removeAt(index);
+                              removed.dispose();
+                            });
+                          }
+                        : null,
+                    icon:
+                        const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  ),
+                ],
+              ),
+              if (!isValid) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Missing: ${issues.join(' | ')}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFFC62828),
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
+              ],
+              const SizedBox(height: 4),
+              const Text(
+                'Tip: click this row and press Ctrl+V to paste product image',
+                style: TextStyle(fontSize: 11, color: Colors.black54),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: draft.stockController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Stock',
-                    border: OutlineInputBorder(),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: draft.assigneeUserId,
+                decoration: const InputDecoration(
+                  labelText: 'Assign to skilled person',
+                  border: OutlineInputBorder(),
+                ),
+                items: _skilledUsers
+                    .map(
+                      (u) => DropdownMenuItem<String>(
+                        value: u.uid,
+                        child: Text('${u.name} (${u.email})'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setState(() => draft.assigneeUserId = v),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: draft.nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: draft.descController,
+                minLines: 2,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: draft.priceController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Price',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
                   ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: draft.stockController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Stock',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: draft.category,
+                items: AppConstants.categories
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setState(() => draft.category = v);
+                },
+                decoration: const InputDecoration(
+                  labelText: 'Category',
+                  border: OutlineInputBorder(),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            value: draft.category,
-            items: AppConstants.categories
-                .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                .toList(),
-            onChanged: (v) {
-              if (v != null) setState(() => draft.category = v);
-            },
-            decoration: const InputDecoration(
-              labelText: 'Category',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => _pickBulkImage(index),
-                icon: const Icon(Icons.photo),
-                label: Text(draft.imageUrl == null ? 'Upload photo' : 'Photo added'),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _pickBulkImage(index),
+                    icon: const Icon(Icons.photo),
+                    label:
+                        Text(draft.imageUrl == null ? 'Upload photo' : 'Photo added'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _pasteBulkImageFromClipboard(index),
+                    icon: const Icon(Icons.content_paste),
+                    label: const Text('Paste image'),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Clear image',
+                    onPressed: draft.imageUrl != null && draft.imageUrl!.isNotEmpty
+                        ? () => _clearRowImage(index)
+                        : null,
+                    icon: const Icon(Icons.image_not_supported_outlined,
+                        color: Colors.redAccent),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      draft.imageUrl == null ? 'No image selected' : 'Image uploaded',
+                      style: const TextStyle(fontSize: 12, color: Colors.black54),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: () => _pasteBulkImageFromClipboard(index),
-                icon: const Icon(Icons.content_paste),
-                label: const Text('Paste image'),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  draft.imageUrl == null ? 'No image selected' : 'Image uploaded',
-                  style: const TextStyle(fontSize: 12, color: Colors.black54),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildImportSummaryCard(_BulkImportSummary summary) {
+    Widget stat(String label, int value, Color color) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          '$label: $value',
+          style: TextStyle(
+            fontSize: 12,
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7FAFF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFD6E3FF)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Import Summary • ${summary.fileName}',
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${summary.isXlsx ? 'XLSX' : 'CSV'} • '
+            'Imported at ${summary.importedAt.hour.toString().padLeft(2, '0')}:${summary.importedAt.minute.toString().padLeft(2, '0')}',
+            style: const TextStyle(fontSize: 11, color: Colors.black54),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              stat('Processed', summary.processedRows, const Color(0xFF1565C0)),
+              stat('Imported', summary.importedRows, const Color(0xFF2E7D32)),
+              stat('Skipped Empty', summary.skippedEmptyRows,
+                  const Color(0xFF6D4C41)),
+              stat('Image URL', summary.imageUrlProvidedRows,
+                  const Color(0xFF512DA8)),
+              stat('Extracted Images', summary.extractedImageRows,
+                  const Color(0xFF00897B)),
+              stat('Missing Image', summary.missingImageRows, Colors.redAccent),
+              stat('Unmapped Assignee', summary.unmappedAssigneeRows,
+                  Colors.orange),
+              stat('Invalid Price', summary.invalidPriceRows,
+                  const Color(0xFFD84315)),
+              stat('Invalid Stock', summary.invalidStockRows,
+                  const Color(0xFFAD1457)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImportHistoryCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7FAFF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFD6E3FF)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Recent Import History (Last 10)',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          ..._importHistory.map((item) {
+            final issues = item.missingImageRows +
+                item.unmappedAssigneeRows +
+                item.invalidPriceRows +
+                item.invalidStockRows;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${item.fileName} • ${item.isXlsx ? 'XLSX' : 'CSV'} • ${item.importedRows}/${item.processedRows} row(s)',
+                      style:
+                          const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    issues == 0 ? 'Clean' : '$issues issue(s)',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color:
+                          issues == 0 ? const Color(0xFF2E7D32) : Colors.redAccent,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
       ),
     );
   }
@@ -1605,4 +2130,34 @@ class _BulkProductDraft {
     stockController.dispose();
     imagePasteFocusNode.dispose();
   }
+}
+
+class _BulkImportSummary {
+  final String fileName;
+  final bool isXlsx;
+  final int processedRows;
+  final int importedRows;
+  final int skippedEmptyRows;
+  final int imageUrlProvidedRows;
+  final int extractedImageRows;
+  final int missingImageRows;
+  final int unmappedAssigneeRows;
+  final int invalidPriceRows;
+  final int invalidStockRows;
+  final DateTime importedAt;
+
+  const _BulkImportSummary({
+    required this.fileName,
+    required this.isXlsx,
+    required this.processedRows,
+    required this.importedRows,
+    required this.skippedEmptyRows,
+    required this.imageUrlProvidedRows,
+    required this.extractedImageRows,
+    required this.missingImageRows,
+    required this.unmappedAssigneeRows,
+    required this.invalidPriceRows,
+    required this.invalidStockRows,
+    required this.importedAt,
+  });
 }

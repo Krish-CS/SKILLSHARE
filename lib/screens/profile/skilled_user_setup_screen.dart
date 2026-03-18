@@ -705,19 +705,22 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       if (!mounted) return;
 
       if (success) {
+        // Keep auth provider user in sync immediately so avatar/photo updates
+        // render across Home/Profile without waiting for a full reload.
+        if (authProvider.currentUser != null) {
+          final syncedUser = authProvider.currentUser!.copyWith(
+            profilePhoto: effectiveProfileUrl ?? authProvider.currentUser!.profilePhoto,
+            avatarConfig: _avatarConfig ?? authProvider.currentUser!.avatarConfig,
+          );
+          await authProvider.updateProfile(syncedUser);
+        }
+
         // Also update user basic profile with profile photo in Firestore directly
         try {
           if (effectiveProfileUrl != null && effectiveProfileUrl.isNotEmpty) {
             // Update via Firestore service directly for reliability
             await FirestoreService().updateUserProfilePhoto(widget.userId, effectiveProfileUrl);
-            
-            // Also update via auth provider to keep local state in sync
-            if (authProvider.currentUser != null) {
-              final updatedUser = authProvider.currentUser!.copyWith(
-                profilePhoto: effectiveProfileUrl,
-              );
-              await authProvider.updateProfile(updatedUser);
-            }
+
             debugPrint('Profile photo saved to both collections: $effectiveProfileUrl');
           }
         } catch (e) {

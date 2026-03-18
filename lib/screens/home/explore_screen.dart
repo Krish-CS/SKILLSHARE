@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/skilled_user_profile.dart';
@@ -21,6 +23,7 @@ class ExploreScreen extends StatefulWidget {
 
 class _ExploreScreenState extends State<ExploreScreen> {
   final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
   String _searchQuery = '';
   String? _selectedCategory;
   double _minRating = 0;
@@ -65,8 +68,17 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 220), () {
+      if (!mounted) return;
+      setState(() => _searchQuery = value.toLowerCase());
+    });
   }
 
   List<SkilledUserProfile> _filter(
@@ -113,6 +125,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     final currentUserId = authProvider.currentUser?.uid;
     final filtered =
         _filter(userProvider.verifiedUsers, currentUserId: currentUserId);
+    final isCompact = MediaQuery.of(context).size.width < 380;
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -166,10 +179,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   ),
                   child: TextField(
                     controller: _searchController,
-                    onChanged: (v) =>
-                        setState(() => _searchQuery = v.toLowerCase()),
+                    onChanged: _onSearchChanged,
                     decoration: InputDecoration(
-                      hintText: 'Search skills, categories...',
+                      hintText: isCompact
+                          ? 'Search skills...'
+                          : 'Search skills, categories...',
                       prefixIcon:
                           const Icon(Icons.search, color: Color(0xFF6A11CB)),
                       suffixIcon: _searchQuery.isNotEmpty
@@ -180,11 +194,12 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                 setState(() => _searchQuery = '');
                               },
                             )
-                          : GestureDetector(
-                              onTap: () => _openFilterSheet(),
-                              child: Container(
-                                margin: const EdgeInsets.all(6),
-                                padding: const EdgeInsets.all(5),
+                          : IconButton(
+                              onPressed: _openFilterSheet,
+                              tooltip: 'Filters',
+                              icon: Container(
+                                width: 28,
+                                height: 28,
                                 decoration: BoxDecoration(
                                   gradient: const LinearGradient(
                                     colors: [

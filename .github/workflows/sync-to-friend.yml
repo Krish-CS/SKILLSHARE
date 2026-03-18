@@ -1,0 +1,20 @@
+name: Sync to Friend's Repo
+
+on:
+  push:
+    branches:
+      - main # Runs every time you push to the main branch
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetches full history so push works properly
+
+      - name: Push to Friend's Repository
+        run: |
+          git remote add friend "https://${{ secrets.FRIEND_TOKEN }}@github.com/ARON08-AJ/SKILLSHARE.git"
+          git push friend main --force
