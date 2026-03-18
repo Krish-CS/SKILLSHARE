@@ -3,7 +3,7 @@ name: Sync to Friend's Repo
 on:
   push:
     branches:
-      - main # Runs every time you push to the main branch
+      - main
 
 jobs:
   sync:
@@ -12,9 +12,10 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Fetches full history so push works properly
+          fetch-depth: 0
+          persist-credentials: false # CRITICAL FIX: Prevents using the default GitHub bot token
 
       - name: Push to Friend's Repository
         run: |
-          git remote add friend "https://${{ secrets.FRIEND_TOKEN }}@github.com/ARON08-AJ/SKILLSHARE.git"
+          git remote add friend "https://ARON08-AJ:${{ secrets.FRIEND_TOKEN }}@github.com/ARON08-AJ/SKILLSHARE.git"
           git push friend main --force
