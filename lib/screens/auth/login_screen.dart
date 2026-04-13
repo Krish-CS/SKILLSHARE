@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/auth_service.dart';
+import '../../utils/app_fonts.dart';
 import '../../widgets/google_g_logo.dart';
 import '../../utils/app_dialog.dart';
 import '../main_navigation.dart';
@@ -277,7 +277,7 @@ class _LoginScreenState extends State<LoginScreen>
                           // App name + tagline above the card
                           Text(
                             'SkillShare',
-                            style: GoogleFonts.pacifico(
+                            style: AppFonts.pacifico(
                               fontSize: 36,
                               color: Colors.white,
                               shadows: [

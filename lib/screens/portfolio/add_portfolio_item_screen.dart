@@ -9,6 +9,7 @@ import '../../services/cloudinary_service.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../utils/app_constants.dart';
 import '../../utils/app_dialog.dart';
+import '../../utils/web_image_loader.dart';
 
 class AddPortfolioItemScreen extends StatefulWidget {
   final PortfolioItem? portfolioItem; // For editing existing item
@@ -349,7 +350,6 @@ class _AddPortfolioItemScreenState extends State<AddPortfolioItemScreen> {
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        prefixIcon: const Icon(Icons.title),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
@@ -547,7 +547,7 @@ class _AddPortfolioItemScreenState extends State<AddPortfolioItemScreen> {
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(color: Colors.grey[300]!),
                                       image: DecorationImage(
-                                        image: NetworkImage(_imageUrls[index]),
+                                        image: WebImageLoader.getImageProvider(_imageUrls[index])!,
                                         fit: BoxFit.cover,
                                       ),
                                     ),

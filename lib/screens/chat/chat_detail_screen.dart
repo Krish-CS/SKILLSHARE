@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../models/chat_model.dart';
@@ -20,6 +19,7 @@ import '../../services/presence_service.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/app_helpers.dart';
 import '../../utils/app_dialog.dart';
+import '../../utils/app_fonts.dart';
 import '../../utils/web_image_loader.dart';
 import '../../widgets/universal_avatar.dart';
 import '../../utils/user_roles.dart';
@@ -138,6 +138,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         _cachedMessages = msgs;
         _messageStreamStarted = true;
       });
+    }, onError: (_) {
+      if (!mounted) return;
+      setState(() {
+        // Even on errors, mark the stream as started so the UI doesn't stay
+        // stuck on the initial loading spinner.
+        _messageStreamStarted = true;
+      });
     });
     _tabController = TabController(length: 2, vsync: this);
     _activeTabIndex = _tabController.index;
@@ -173,7 +180,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
     // Subscribe to work requests
     _workReqSubscription = _firestoreService
-        .streamChatWorkRequests(widget.chatId)
+        .streamChatWorkRequests(
+          widget.chatId,
+          currentUserId: _currentUserId ?? '',
+        )
         .listen((requests) {
       if (!mounted) return;
       final pending = requests.where((r) => r.status == 'pending').toList();
@@ -1379,6 +1389,18 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     }
   }
 
+  String _friendlyMessageStreamError(Object error) {
+    if (error is FirebaseException) {
+      if (error.code == 'permission-denied') {
+        return 'You do not have permission to open this chat.';
+      }
+      if (error.code == 'unavailable' || error.code == 'deadline-exceeded') {
+        return 'Network issue while loading messages. Please retry.';
+      }
+    }
+    return 'Unable to load messages right now.';
+  }
+
   Widget _monitoringSectionLabel(String label, Color color, IconData icon) {
     return Padding(
       padding: const EdgeInsets.only(left: 4, bottom: 6),
@@ -2106,7 +2128,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         children: [
                           Text(
                             AppHelpers.capitalize(widget.otherUserName),
-                            style: GoogleFonts.lora(
+                            style: AppFonts.lora(
                               color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
@@ -2117,7 +2139,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           ),
                           Text(
                             subtitle,
-                            style: GoogleFonts.lora(
+                            style: AppFonts.lora(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                               color: isOnline
@@ -2240,7 +2262,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                       _workProjectName!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.lora(
+                      style: AppFonts.lora(
                         color: Colors.white,
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
@@ -2428,7 +2450,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                     const SizedBox(height: 2),
                     Text(
                       label,
-                      style: GoogleFonts.lora(
+                      style: AppFonts.lora(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                         color: active ? activeText : inactiveText,
@@ -2532,14 +2554,29 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             stream: _messageStream,
             initialData: _cachedMessages.isEmpty ? null : _cachedMessages,
             builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                final fallbackMessages = snapshot.data ?? _cachedMessages;
+                if (fallbackMessages.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        _friendlyMessageStreamError(snapshot.error!),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey[700]),
+                      ),
+                    ),
+                  );
+                }
+              }
+
+              final messages = snapshot.data ?? _cachedMessages;
+
               // Only show spinner on the very first load (no cached data yet)
-              if (!_messageStreamStarted && snapshot.data == null) {
+              if (!_messageStreamStarted && messages.isEmpty) {
                 return const Center(child: CircularProgressIndicator());
               }
-              if (snapshot.hasError) {
-                return Center(child: Text('Error: ${snapshot.error}'));
-              }
-              final messages = snapshot.data ?? _cachedMessages;
+
               if (messages.isEmpty) {
                 return Center(
                   child: Column(

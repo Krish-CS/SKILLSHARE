@@ -1,7 +1,5 @@
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:local_auth/local_auth.dart';
-import 'package:local_auth/error_codes.dart' as auth_error;
-import 'package:flutter/services.dart';
 
 class BiometricService {
   static final LocalAuthentication _auth = LocalAuthentication();
@@ -36,7 +34,7 @@ class BiometricService {
     String reason = 'Please verify your identity to continue',
   }) async {
     if (kIsWeb) {
-      // Web doesn't support local_auth — treat as passed for demo
+      // Web doesn't support local_auth; treat as passed for demo.
       return BiometricResult.success;
     }
 
@@ -48,22 +46,20 @@ class BiometricService {
 
       final authenticated = await _auth.authenticate(
         localizedReason: reason,
-        options: const AuthenticationOptions(
-          biometricOnly: false, // allow PIN/pattern as fallback
-          stickyAuth: true,
-          sensitiveTransaction: true,
-        ),
+        biometricOnly: false,
+        persistAcrossBackgrounding: true,
+        sensitiveTransaction: true,
       );
 
       return authenticated ? BiometricResult.success : BiometricResult.failed;
-    } on PlatformException catch (e) {
-      debugPrint('Biometric auth PlatformException: ${e.code} — ${e.message}');
+    } on LocalAuthException catch (e) {
+      debugPrint('Biometric auth LocalAuthException: ${e.code}');
       switch (e.code) {
-        case auth_error.notAvailable:
-        case auth_error.notEnrolled:
+        case LocalAuthExceptionCode.noBiometricHardware:
+        case LocalAuthExceptionCode.noBiometricsEnrolled:
           return BiometricResult.notAvailable;
-        case auth_error.lockedOut:
-        case auth_error.permanentlyLockedOut:
+        case LocalAuthExceptionCode.temporaryLockout:
+        case LocalAuthExceptionCode.biometricLockout:
           return BiometricResult.lockedOut;
         default:
           return BiometricResult.failed;

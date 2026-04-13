@@ -49,6 +49,8 @@ class AppConstants {
   static const String supportTicketsCollection = 'support_tickets';
   static const String deliveryAssignmentsCollection = 'delivery_assignments';
   static const String companyEndorsementsCollection = 'company_endorsements';
+  static const String skilledVerificationPrivateCollection =
+      'skilled_verification_private';
 
   // Storage Paths
   static const String profilePhotosPath = 'profile_photos';

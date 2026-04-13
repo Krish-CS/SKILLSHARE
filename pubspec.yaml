@@ -6,61 +6,65 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.6.0 <4.0.0'
+  flutter: '>=3.27.0'
 
 dependencies:
   flutter:
     sdk: flutter
 
   # Firebase
-  firebase_core: ^3.6.0
-  firebase_auth: ^5.3.1
-  cloud_firestore: ^5.4.4
-  google_sign_in: ^6.2.1
+  firebase_core: ^4.6.0
+  firebase_auth: ^6.3.0
+  cloud_firestore: ^6.2.0
+  google_sign_in: ^7.2.0
   
   # State Management
-  provider: ^6.1.1
+  provider: ^6.1.5
   
   # UI Components
-  cupertino_icons: ^1.0.6
-  google_fonts: ^6.1.0
-  cached_network_image: ^3.3.0
+  cupertino_icons: ^1.0.9
+  google_fonts: ^8.0.2
+  cached_network_image: ^3.4.1
   flutter_rating_bar: ^4.0.1
   shimmer: ^3.0.0
-  flutter_svg: ^2.0.10+1
+  flutter_svg: ^2.2.4
   
   # Image Handling & Upload
-  image_picker: ^1.0.5
-  cloudinary_public: ^0.21.0
-  http: ^1.1.0
+  image_picker: ^1.2.1
+  cloudinary_public: ^0.23.1
+  http: ^1.5.0
+  connectivity_plus: ^7.1.0
   
   # Location
-  geolocator: ^10.1.0
-  geocoding: ^2.1.1
+  geolocator: ^14.0.2
+  geocoding: ^4.0.0
   
   # Chat
-  intl: ^0.18.1
+  intl: ^0.20.2
   
   # Biometric / local auth
-  local_auth: ^2.3.0
+  local_auth: ^3.0.1
+  shared_preferences: ^2.5.5
+  crypto: ^3.0.7
 
   # Utils
-  url_launcher: ^6.2.2
-  share_plus: ^10.0.3
+  url_launcher: ^6.3.2
+  share_plus: ^12.0.2
   matrix_gesture_detector: ^0.2.0-nullsafety.1
-  pdf: ^3.11.3
+  pdf: ^3.12.0
   super_clipboard: ^0.9.1
-  file_picker: ^8.1.2
-  csv: ^6.0.0
+  file_picker: ^10.3.10
+  csv: ^8.0.0
   excel: ^4.0.6
   archive: ^3.6.1
-  xml: ^6.5.0
+  xml: ^6.6.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.1
-  flutter_launcher_icons: ^0.13.1
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter_launcher_icons:
   android: true
@@ -77,6 +81,9 @@ flutter:
     - assets/icons/
 
   fonts:
+    - family: Pacifico
+      fonts:
+        - asset: assets/fonts/Pacifico-Regular.ttf
     - family: SourceSerif4
       fonts:
         - asset: Source_Serif_4/static/SourceSerif4-ExtraLight.ttf

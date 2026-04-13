@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'app_fonts.dart';
 
 class ModernPickers {
   static Future<DateTime?> showModernDatePicker({
@@ -28,7 +28,7 @@ class ModernPickers {
         return Theme(
           data: Theme.of(ctx).copyWith(
             colorScheme: scheme,
-            textTheme: GoogleFonts.loraTextTheme(Theme.of(ctx).textTheme),
+            textTheme: AppFonts.loraTextTheme(Theme.of(ctx).textTheme),
             datePickerTheme: DatePickerThemeData(
               backgroundColor: const Color(0xFFF7F9FF),
               surfaceTintColor: Colors.transparent,
@@ -61,7 +61,7 @@ class ModernPickers {
             textButtonTheme: TextButtonThemeData(
               style: TextButton.styleFrom(
                 foregroundColor: seedColor,
-                textStyle: GoogleFonts.lora(
+                textStyle: AppFonts.lora(
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
                 ),
@@ -91,7 +91,7 @@ class ModernPickers {
       builder: (ctx, child) {
         return Theme(
           data: Theme.of(ctx).copyWith(
-            textTheme: GoogleFonts.loraTextTheme(Theme.of(ctx).textTheme),
+            textTheme: AppFonts.loraTextTheme(Theme.of(ctx).textTheme),
             timePickerTheme: TimePickerThemeData(
               backgroundColor: const Color(0xFFF7F9FF),
               hourMinuteColor: WidgetStateColor.resolveWith((states) {
@@ -129,7 +129,7 @@ class ModernPickers {
             textButtonTheme: TextButtonThemeData(
               style: TextButton.styleFrom(
                 foregroundColor: seedColor,
-                textStyle: GoogleFonts.lora(
+                textStyle: AppFonts.lora(
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
                 ),

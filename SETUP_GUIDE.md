@@ -428,28 +428,28 @@ flutter doctor -v
 #### Admin Account:
 ```
 Email: admin@skillshare.com
-Password: Admin@123
+Password: <set-a-strong-unique-password>
 Role: admin
 ```
 
 #### Skilled User:
 ```
 Email: baker@skillshare.com
-Password: Baker@123
+Password: <set-a-strong-unique-password>
 Role: skilled_user
 ```
 
 #### Customer:
 ```
 Email: customer@skillshare.com
-Password: Customer@123
+Password: <set-a-strong-unique-password>
 Role: customer
 ```
 
 #### Company:
 ```
 Email: company@skillshare.com
-Password: Company@123
+Password: <set-a-strong-unique-password>
 Role: company
 ```
 

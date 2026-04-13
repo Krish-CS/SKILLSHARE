@@ -24,6 +24,26 @@ service firebase.storage {
       return isImageFile() && isValidFileSize();
     }
 
+    function isAllowedChatAttachmentType() {
+      return request.resource.contentType.matches('image/.*') ||
+        request.resource.contentType.matches('video/.*') ||
+        request.resource.contentType.matches('application/pdf');
+    }
+
+    function chatDocument(chatId) {
+      return firestore.get(/databases/(default)/documents/chats/$(chatId));
+    }
+
+    function chatExists(chatId) {
+      return firestore.exists(/databases/(default)/documents/chats/$(chatId));
+    }
+
+    function isChatParticipant(chatId) {
+      return isSignedIn() &&
+        chatExists(chatId) &&
+        request.auth.uid in chatDocument(chatId).data.participants;
+    }
+
     // ─── Profile photos ───────────────────────────────────────────────
     match /profile_photos/{userId}/{fileName} {
       allow read: if isSignedIn();
@@ -54,10 +74,11 @@ service firebase.storage {
 
     // ─── Chat attachments ─────────────────────────────────────────────
     match /chat_attachments/{chatId}/{fileName} {
-      // Only signed-in users can access (participants verified at Firestore level)
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && isValidFileSize();
-      allow delete: if isSignedIn();
+      allow read: if isChatParticipant(chatId);
+      allow write: if isChatParticipant(chatId) &&
+        isValidFileSize() &&
+        isAllowedChatAttachmentType();
+      allow delete: if isChatParticipant(chatId);
     }
 
     // ─── Portfolio images ─────────────────────────────────────────────

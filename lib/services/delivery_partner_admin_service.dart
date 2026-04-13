@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/user_model.dart';
 import '../utils/app_constants.dart';
@@ -125,10 +126,13 @@ class DeliveryPartnerAdminService {
     } finally {
       try {
         await tempAuth?.signOut();
-      } catch (_) {}
-      try {
-        await tempApp?.delete();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Managed user temp auth signOut failed: $e');
+      }
+      // Avoid immediate deletion on Android. Plugin callbacks may still
+      // complete briefly after auth/firestore operations and can throw
+      // "FirebaseApp was deleted" for active channels.
+      tempApp = null;
     }
   }
 

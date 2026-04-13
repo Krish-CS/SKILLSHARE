@@ -24,7 +24,9 @@ class UserRoles {
 
   // Legacy aliases supported for existing Firebase users
   static const Set<String> _skilledAliases = {
+    'skilled',
     'skilled_user',
+    'skilleduser',
     'skilled-person',
     'skilled person',
     'service_provider',

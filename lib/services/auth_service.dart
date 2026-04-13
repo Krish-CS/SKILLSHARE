@@ -8,6 +8,8 @@ import '../utils/app_constants.dart';
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+  static Future<void>? _googleSignInInitialization;
   static bool _isInitialized = false;
 
   AuthService() {
@@ -244,14 +246,18 @@ class AuthService {
     return null;
   }
 
+  Future<GoogleSignIn> _getGoogleSignInClient() async {
+    _googleSignInInitialization ??= _googleSignIn.initialize();
+    await _googleSignInInitialization;
+    return _googleSignIn;
+  }
+
   // Sign out
   Future<void> signOut() async {
     // Try to sign out of Google if it was used, but don't let it block logout
     try {
-      final googleSignIn = GoogleSignIn();
-      if (await googleSignIn.isSignedIn()) {
-        await googleSignIn.signOut();
-      }
+      final googleSignIn = await _getGoogleSignInClient();
+      await googleSignIn.signOut();
     } catch (_) {
       // Google Sign-In not configured or not used — ignore
     }
@@ -274,13 +280,14 @@ class AuthService {
         return await _upsertGoogleUser(user, defaultRole);
       } else {
         // On mobile, use the google_sign_in package
-        final googleSignIn = GoogleSignIn();
-        googleUser = await googleSignIn.signIn();
-        if (googleUser == null) return null; // user cancelled
+        final googleSignIn = await _getGoogleSignInClient();
+        googleUser = await googleSignIn.authenticate();
 
-        final googleAuth = await googleUser.authentication;
+        final googleAuth = googleUser.authentication;
+        if (googleAuth.idToken == null || googleAuth.idToken!.isEmpty) {
+          throw 'Google Sign-In did not return an ID token.';
+        }
         final credential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken,
           idToken: googleAuth.idToken,
         );
 
@@ -320,13 +327,14 @@ class AuthService {
     final currentUser = _auth.currentUser;
     if (currentUser == null) throw 'No user is currently signed in.';
 
-    final googleSignIn = GoogleSignIn();
-    final googleUser = await googleSignIn.signIn();
-    if (googleUser == null) return; // cancelled
+    final googleSignIn = await _getGoogleSignInClient();
+    final googleUser = await googleSignIn.authenticate();
 
-    final googleAuth = await googleUser.authentication;
+    final googleAuth = googleUser.authentication;
+    if (googleAuth.idToken == null || googleAuth.idToken!.isEmpty) {
+      throw 'Google Sign-In did not return an ID token.';
+    }
     final credential = GoogleAuthProvider.credential(
-      accessToken: googleAuth.accessToken,
       idToken: googleAuth.idToken,
     );
 

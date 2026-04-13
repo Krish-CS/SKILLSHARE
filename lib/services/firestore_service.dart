@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import '../models/skilled_user_profile.dart';
 import '../models/customer_profile.dart';
 import '../models/company_profile.dart';
@@ -30,8 +32,43 @@ class AdminDashboardData {
   });
 }
 
+class CompanyBuyerHighlight {
+  final String companyId;
+  final String companyName;
+  final int totalOrders;
+  final int totalUnits;
+  final double totalSpend;
+  final DateTime latestOrderAt;
+
+  const CompanyBuyerHighlight({
+    required this.companyId,
+    required this.companyName,
+    required this.totalOrders,
+    required this.totalUnits,
+    required this.totalSpend,
+    required this.latestOrderAt,
+  });
+}
+
+class SkilledCompanySocialProof {
+  final int uniqueCompanyBuyers;
+  final int companyOrdersCount;
+  final int companyUnitsBought;
+  final double companyRevenue;
+  final List<CompanyBuyerHighlight> topCompanyBuyers;
+
+  const SkilledCompanySocialProof({
+    this.uniqueCompanyBuyers = 0,
+    this.companyOrdersCount = 0,
+    this.companyUnitsBought = 0,
+    this.companyRevenue = 0,
+    this.topCompanyBuyers = const <CompanyBuyerHighlight>[],
+  });
+}
+
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   final Random _random = Random.secure();
   static const String _aadhaarRegistryCollection =
       AppConstants.aadhaarRegistryCollection;
@@ -116,6 +153,64 @@ class FirestoreService {
     return profile.isVerified || statusApproved;
   }
 
+  Uri? _parseCredentialUri(String rawValue) {
+    final trimmed = rawValue.trim();
+    if (trimmed.isEmpty) return null;
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || !uri.hasScheme || !uri.hasAuthority) return null;
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme != 'http' && scheme != 'https') return null;
+    return uri;
+  }
+
+  bool _isAcceptableCredentialStatus(int statusCode) {
+    return (statusCode >= 200 && statusCode < 400) ||
+        statusCode == 401 ||
+        statusCode == 403;
+  }
+
+  Future<bool> _isCredentialUrlReachable(Uri uri) async {
+    try {
+      final headResponse = await http.head(uri, headers: const {
+        'Cache-Control': 'no-cache'
+      }).timeout(const Duration(seconds: 5));
+      if (_isAcceptableCredentialStatus(headResponse.statusCode)) {
+        return true;
+      }
+      if (headResponse.statusCode != 405) {
+        return false;
+      }
+    } catch (_) {
+      // Fall back to GET for servers that block HEAD.
+    }
+
+    try {
+      final getResponse = await http.get(
+        uri,
+        headers: const {
+          'Cache-Control': 'no-cache',
+          'Range': 'bytes=0-0',
+        },
+      ).timeout(const Duration(seconds: 5));
+      return _isAcceptableCredentialStatus(getResponse.statusCode);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool _isSuccessfulOrderStatus(String status) {
+    switch (status.toLowerCase().trim()) {
+      case 'pending':
+      case 'confirmed':
+      case 'shipped':
+      case 'out_for_delivery':
+      case 'delivered':
+        return true;
+      default:
+        return false;
+    }
+  }
+
   Future<bool> canCompanyHireSkilledPersons(String companyUserId) async {
     final profile = await getCompanyProfile(companyUserId);
     return _isCompanyProfileVerified(profile);
@@ -155,6 +250,37 @@ class FirestoreService {
     };
   }
 
+  String _chatCategoryForRole(String? role) {
+    final normalized = UserRoles.normalizeRole(role ?? '');
+    if (normalized == UserRoles.company) return 'company';
+    if (normalized == UserRoles.customer) return 'customer';
+    if (normalized == UserRoles.skilledPerson) return 'skilled';
+    if (normalized == UserRoles.deliveryPartner) return 'delivery';
+    return 'general';
+  }
+
+  String _deriveDirectChatCategory(UserModel? userA, UserModel? userB) {
+    final roleA = UserRoles.normalizeRole(userA?.role ?? '');
+    final roleB = UserRoles.normalizeRole(userB?.role ?? '');
+
+    if (roleA == UserRoles.skilledPerson && roleB != null) {
+      return _chatCategoryForRole(roleB);
+    }
+    if (roleB == UserRoles.skilledPerson && roleA != null) {
+      return _chatCategoryForRole(roleA);
+    }
+    if (roleA == UserRoles.company || roleB == UserRoles.company) {
+      return 'company';
+    }
+    if (roleA == UserRoles.customer || roleB == UserRoles.customer) {
+      return 'customer';
+    }
+    if (roleA == UserRoles.skilledPerson || roleB == UserRoles.skilledPerson) {
+      return 'skilled';
+    }
+    return 'general';
+  }
+
   Future<String> _ensureDirectChatBetweenUsers({
     required UserModel? userA,
     required UserModel? userB,
@@ -171,6 +297,11 @@ class FirestoreService {
         userAId: _participantDetailsFromUser(userA),
         userBId: _participantDetailsFromUser(userB),
       },
+      'isWorkChat': false,
+      'isJobChat': false,
+      'chatCategory': _deriveDirectChatCategory(userA, userB),
+      'jobId': null,
+      'workRequestId': null,
       'lastMessage': '',
       'lastMessageType': 'text',
       'lastMessageTime': FieldValue.serverTimestamp(),
@@ -220,6 +351,7 @@ class FirestoreService {
         for (final id in participants) id: 0,
       },
       'isWorkChat': true,
+      'chatCategory': _chatCategoryForRole(customer?.role),
       'workRequestId': requestId,
       if (originChatId != null && originChatId.trim().isNotEmpty)
         'originChatId': originChatId.trim(),
@@ -292,6 +424,7 @@ class FirestoreService {
         skilledUserId: _participantDetailsFromUser(skilled),
       },
       'isJobChat': true,
+      'chatCategory': 'company',
       'jobId': jobId,
       'jobTitle': safeJobTitle,
       'lastMessage': '',
@@ -413,7 +546,8 @@ class FirestoreService {
     }
     if (isSuspended != null) {
       payload['isSuspended'] = isSuspended;
-      payload['suspendedAt'] = isSuspended ? FieldValue.serverTimestamp() : null;
+      payload['suspendedAt'] =
+          isSuspended ? FieldValue.serverTimestamp() : null;
     }
 
     await _firestore
@@ -494,6 +628,39 @@ class FirestoreService {
       final ts = doc.data()?['lastNotificationSeenAt'];
       if (ts == null) return null;
       return (ts as Timestamp).toDate();
+    });
+  }
+
+  Future<void> _createNotificationRecord({
+    required String toUserId,
+    required String type,
+    required String title,
+    required String body,
+    String? fromUserId,
+    String? orderId,
+    String? productId,
+    String? productName,
+    String? status,
+  }) async {
+    final targetUserId = toUserId.trim();
+    if (targetUserId.isEmpty) return;
+
+    await _firestore.collection('notifications').add({
+      'toUserId': targetUserId,
+      if (fromUserId != null && fromUserId.trim().isNotEmpty)
+        'fromUserId': fromUserId.trim(),
+      'type': type,
+      'title': title,
+      'body': body,
+      if (orderId != null && orderId.trim().isNotEmpty)
+        'orderId': orderId.trim(),
+      if (productId != null && productId.trim().isNotEmpty)
+        'productId': productId.trim(),
+      if (productName != null && productName.trim().isNotEmpty)
+        'productName': productName.trim(),
+      if (status != null && status.trim().isNotEmpty) 'status': status.trim(),
+      'createdAt': FieldValue.serverTimestamp(),
+      'seen': false,
     });
   }
 
@@ -749,6 +916,189 @@ class FirestoreService {
     });
   }
 
+  Future<List<String>> getPrivateSkilledCredentialLinks(String userId) async {
+    final doc = await _firestore
+        .collection(AppConstants.skilledVerificationPrivateCollection)
+        .doc(userId)
+        .get();
+    if (!doc.exists) return const <String>[];
+    final data = doc.data();
+    final links = data?['links'];
+    if (links is! List) return const <String>[];
+    return links
+        .map((link) => link?.toString().trim() ?? '')
+        .where((link) => link.isNotEmpty)
+        .toList();
+  }
+
+  Future<List<String>> savePrivateSkilledCredentialLinks({
+    required String userId,
+    required List<String> rawLinks,
+  }) async {
+    final normalizedUniqueLinks = rawLinks
+        .map((link) => link.trim())
+        .where((link) => link.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+
+    final validLinks = <String>[];
+    final hosts = <String>{};
+    for (final link in normalizedUniqueLinks) {
+      final uri = _parseCredentialUri(link);
+      if (uri == null) continue;
+      final reachable = await _isCredentialUrlReachable(uri);
+      if (!reachable) continue;
+      validLinks.add(uri.toString());
+      final host = uri.host.trim().toLowerCase();
+      if (host.isNotEmpty) hosts.add(host);
+    }
+
+    final privateRef = _firestore
+        .collection(AppConstants.skilledVerificationPrivateCollection)
+        .doc(userId);
+    final profileRef =
+        _firestore.collection(AppConstants.skilledUsersCollection).doc(userId);
+    final publicSummary = <String, dynamic>{
+      'hasConfidentialCredentials': validLinks.isNotEmpty,
+      'verifiedCredentialCount': validLinks.length,
+      'status':
+          validLinks.isNotEmpty ? 'credentials_on_file' : 'no_credentials',
+      'lastCheckedAt': FieldValue.serverTimestamp(),
+    };
+
+    final batch = _firestore.batch();
+    if (validLinks.isEmpty) {
+      batch.delete(privateRef);
+    } else {
+      batch.set(
+        privateRef,
+        {
+          'userId': userId,
+          'links': validLinks,
+          'hostCount': hosts.length,
+          'updatedAt': FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    }
+
+    batch.set(
+      profileRef,
+      {
+        'verificationData': {
+          'credentialSummary': publicSummary,
+        },
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+    await batch.commit();
+    return validLinks;
+  }
+
+  Future<SkilledCompanySocialProof> getSkilledCompanySocialProof(
+    String skilledUserId,
+  ) async {
+    final snapshot = await _firestore
+        .collection(AppConstants.ordersCollection)
+        .where('sellerId', isEqualTo: skilledUserId)
+        .get();
+
+    final relevantOrders = snapshot.docs
+        .map((doc) => OrderModel.fromMap(doc.data(), doc.id))
+        .where((order) => _isSuccessfulOrderStatus(order.status))
+        .toList();
+    if (relevantOrders.isEmpty) {
+      return const SkilledCompanySocialProof();
+    }
+
+    final buyerIds = relevantOrders
+        .map((order) => order.buyerId.trim())
+        .where((buyerId) => buyerId.isNotEmpty)
+        .toSet()
+        .toList();
+
+    final users = await Future.wait(
+      buyerIds.map(getUserById),
+    );
+    final companyUsersById = <String, UserModel>{};
+    for (final user in users) {
+      if (user == null) continue;
+      if (UserRoles.normalizeRole(user.role) == UserRoles.company) {
+        companyUsersById[user.uid] = user;
+      }
+    }
+    if (companyUsersById.isEmpty) {
+      return const SkilledCompanySocialProof();
+    }
+
+    final companyProfiles = await Future.wait(
+      companyUsersById.keys.map(getCompanyProfile),
+    );
+    final companyNamesById = <String, String>{};
+    for (var i = 0; i < companyProfiles.length; i++) {
+      final companyId = companyUsersById.keys.elementAt(i);
+      final companyProfile = companyProfiles[i];
+      final fallbackUser = companyUsersById[companyId];
+      final companyName =
+          (companyProfile?.companyName ?? fallbackUser?.name ?? '').trim();
+      companyNamesById[companyId] =
+          companyName.isEmpty ? 'Company buyer' : companyName;
+    }
+
+    final ordersByCompany = <String, List<OrderModel>>{};
+    for (final order in relevantOrders) {
+      if (!companyUsersById.containsKey(order.buyerId)) continue;
+      ordersByCompany
+          .putIfAbsent(order.buyerId, () => <OrderModel>[])
+          .add(order);
+    }
+    if (ordersByCompany.isEmpty) {
+      return const SkilledCompanySocialProof();
+    }
+
+    final highlights = ordersByCompany.entries.map((entry) {
+      final companyOrders = entry.value;
+      companyOrders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final totalUnits =
+          companyOrders.fold<int>(0, (total, order) => total + order.quantity);
+      final totalSpend = companyOrders.fold<double>(
+          0, (total, order) => total + order.totalPrice);
+      return CompanyBuyerHighlight(
+        companyId: entry.key,
+        companyName: companyNamesById[entry.key] ?? 'Company buyer',
+        totalOrders: companyOrders.length,
+        totalUnits: totalUnits,
+        totalSpend: totalSpend,
+        latestOrderAt: companyOrders.first.createdAt,
+      );
+    }).toList()
+      ..sort((a, b) {
+        final unitCompare = b.totalUnits.compareTo(a.totalUnits);
+        if (unitCompare != 0) return unitCompare;
+        return b.latestOrderAt.compareTo(a.latestOrderAt);
+      });
+
+    return SkilledCompanySocialProof(
+      uniqueCompanyBuyers: highlights.length,
+      companyOrdersCount: highlights.fold<int>(
+        0,
+        (total, item) => total + item.totalOrders,
+      ),
+      companyUnitsBought: highlights.fold<int>(
+        0,
+        (total, item) => total + item.totalUnits,
+      ),
+      companyRevenue: highlights.fold<double>(
+        0,
+        (total, item) => total + item.totalSpend,
+      ),
+      topCompanyBuyers: highlights.take(3).toList(),
+    );
+  }
+
   /// Counts a skilled profile view only once per viewer.
   Future<void> trackUniqueSkilledProfileView({
     required String skilledUserId,
@@ -988,72 +1338,102 @@ class FirestoreService {
     List<String>? skills,
     int limit = 20,
   }) async {
-    Query query = _firestore
-        .collection(AppConstants.skilledUsersCollection)
-        .where('isVerified', isEqualTo: true)
-        .where('visibility', isEqualTo: AppConstants.visibilityPublic);
+    if (_auth.currentUser == null) return [];
 
-    if (category != null) {
-      query = query.where('category', isEqualTo: category);
-    }
+    try {
+      Query query = _firestore
+          .collection(AppConstants.skilledUsersCollection)
+          .where('isVerified', isEqualTo: true)
+          .where('visibility', isEqualTo: AppConstants.visibilityPublic);
 
-    final fetchLimit = (limit * 3).clamp(20, 120).toInt();
-    query = query.limit(fetchLimit);
+      if (category != null) {
+        query = query.where('category', isEqualTo: category);
+      }
 
-    final snapshot = await query.get();
-    final dedupedProfiles = <String, SkilledUserProfile>{};
+      final fetchLimit = (limit * 3).clamp(20, 120).toInt();
+      query = query.limit(fetchLimit);
 
-    for (final doc in snapshot.docs) {
-      final profile = SkilledUserProfile.fromMap(
-        doc.data() as Map<String, dynamic>,
-        doc.id,
-      );
-      if (!_isSkilledProfileAadhaarVerified(profile)) continue;
-      if (profile.userId.trim().isEmpty) continue;
-      if (doc.id != profile.userId) {
-        // Legacy compatibility: move auto-id profile docs to /skilled_users/{uid}.
-        try {
-          final legacyData = Map<String, dynamic>.from(
-            doc.data() as Map<String, dynamic>,
-          );
-          legacyData['userId'] = profile.userId;
-          await _firestore
-              .collection(AppConstants.skilledUsersCollection)
-              .doc(profile.userId)
-              .set(legacyData, SetOptions(merge: true));
-        } catch (e) {
-          debugPrint(
-            'Verified profile migration skipped (${profile.userId}): $e',
-          );
+      final snapshot = await query.get();
+      final dedupedProfiles = <String, SkilledUserProfile>{};
+
+      for (final doc in snapshot.docs) {
+        final profile = SkilledUserProfile.fromMap(
+          doc.data() as Map<String, dynamic>,
+          doc.id,
+        );
+        if (!_isSkilledProfileAadhaarVerified(profile)) continue;
+        if (profile.userId.trim().isEmpty) continue;
+        if (doc.id != profile.userId) {
+          // Legacy compatibility: move auto-id profile docs to /skilled_users/{uid}.
+          try {
+            final legacyData = Map<String, dynamic>.from(
+              doc.data() as Map<String, dynamic>,
+            );
+            legacyData['userId'] = profile.userId;
+            await _firestore
+                .collection(AppConstants.skilledUsersCollection)
+                .doc(profile.userId)
+                .set(legacyData, SetOptions(merge: true));
+          } catch (e) {
+            debugPrint(
+              'Verified profile migration skipped (${profile.userId}): $e',
+            );
+          }
+        }
+
+        final existing = dedupedProfiles[profile.userId];
+        if (existing == null || profile.updatedAt.isAfter(existing.updatedAt)) {
+          dedupedProfiles[profile.userId] = profile;
         }
       }
 
-      final existing = dedupedProfiles[profile.userId];
-      if (existing == null || profile.updatedAt.isAfter(existing.updatedAt)) {
-        dedupedProfiles[profile.userId] = profile;
+      var profiles = dedupedProfiles.values.toList();
+
+      if (skills != null && skills.isNotEmpty) {
+        final normalizedSkills = skills
+            .map((skill) => skill.toLowerCase().trim())
+            .where((skill) => skill.isNotEmpty)
+            .toSet();
+        if (normalizedSkills.isNotEmpty) {
+          profiles = profiles.where((profile) {
+            final profileSkills =
+                profile.skills.map((skill) => skill.toLowerCase().trim());
+            return profileSkills.any(normalizedSkills.contains);
+          }).toList();
+        }
       }
-    }
 
-    var profiles = dedupedProfiles.values.toList();
+      if (profiles.isEmpty) return profiles;
 
-    if (skills != null && skills.isNotEmpty) {
-      final normalizedSkills = skills
-          .map((skill) => skill.toLowerCase().trim())
-          .where((skill) => skill.isNotEmpty)
-          .toSet();
-      if (normalizedSkills.isNotEmpty) {
-        profiles = profiles.where((profile) {
-          final profileSkills =
-              profile.skills.map((skill) => skill.toLowerCase().trim());
-          return profileSkills.any(normalizedSkills.contains);
-        }).toList();
+      // Dynamic privacy guard: hide profiles where users.settings.profileVisible is false.
+      final userDocs = await Future.wait(
+        profiles.map((p) => _firestore
+            .collection(AppConstants.usersCollection)
+            .doc(p.userId)
+            .get()),
+      );
+      final hiddenUserIds = <String>{};
+      for (final doc in userDocs) {
+        final settings = doc.data()?['settings'];
+        final visible = settings is Map
+            ? (settings['profileVisible'] as bool? ?? true)
+            : true;
+        if (!visible) hiddenUserIds.add(doc.id);
       }
-    }
 
-    if (profiles.length > limit) {
-      return profiles.sublist(0, limit);
+      profiles =
+          profiles.where((p) => !hiddenUserIds.contains(p.userId)).toList();
+
+      if (profiles.length > limit) {
+        return profiles.sublist(0, limit);
+      }
+      return profiles;
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied' || e.code == 'failed-precondition') {
+        return [];
+      }
+      rethrow;
     }
-    return profiles;
   }
 
   // ===== Customer Profile =====
@@ -1412,6 +1792,8 @@ class FirestoreService {
   }
 
   Future<List<ProductModel>> getAllProducts({int limit = 50}) async {
+    if (_auth.currentUser == null) return [];
+
     try {
       final snapshot = await _firestore
           .collection(AppConstants.productsCollection)
@@ -1686,6 +2068,169 @@ class FirestoreService {
     return items.fold<int>(0, (totalItems, item) => totalItems + item.quantity);
   }
 
+  Future<OrderModel> purchaseProductDirect({
+    required String userId,
+    required ProductModel product,
+    int quantity = 1,
+    String paymentMethod = 'gpay_simulation',
+    String? paymentReference,
+    String? deliveryAddress,
+    String? deliveryLocation,
+  }) async {
+    if (quantity <= 0) {
+      throw Exception('Quantity must be at least 1.');
+    }
+    if (userId == product.userId) {
+      throw Exception('You cannot buy your own product.');
+    }
+
+    final buyer = await getUserById(userId);
+    final shopSettings = await getShopSettings(product.userId);
+    final userSettings = await getUserSettings(product.userId);
+
+    int parseMaxDeliveryQuantity(dynamic value) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      if (value is String) {
+        final parsed = int.tryParse(value.trim());
+        if (parsed != null) return parsed;
+      }
+      return 0;
+    }
+
+    bool parseAllowDelivery(dynamic value) {
+      if (value is bool) return value;
+      if (value is String) {
+        final normalized = value.trim().toLowerCase();
+        return normalized == 'true' || normalized == '1' || normalized == 'yes';
+      }
+      if (value is num) return value != 0;
+      return true;
+    }
+
+    final profileWorkflowEnabled =
+        (userSettings['enableShopDeliveryWorkflow'] as bool?) ?? false;
+    final allowDeliveryIfAvailable =
+        parseAllowDelivery(shopSettings['enableDeliveryIfAvailable']);
+    final configuredMaxDeliveryQty =
+        parseMaxDeliveryQuantity(shopSettings['maxDeliveryQuantity']);
+    final appliedMaxDeliveryQty =
+        configuredMaxDeliveryQty > 0 ? configuredMaxDeliveryQty : 10;
+    final deliveryByPartner = profileWorkflowEnabled &&
+        allowDeliveryIfAvailable &&
+        quantity <= appliedMaxDeliveryQty;
+    final deliveryCode = _generateDeliveryVerificationCode();
+    final normalizedPaymentMethod =
+        paymentMethod.trim().isEmpty ? 'gpay_simulation' : paymentMethod.trim();
+    final normalizedReference = paymentReference?.trim();
+    final normalizedDeliveryAddress = deliveryAddress?.trim();
+    final normalizedDeliveryLocation = deliveryLocation?.trim();
+
+    final productRef =
+        _firestore.collection(AppConstants.productsCollection).doc(product.id);
+    final cartItemRef = _firestore
+        .collection(AppConstants.cartsCollection)
+        .doc(userId)
+        .collection('items')
+        .doc(product.id);
+    final orderRef = _firestore.collection(AppConstants.ordersCollection).doc();
+    final now = DateTime.now();
+    late final OrderModel createdOrder;
+
+    await _firestore.runTransaction((transaction) async {
+      final productSnap = await transaction.get(productRef);
+      if (!productSnap.exists || productSnap.data() == null) {
+        throw Exception('Product no longer exists.');
+      }
+
+      final latestProduct =
+          ProductModel.fromMap(productSnap.data()!, productSnap.id);
+      if (!latestProduct.isAvailable || latestProduct.stock <= 0) {
+        throw Exception('This product is currently out of stock.');
+      }
+      if (quantity > latestProduct.stock) {
+        throw Exception(
+            'Only ${latestProduct.stock} item(s) are available in stock.');
+      }
+
+      final remainingStock = latestProduct.stock - quantity;
+
+      createdOrder = OrderModel(
+        id: orderRef.id,
+        buyerId: userId,
+        sellerId: latestProduct.userId,
+        productId: latestProduct.id,
+        productName: latestProduct.name,
+        productImage:
+            latestProduct.images.isNotEmpty ? latestProduct.images.first : null,
+        quantity: quantity,
+        unitPrice: latestProduct.price,
+        totalPrice: latestProduct.price * quantity,
+        status: 'pending',
+        buyerName: buyer?.name,
+        buyerEmail: buyer?.email,
+        paymentMethod: normalizedPaymentMethod,
+        paymentStatus: 'paid',
+        paymentReference:
+            (normalizedReference != null && normalizedReference.isNotEmpty)
+                ? normalizedReference
+                : null,
+        paidAt: now,
+        sellerTransferStatus: 'credited_simulated',
+        sellerTransferAt: now,
+        statusTimeline: {'pending': now},
+        deliveryAddress: normalizedDeliveryAddress != null &&
+                normalizedDeliveryAddress.isNotEmpty
+            ? normalizedDeliveryAddress
+            : null,
+        deliveryLocation: normalizedDeliveryLocation != null &&
+                normalizedDeliveryLocation.isNotEmpty
+            ? normalizedDeliveryLocation
+            : null,
+        deliveryVerificationCode: deliveryCode,
+        deliveryByPartner: deliveryByPartner,
+        deliveryQuantityLimit: appliedMaxDeliveryQty,
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      transaction.set(orderRef, createdOrder.toMap());
+      transaction.update(productRef, {
+        'stock': remainingStock,
+        'isAvailable': remainingStock > 0,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      transaction.delete(cartItemRef);
+    });
+
+    await _createNotificationRecord(
+      toUserId: createdOrder.sellerId,
+      fromUserId: createdOrder.buyerId,
+      type: 'shopOrderPlaced',
+      title: 'New shop order received',
+      body:
+          '${createdOrder.buyerName ?? 'A customer'} placed an order for ${createdOrder.quantity} x ${createdOrder.productName}.',
+      orderId: createdOrder.id,
+      productId: createdOrder.productId,
+      productName: createdOrder.productName,
+      status: createdOrder.status,
+    );
+
+    await _createNotificationRecord(
+      toUserId: createdOrder.buyerId,
+      fromUserId: createdOrder.sellerId,
+      type: 'shopOrderPlaced',
+      title: 'Order placed successfully',
+      body: 'Your order for ${createdOrder.productName} has been placed.',
+      orderId: createdOrder.id,
+      productId: createdOrder.productId,
+      productName: createdOrder.productName,
+      status: createdOrder.status,
+    );
+
+    return createdOrder;
+  }
+
   Future<List<OrderModel>> checkoutCart(
     String userId, {
     String paymentMethod = 'gpay_simulation',
@@ -1817,6 +2362,12 @@ class FirestoreService {
       );
       createdOrders.add(order);
       batch.set(orderRef, order.toMap());
+      final remainingStock = latestProduct.stock - item.quantity;
+      batch.update(productRef, {
+        'stock': remainingStock,
+        'isAvailable': remainingStock > 0,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
 
       final cartItemRef = _firestore
           .collection(AppConstants.cartsCollection)
@@ -1827,6 +2378,39 @@ class FirestoreService {
     }
 
     await batch.commit();
+
+    final notificationTasks = <Future<void>>[];
+    for (final order in createdOrders) {
+      notificationTasks.add(
+        _createNotificationRecord(
+          toUserId: order.sellerId,
+          fromUserId: order.buyerId,
+          type: 'shopOrderPlaced',
+          title: 'New shop order received',
+          body:
+              '${order.buyerName ?? 'A customer'} placed an order for ${order.quantity} x ${order.productName}.',
+          orderId: order.id,
+          productId: order.productId,
+          productName: order.productName,
+          status: order.status,
+        ),
+      );
+      notificationTasks.add(
+        _createNotificationRecord(
+          toUserId: order.buyerId,
+          fromUserId: order.sellerId,
+          type: 'shopOrderPlaced',
+          title: 'Order placed successfully',
+          body: 'Your order for ${order.productName} has been placed.',
+          orderId: order.id,
+          productId: order.productId,
+          productName: order.productName,
+          status: order.status,
+        ),
+      );
+    }
+    await Future.wait(notificationTasks);
+
     return createdOrders;
   }
 
@@ -1915,6 +2499,33 @@ class FirestoreService {
       'statusTimeline.$status': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    final buyerId = (data['buyerId'] as String?)?.trim() ?? '';
+    final productId = (data['productId'] as String?)?.trim() ?? '';
+    final productName =
+        (data['productName'] as String?)?.trim() ?? 'your order';
+
+    final statusTitle = switch (status) {
+      'confirmed' => 'Order confirmed',
+      'shipped' => 'Order shipped',
+      'delivered' => 'Order delivered',
+      'cancelled' => 'Order cancelled',
+      _ => 'Order updated',
+    };
+
+    if (buyerId.isNotEmpty) {
+      await _createNotificationRecord(
+        toUserId: buyerId,
+        fromUserId: sellerId,
+        type: 'shopOrderStatusUpdated',
+        title: statusTitle,
+        body: 'Your order for $productName is now ${status.toUpperCase()}.',
+        orderId: orderId,
+        productId: productId,
+        productName: productName,
+        status: status,
+      );
+    }
   }
 
   // ===== Delivery Partner =====
@@ -1995,6 +2606,38 @@ class FirestoreService {
       updateData['estimatedDelivery'] = Timestamp.fromDate(estimatedDelivery);
     }
     await ref.update(updateData);
+
+    final buyerId = (data['buyerId'] as String?)?.trim() ?? '';
+    final sellerId = (data['sellerId'] as String?)?.trim() ?? '';
+    final productId = (data['productId'] as String?)?.trim() ?? '';
+    final productName =
+        (data['productName'] as String?)?.trim() ?? 'your order';
+
+    await _createNotificationRecord(
+      toUserId: deliveryPartnerId,
+      fromUserId: sellerId,
+      type: 'shopDeliveryAssigned',
+      title: 'New delivery assigned',
+      body: 'You have been assigned to deliver $productName.',
+      orderId: orderId,
+      productId: productId,
+      productName: productName,
+      status: 'out_for_delivery',
+    );
+
+    if (buyerId.isNotEmpty) {
+      await _createNotificationRecord(
+        toUserId: buyerId,
+        fromUserId: deliveryPartnerId,
+        type: 'shopDeliveryAssigned',
+        title: 'Delivery partner assigned',
+        body: 'A delivery partner is assigned for your order of $productName.',
+        orderId: orderId,
+        productId: productId,
+        productName: productName,
+        status: 'out_for_delivery',
+      );
+    }
   }
 
   /// Update order delivery status (only assigned delivery partner can do this).
@@ -2045,6 +2688,48 @@ class FirestoreService {
         'deliveryCodeVerifiedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    final buyerId = (data['buyerId'] as String?)?.trim() ?? '';
+    final sellerId = (data['sellerId'] as String?)?.trim() ?? '';
+    final productId = (data['productId'] as String?)?.trim() ?? '';
+    final productName =
+        (data['productName'] as String?)?.trim() ?? 'your order';
+
+    final eventTitle = switch (status) {
+      'out_for_delivery' => 'Order is out for delivery',
+      'delivered' => 'Order delivered',
+      'failed_delivery' => 'Delivery attempt failed',
+      _ => 'Delivery status updated',
+    };
+
+    if (buyerId.isNotEmpty) {
+      await _createNotificationRecord(
+        toUserId: buyerId,
+        fromUserId: deliveryPartnerId,
+        type: 'shopDeliveryStatusUpdated',
+        title: eventTitle,
+        body: 'Delivery update for $productName: ${status.toUpperCase()}.',
+        orderId: orderId,
+        productId: productId,
+        productName: productName,
+        status: status,
+      );
+    }
+
+    if (sellerId.isNotEmpty) {
+      await _createNotificationRecord(
+        toUserId: sellerId,
+        fromUserId: deliveryPartnerId,
+        type: 'shopDeliveryStatusUpdated',
+        title: eventTitle,
+        body:
+            'Delivery update for your order item $productName: ${status.toUpperCase()}.',
+        orderId: orderId,
+        productId: productId,
+        productName: productName,
+        status: status,
+      );
+    }
   }
 
   /// Update estimated delivery timeline for the assigned delivery partner.
@@ -2879,14 +3564,21 @@ class FirestoreService {
     return docRef.id;
   }
 
-  Stream<List<ServiceRequestModel>> streamChatWorkRequests(String chatId) {
+  Stream<List<ServiceRequestModel>> streamChatWorkRequests(
+    String chatId, {
+    required String currentUserId,
+  }) {
+    if (currentUserId.trim().isEmpty) {
+      return Stream.value(const <ServiceRequestModel>[]);
+    }
     return _firestore
         .collection(AppConstants.requestsCollection)
-        .where('chatId', isEqualTo: chatId) // single-field — no composite index
+        .where('participants', arrayContains: currentUserId)
         .snapshots()
         .map((snapshot) {
       final requests = snapshot.docs
           .map((doc) => ServiceRequestModel.fromMap(doc.data(), doc.id))
+          .where((request) => request.chatId == chatId)
           .where(_isWorkRequestLike) // type filter in memory
           .toList();
       requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -3267,27 +3959,35 @@ class FirestoreService {
   Future<List<SkilledUserProfile>> getPendingVerifications() async {
     final snapshot = await _firestore
         .collection(AppConstants.skilledUsersCollection)
-        .where('verificationStatus',
-            isEqualTo: AppConstants.verificationPending)
-        .orderBy('createdAt', descending: false)
+        .limit(1000)
         .get();
 
-    return snapshot.docs
+    final pending = snapshot.docs
         .map((doc) => SkilledUserProfile.fromMap(doc.data(), doc.id))
+        .where((p) =>
+            p.verificationStatus.toLowerCase().trim() ==
+            AppConstants.verificationPending)
         .toList();
+
+    pending.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return pending;
   }
 
   Stream<List<SkilledUserProfile>> streamPendingVerifications() {
     return _firestore
         .collection(AppConstants.skilledUsersCollection)
-        .where('verificationStatus',
-            isEqualTo: AppConstants.verificationPending)
-        .orderBy('createdAt', descending: false)
+        .limit(1000)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
+      final pending = snapshot.docs
           .map((doc) => SkilledUserProfile.fromMap(doc.data(), doc.id))
+          .where((p) =>
+              p.verificationStatus.toLowerCase().trim() ==
+              AppConstants.verificationPending)
           .toList();
+
+      pending.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      return pending;
     });
   }
 
@@ -3479,8 +4179,9 @@ class FirestoreService {
           .snapshots()
           .listen(
         (snapshot) {
-          reports =
-              snapshot.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList();
+          reports = snapshot.docs
+              .map((doc) => {'id': doc.id, ...doc.data()})
+              .toList();
           reports.sort((a, b) {
             final aTime = a['createdAt'];
             final bTime = b['createdAt'];
@@ -3500,15 +4201,18 @@ class FirestoreService {
 
       pendingSub = _firestore
           .collection(AppConstants.skilledUsersCollection)
-          .where('verificationStatus',
-              isEqualTo: AppConstants.verificationPending)
-          .orderBy('createdAt', descending: false)
+          .limit(limit * 3)
           .snapshots()
           .listen(
         (snapshot) {
           pendingVerifications = snapshot.docs
               .map((doc) => SkilledUserProfile.fromMap(doc.data(), doc.id))
+              .where((p) =>
+                  p.verificationStatus.toLowerCase().trim() ==
+                  AppConstants.verificationPending)
               .toList();
+          pendingVerifications
+              .sort((a, b) => a.createdAt.compareTo(b.createdAt));
           emit();
         },
         onError: (Object e, StackTrace st) {

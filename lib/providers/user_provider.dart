@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/skilled_user_profile.dart';
 import '../models/customer_profile.dart';
 import '../models/company_profile.dart';
@@ -163,6 +164,13 @@ class UserProvider with ChangeNotifier {
   // Load verified skilled users
   Future<void> loadVerifiedUsers(
       {String? category, List<String>? skills}) async {
+    if (FirebaseAuth.instance.currentUser == null) {
+      _verifiedUsers = [];
+      _isLoading = false;
+      notifyListeners();
+      return;
+    }
+
     try {
       _isLoading = true;
       notifyListeners();

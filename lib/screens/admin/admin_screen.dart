@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
@@ -23,20 +24,98 @@ class AdminScreen extends StatefulWidget {
 }
 
 class _AdminScreenState extends State<AdminScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late TabController _tabController;
+  late final AnimationController _headerGradientCtrl;
   final FirestoreService _firestoreService = FirestoreService();
+  final GlobalKey<_UsersTabState> _usersTabKey = GlobalKey<_UsersTabState>();
+  int _activeTab = 0;
+
+  static const List<List<List<Color>>> _headerTabGradients = [
+    [
+      [Color(0xFF10215F), Color(0xFF3D2A95), Color(0xFF7B1FA2)],
+      [Color(0xFF0B2E63), Color(0xFF4E2A9C), Color(0xFF8E24AA)],
+    ],
+    [
+      [Color(0xFF0D3B73), Color(0xFF1E88E5), Color(0xFF5E35B1)],
+      [Color(0xFF004C8C), Color(0xFF1565C0), Color(0xFF7E57C2)],
+    ],
+    [
+      [Color(0xFF6A1B9A), Color(0xFFAD1457), Color(0xFFFF7043)],
+      [Color(0xFF7B1FA2), Color(0xFFD81B60), Color(0xFFFF8A65)],
+    ],
+    [
+      [Color(0xFF283593), Color(0xFF8E24AA), Color(0xFFE53935)],
+      [Color(0xFF3949AB), Color(0xFFAB47BC), Color(0xFFFF5252)],
+    ],
+  ];
+
+  static const List<Color> _tabAccents = [
+    Color(0xFFFFD54F),
+    Color(0xFF81D4FA),
+    Color(0xFFFFCC80),
+    Color(0xFFFFAB91),
+  ];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(_onTabChanged);
+    _headerGradientCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 11),
+    )..repeat();
+  }
+
+  void _onTabChanged() {
+    if (!_tabController.indexIsChanging && _activeTab != _tabController.index) {
+      setState(() => _activeTab = _tabController.index);
+    }
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
+    _headerGradientCtrl.dispose();
     super.dispose();
+  }
+
+  Alignment _animatedHeaderBegin() {
+    final a = _headerGradientCtrl.value * 2 * math.pi;
+    return Alignment(math.cos(a), math.sin(a));
+  }
+
+  Alignment _animatedHeaderEnd() {
+    final a = _headerGradientCtrl.value * 2 * math.pi + math.pi;
+    return Alignment(math.cos(a), math.sin(a));
+  }
+
+  Widget _buildAnimatedHeaderBackground() {
+    return AnimatedBuilder(
+      animation: _headerGradientCtrl,
+      builder: (context, _) {
+        final gradients = _headerTabGradients[_activeTab];
+        final first = gradients[0];
+        final second = gradients[1];
+        final t = Curves.easeInOut.transform(_headerGradientCtrl.value);
+        final blended = List<Color>.generate(
+          first.length,
+          (i) => Color.lerp(first[i], second[i], t)!,
+        );
+
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: blended,
+              begin: _animatedHeaderBegin(),
+              end: _animatedHeaderEnd(),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -75,28 +154,59 @@ class _AdminScreenState extends State<AdminScreen>
             ),
           ],
         ),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF0F1B5B), Color(0xFF5E2CA5), Color(0xFF8E24AA)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
+        flexibleSpace: _buildAnimatedHeaderBackground(),
         elevation: 2,
         actions: [
-          IconButton(
-            tooltip: 'Logout',
-            onPressed: _logout,
-            icon: const Icon(Icons.logout_rounded, color: Colors.white),
+          Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFEF5350), Color(0xFFF57C00)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFEF5350).withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(999),
+                  onTap: _logout,
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    child: Row(
+                      children: [
+                        Text(
+                          'Logout',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        SizedBox(width: 6),
+                        Icon(Icons.logout_rounded, color: Colors.white, size: 18),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
           indicatorSize: TabBarIndicatorSize.label,
-          indicator: const UnderlineTabIndicator(
-            borderSide: BorderSide(color: Color(0xFFFFD54F), width: 3),
+          indicator: UnderlineTabIndicator(
+            borderSide: BorderSide(color: _tabAccents[_activeTab], width: 3),
           ),
           labelColor: Colors.white,
           unselectedLabelColor: const Color(0xFFCEBFE8),
@@ -111,17 +221,41 @@ class _AdminScreenState extends State<AdminScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _DashboardTab(firestoreService: _firestoreService),
-          _TabGradientShell(
-            colors: const [Color(0xFFEFF7FF), Color(0xFFF6F1FF)],
-            child: _UsersTab(firestoreService: _firestoreService),
+          _AnimatedTabGradientShell(
+            colors: const [
+              [Color(0xFFE8F1FF), Color(0xFFF5EEFF), Color(0xFFFFF2F7)],
+              [Color(0xFFEFFBFF), Color(0xFFF5F2FF), Color(0xFFFFF8EC)],
+            ],
+            child: _DashboardTab(
+              firestoreService: _firestoreService,
+              onOpenPendingVerifications: () {
+                _tabController.animateTo(1);
+                _usersTabKey.currentState?.showPendingVerificationFilter();
+              },
+              onOpenReports: () {
+                _tabController.animateTo(3);
+              },
+            ),
           ),
-          _TabGradientShell(
-            colors: const [Color(0xFFFFF4EE), Color(0xFFF8F2FF)],
+          _AnimatedTabGradientShell(
+            colors: const [
+              [Color(0xFFEAF4FF), Color(0xFFF1EEFF), Color(0xFFF4FCFF)],
+              [Color(0xFFFFF2F8), Color(0xFFEFF7FF), Color(0xFFF6F3FF)],
+            ],
+            child: _UsersTab(key: _usersTabKey, firestoreService: _firestoreService),
+          ),
+          _AnimatedTabGradientShell(
+            colors: const [
+              [Color(0xFFFFF4EE), Color(0xFFF8F2FF), Color(0xFFEFFFFC)],
+              [Color(0xFFFFFAF1), Color(0xFFEFF2FF), Color(0xFFFFF0F7)],
+            ],
             child: AdminProductsTab(firestoreService: _firestoreService),
           ),
-          _TabGradientShell(
-            colors: const [Color(0xFFFFF6EF), Color(0xFFFFF1F7)],
+          _AnimatedTabGradientShell(
+            colors: const [
+              [Color(0xFFFFF6EF), Color(0xFFFFF1F7), Color(0xFFEFFBFF)],
+              [Color(0xFFFFFCEF), Color(0xFFF4EEFF), Color(0xFFFFF4F4)],
+            ],
             child: _ReportsTab(firestoreService: _firestoreService),
           ),
         ],
@@ -150,23 +284,68 @@ class _AdminScreenState extends State<AdminScreen>
   }
 }
 
-class _TabGradientShell extends StatelessWidget {
+class _AnimatedTabGradientShell extends StatefulWidget {
   final Widget child;
-  final List<Color> colors;
+  final List<List<Color>> colors;
 
-  const _TabGradientShell({required this.child, required this.colors});
+  const _AnimatedTabGradientShell({
+    required this.child,
+    required this.colors,
+  });
+
+  @override
+  State<_AnimatedTabGradientShell> createState() =>
+      _AnimatedTabGradientShellState();
+}
+
+class _AnimatedTabGradientShellState extends State<_AnimatedTabGradientShell>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 14),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Alignment _movingAlignment(double phaseShift) {
+    final a = (_controller.value * 2 * math.pi) + phaseShift;
+    return Alignment(math.cos(a), math.sin(a));
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: colors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: child,
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final first = widget.colors[0];
+        final second = widget.colors[1];
+        final t = Curves.easeInOut.transform(_controller.value);
+        final blended = List<Color>.generate(
+          first.length,
+          (i) => Color.lerp(first[i], second[i], t)!,
+        );
+
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: blended,
+              begin: _movingAlignment(0),
+              end: _movingAlignment(math.pi),
+            ),
+          ),
+          child: widget.child,
+        );
+      },
     );
   }
 }
@@ -175,7 +354,14 @@ class _TabGradientShell extends StatelessWidget {
 
 class _DashboardTab extends StatelessWidget {
   final FirestoreService firestoreService;
-  const _DashboardTab({required this.firestoreService});
+  final VoidCallback onOpenPendingVerifications;
+  final VoidCallback onOpenReports;
+
+  const _DashboardTab({
+    required this.firestoreService,
+    required this.onOpenPendingVerifications,
+    required this.onOpenReports,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -244,10 +430,22 @@ class _DashboardTab extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            Card(
-              elevation: 1.5,
-              shape: RoundedRectangleBorder(
+            Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFFFFFF), Color(0xFFF6F7FF), Color(0xFFEFFBFF)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
                 borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFD8E2FF)),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF5E35B1).withValues(alpha: 0.12),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: Column(
                 children: [
@@ -274,7 +472,11 @@ class _DashboardTab extends StatelessWidget {
             const SizedBox(height: 24),
             const Text(
               'Quick Actions',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF33254C),
+              ),
             ),
             const SizedBox(height: 12),
             _QuickActionTile(
@@ -282,18 +484,14 @@ class _DashboardTab extends StatelessWidget {
               title: 'Pending Verifications',
               subtitle: '${pendingVerifs.length} skilled user(s) pending',
               color: const Color(0xFF00695C),
-              onTap: () {
-                // Navigate to users tab and filter pending
-              },
+              onTap: onOpenPendingVerifications,
             ),
             _QuickActionTile(
               icon: Icons.flag_outlined,
               title: 'Open Reports',
               subtitle: '$pendingReports report(s) need attention',
               color: Colors.orange,
-              onTap: () {
-                // Navigate to reports tab
-              },
+              onTap: onOpenReports,
             ),
           ],
         );
@@ -347,15 +545,21 @@ class _MetricListRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    return Container(
+      margin: const EdgeInsets.fromLTRB(10, 6, 10, 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
       child: Row(
         children: [
           Container(
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
+              color: color.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 18),
@@ -398,9 +602,27 @@ class _QuickActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.white,
+            color.withValues(alpha: 0.12),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.12),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
       child: ListTile(
         leading: Container(
           padding: const EdgeInsets.all(8),
@@ -423,7 +645,7 @@ class _QuickActionTile extends StatelessWidget {
 
 class _UsersTab extends StatefulWidget {
   final FirestoreService firestoreService;
-  const _UsersTab({required this.firestoreService});
+  const _UsersTab({super.key, required this.firestoreService});
 
   @override
   State<_UsersTab> createState() => _UsersTabState();
@@ -434,10 +656,18 @@ class _UsersTabState extends State<_UsersTab> {
       DeliveryPartnerAdminService();
   List<UserModel> _allUsers = [];
   List<UserModel> _filteredUsers = [];
+  Set<String> _pendingVerificationUserIds = <String>{};
   bool _isLoading = true;
   bool _isBulkCreatingUsers = false;
   String _searchQuery = '';
   String? _roleFilter;
+  bool _pendingVerificationOnly = false;
+
+  void showPendingVerificationFilter() {
+    _pendingVerificationOnly = true;
+    _roleFilter = UserRoles.skilledPerson;
+    _applyFilter();
+  }
 
   @override
   void initState() {
@@ -447,7 +677,63 @@ class _UsersTabState extends State<_UsersTab> {
 
   Future<void> _loadUsers() async {
     setState(() => _isLoading = true);
-    _allUsers = await widget.firestoreService.getAllUsers(limit: 300);
+
+    final allUsers = await widget.firestoreService.getAllUsers(limit: 300);
+
+    final pendingSnapshot = await FirebaseFirestore.instance
+        .collection('skilled_users')
+        .limit(1000)
+        .get();
+
+    final pendingIdCandidates = <String>{};
+    final pendingProfileByAnyId = <String, Map<String, dynamic>>{};
+
+    for (final doc in pendingSnapshot.docs) {
+      final data = doc.data();
+      final status =
+          ((data['verificationStatus'] as String?) ?? '').toLowerCase().trim();
+      if (status != 'pending') continue;
+
+      final ids = <String>{
+        doc.id,
+        ((data['userId'] as String?) ?? '').trim(),
+        ((data['uid'] as String?) ?? '').trim(),
+        ((data['userUid'] as String?) ?? '').trim(),
+        ((data['ownerId'] as String?) ?? '').trim(),
+        ((data['createdBy'] as String?) ?? '').trim(),
+      }..removeWhere((id) => id.isEmpty);
+
+      pendingIdCandidates.addAll(ids);
+      for (final id in ids) {
+        pendingProfileByAnyId[id] = data;
+      }
+    }
+
+    _pendingVerificationUserIds = pendingIdCandidates;
+
+    // Some older records can have pending skilled profiles without a matching
+    // users document. Add lightweight fallback rows so pending filter is never empty.
+    final existingUserIds = allUsers.map((u) => u.uid).toSet();
+    final fallbackUsers = pendingIdCandidates
+        .where((id) => !existingUserIds.contains(id))
+        .map((id) {
+      final data = pendingProfileByAnyId[id] ?? const <String, dynamic>{};
+      return UserModel(
+        uid: id,
+        email: ((data['email'] as String?) ?? '').trim(),
+        name: ((data['name'] as String?) ?? 'Pending Skilled User').trim(),
+        role: UserRoles.skilledPerson,
+        phone: ((data['phone'] as String?) ?? '').trim(),
+        profilePhoto: ((data['profilePicture'] as String?) ?? '').trim(),
+        createdAt:
+            (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        updatedAt:
+            (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        isActive: true,
+      );
+    }).toList();
+
+    _allUsers = [...allUsers, ...fallbackUsers];
     _applyFilter();
     if (mounted) setState(() => _isLoading = false);
   }
@@ -459,7 +745,9 @@ class _UsersTabState extends State<_UsersTab> {
             u.name.toLowerCase().contains(_searchQuery) ||
             u.email.toLowerCase().contains(_searchQuery);
         final matchesRole = _roleFilter == null || u.role == _roleFilter;
-        return matchesSearch && matchesRole;
+        final matchesPending = !_pendingVerificationOnly ||
+            _pendingVerificationUserIds.contains(u.uid);
+        return matchesSearch && matchesRole && matchesPending;
       }).toList();
     });
   }
@@ -570,9 +858,8 @@ class _UsersTabState extends State<_UsersTab> {
 
     try {
       final raw = utf8.decode(bytes, allowMalformed: true);
-      final rows = const CsvToListConverter(
-        shouldParseNumbers: false,
-        eol: '\n',
+      final rows = const CsvDecoder(
+        dynamicTyping: false,
       ).convert(raw);
 
       if (rows.length < 2) {
@@ -906,8 +1193,30 @@ class _UsersTabState extends State<_UsersTab> {
         ),
         Padding(
           padding: const EdgeInsets.all(12),
-          child: Column(
-            children: [
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFFFFFFFF),
+                  Color(0xFFF4F7FF),
+                  Color(0xFFF8F2FF),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFD7DFF8)),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF5E35B1).withValues(alpha: 0.09),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
               Row(
                 children: [
                   Expanded(
@@ -970,7 +1279,11 @@ class _UsersTabState extends State<_UsersTab> {
                   hintText: 'Search users...',
                   prefixIcon: const Icon(Icons.search),
                   filled: true,
-                  fillColor: Colors.white,
+                  fillColor: const Color(0xFFF9FBFF),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFFD3DCF7)),
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -986,52 +1299,70 @@ class _UsersTabState extends State<_UsersTab> {
                     _filterChip(
                         'All',
                         null,
-                        _roleFilter,
+                      _pendingVerificationOnly ? '__pending__' : _roleFilter,
                         const [Color(0xFF1565C0), Color(0xFF5E35B1)],
                         (v) => setState(() {
+                        _pendingVerificationOnly = false;
                               _roleFilter = v;
                               _applyFilter();
                             })),
                     _filterChip(
                         'Customers',
                         UserRoles.customer,
-                        _roleFilter,
+                      _pendingVerificationOnly ? '__pending__' : _roleFilter,
                         const [Color(0xFF1565C0), Color(0xFF5E35B1)],
                         (v) => setState(() {
+                        _pendingVerificationOnly = false;
                               _roleFilter = v;
                               _applyFilter();
                             })),
                     _filterChip(
                         'Skilled',
                         UserRoles.skilledPerson,
-                        _roleFilter,
+                      _pendingVerificationOnly ? '__pending__' : _roleFilter,
                         const [Color(0xFF1565C0), Color(0xFF5E35B1)],
                         (v) => setState(() {
+                        _pendingVerificationOnly = false;
                               _roleFilter = v;
                               _applyFilter();
                             })),
                     _filterChip(
                         'Companies',
                         UserRoles.company,
-                        _roleFilter,
+                      _pendingVerificationOnly ? '__pending__' : _roleFilter,
                         const [Color(0xFF1565C0), Color(0xFF5E35B1)],
                         (v) => setState(() {
+                        _pendingVerificationOnly = false;
                               _roleFilter = v;
                               _applyFilter();
                             })),
                     _filterChip(
                         'Delivery',
                         UserRoles.deliveryPartner,
-                        _roleFilter,
+                      _pendingVerificationOnly ? '__pending__' : _roleFilter,
+                      const [Color(0xFF1565C0), Color(0xFF5E35B1)],
+                      (v) => setState(() {
+                        _pendingVerificationOnly = false;
+                        _roleFilter = v;
+                        _applyFilter();
+                          })),
+                      _filterChip(
+                      'Pending Verifications',
+                      '__pending__',
+                      _pendingVerificationOnly ? '__pending__' : _roleFilter,
                         const [Color(0xFF1565C0), Color(0xFF5E35B1)],
                         (v) => setState(() {
-                              _roleFilter = v;
+                        _pendingVerificationOnly = v == '__pending__';
+                        _roleFilter = v == '__pending__'
+                            ? UserRoles.skilledPerson
+                            : v;
                               _applyFilter();
                             })),
                   ],
                 ),
               ),
-            ],
+              ],
+            ),
           ),
         ),
         Padding(
@@ -1052,6 +1383,7 @@ class _UsersTabState extends State<_UsersTab> {
                     itemBuilder: (context, index) {
                       final user = _filteredUsers[index];
                       return _UserCard(
+                        index: index,
                         user: user,
                         onEdit: () => _editUser(user),
                         onSuspend: () => _toggleSuspend(user),
@@ -1115,12 +1447,14 @@ Widget _filterChip(
 }
 
 class _UserCard extends StatelessWidget {
+  final int index;
   final UserModel user;
   final VoidCallback onEdit;
   final VoidCallback onSuspend;
   final VoidCallback onDelete;
 
   const _UserCard({
+    required this.index,
     required this.user,
     required this.onEdit,
     required this.onSuspend,
@@ -1151,11 +1485,38 @@ class _UserCard extends StatelessWidget {
     final isSuspended = user.isSuspended ?? false;
     final isActive = user.isActive;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 2,
-      child: Padding(
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 260 + (index * 22).clamp(0, 260)),
+      curve: Curves.easeOutCubic,
+      builder: (context, t, child) {
+        return Transform.translate(
+          offset: Offset(0, 16 * (1 - t)),
+          child: Opacity(opacity: t, child: child),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Colors.white,
+              _roleColor.withValues(alpha: 0.08),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _roleColor.withValues(alpha: 0.22)),
+          boxShadow: [
+            BoxShadow(
+              color: _roleColor.withValues(alpha: 0.12),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Padding(
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
@@ -1298,6 +1659,7 @@ class _UserCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -1825,10 +2187,21 @@ class _ReportsTabState extends State<_ReportsTab> {
         ),
         Padding(
           padding: const EdgeInsets.all(12),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFFFFFF), Color(0xFFFFF7F2), Color(0xFFFFF1F7)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFFFD9CE)),
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
                 _filterChip('Pending', 'pending', _statusFilter,
                   const [Color(0xFFFF8F00), Color(0xFFD81B60)],
                     (v) => setState(() => _statusFilter = v ?? 'pending')),
@@ -1841,7 +2214,8 @@ class _ReportsTabState extends State<_ReportsTab> {
                 _filterChip('All', 'all', _statusFilter,
                   const [Color(0xFFFF8F00), Color(0xFFD81B60)],
                     (v) => setState(() => _statusFilter = v ?? 'all')),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -1913,11 +2287,27 @@ class _ReportCard extends StatelessWidget {
           '${dt.day}/${dt.month}/${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
     }
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 1.5,
-      color: Colors.white,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.white,
+            _statusColor.withValues(alpha: 0.1),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _statusColor.withValues(alpha: 0.25)),
+        boxShadow: [
+          BoxShadow(
+            color: _statusColor.withValues(alpha: 0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(

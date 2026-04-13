@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../models/dicebear_config.dart';
+import '../../utils/web_image_loader.dart';
 
 /// Full-screen DiceBear avatar customiser.
 ///
@@ -95,6 +96,23 @@ class _AvatarBuilderScreenState extends State<AvatarBuilderScreen> {
           _sectionTitle('Style'),
           const SizedBox(height: 10),
           _buildStylePicker(),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: _shuffleSeed,
+              icon: const Icon(Icons.shuffle_rounded),
+              label: const Text('Shuffle Look'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF6A11CB),
+                side: const BorderSide(color: Color(0xFF6A11CB)),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
           const SizedBox(height: 24),
 
           // ── Background Color ──────────────────────────────────────────────
@@ -134,31 +152,6 @@ class _AvatarBuilderScreenState extends State<AvatarBuilderScreen> {
             const SizedBox(height: 24),
           ],
 
-          // ── Shuffle ───────────────────────────────────────────────────────
-          _sectionTitle('Look & Feel'),
-          const SizedBox(height: 10),
-          Text(
-            'Tap Shuffle to get a completely different face, hair style, and '
-            'features while keeping your colour choices.',
-            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _shuffleSeed,
-              icon: const Icon(Icons.shuffle_rounded),
-              label: const Text('Shuffle Look'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF6A11CB),
-                side: const BorderSide(color: Color(0xFF6A11CB)),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ),
           const SizedBox(height: 32),
         ],
       ),
@@ -186,19 +179,12 @@ class _AvatarBuilderScreenState extends State<AvatarBuilderScreen> {
               ],
             ),
             child: ClipOval(
-              child: Image.network(
-                _config.url,
+              child: WebImageLoader.loadImage(
+                imageUrl: _config.url,
                 width: 160,
                 height: 160,
                 fit: BoxFit.cover,
-                loadingBuilder: (_, child, progress) {
-                  if (progress == null) return child;
-                  return const Center(
-                    child: CircularProgressIndicator(
-                        color: Color(0xFF6A11CB), strokeWidth: 2),
-                  );
-                },
-                errorBuilder: (_, __, ___) => const Center(
+                errorWidget: const Center(
                   child: Icon(Icons.face, size: 60, color: Color(0xFF6A11CB)),
                 ),
               ),
@@ -261,11 +247,10 @@ class _AvatarBuilderScreenState extends State<AvatarBuilderScreen> {
                         : null,
                   ),
                   child: ClipOval(
-                    child: Image.network(
-                      previewUrl,
+                    child: WebImageLoader.loadImage(
+                      imageUrl: previewUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                          const Icon(Icons.face, size: 28),
+                      errorWidget: const Icon(Icons.face, size: 28),
                     ),
                   ),
                 ),

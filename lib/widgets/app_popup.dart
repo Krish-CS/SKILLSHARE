@@ -11,6 +11,15 @@ enum PopupType { success, error, info, warning }
 class AppPopup {
   static OverlayEntry? _currentEntry;
 
+  static void _safeRemove(OverlayEntry? entry) {
+    if (entry == null) return;
+    try {
+      entry.remove();
+    } catch (_) {
+      // Entry may already be detached; ignore repeated remove calls.
+    }
+  }
+
   static void show(
     BuildContext context, {
     required String message,
@@ -19,22 +28,28 @@ class AppPopup {
     IconData? icon,
   }) {
     // Remove any existing popup
-    _currentEntry?.remove();
+    _safeRemove(_currentEntry);
     _currentEntry = null;
 
     final overlay = Overlay.of(context, rootOverlay: true);
 
     late OverlayEntry entry;
+    var dismissed = false;
+
+    void dismissOnce() {
+      if (dismissed) return;
+      dismissed = true;
+      _safeRemove(entry);
+      if (_currentEntry == entry) _currentEntry = null;
+    }
+
     entry = OverlayEntry(
       builder: (_) => _AnimatedPopupWidget(
         message: message,
         type: type,
         icon: icon,
         duration: duration,
-        onDismiss: () {
-          entry.remove();
-          if (_currentEntry == entry) _currentEntry = null;
-        },
+        onDismiss: dismissOnce,
       ),
     );
 
@@ -43,7 +58,7 @@ class AppPopup {
   }
 
   static void dismiss() {
-    _currentEntry?.remove();
+    _safeRemove(_currentEntry);
     _currentEntry = null;
   }
 }

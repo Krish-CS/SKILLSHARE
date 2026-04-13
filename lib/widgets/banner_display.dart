@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../utils/app_fonts.dart';
 import '../utils/web_image_loader.dart';
 
 /// Renders a profile banner from [bannerData].
@@ -167,27 +167,27 @@ class _BannerDisplayState extends State<BannerDisplay>
     );
     switch (fontKey) {
       case 'pacifico':
-        return GoogleFonts.pacifico(textStyle: base);
+        return AppFonts.pacifico(textStyle: base);
       case 'dancing':
-        return GoogleFonts.dancingScript(textStyle: base);
+        return AppFonts.dancingScript(textStyle: base);
       case 'oswald':
-        return GoogleFonts.oswald(textStyle: base);
+        return AppFonts.oswald(textStyle: base);
       case 'lexend':
-        return GoogleFonts.lexend(textStyle: base);
+        return AppFonts.lexend(textStyle: base);
       case 'playfair':
-        return GoogleFonts.playfairDisplay(textStyle: base);
+        return AppFonts.playfairDisplay(textStyle: base);
       case 'lobster':
-        return GoogleFonts.lobster(textStyle: base);
+        return AppFonts.lobster(textStyle: base);
       case 'raleway':
-        return GoogleFonts.raleway(textStyle: base);
+        return AppFonts.raleway(textStyle: base);
       case 'mono':
-        return GoogleFonts.spaceMono(textStyle: base);
+        return AppFonts.spaceMono(textStyle: base);
       case 'caveat':
-        return GoogleFonts.caveat(textStyle: base);
+        return AppFonts.caveat(textStyle: base);
       case 'satisfy':
-        return GoogleFonts.satisfy(textStyle: base);
+        return AppFonts.satisfy(textStyle: base);
       case 'righteous':
-        return GoogleFonts.righteous(textStyle: base);
+        return AppFonts.righteous(textStyle: base);
       default:
         return base;
     }

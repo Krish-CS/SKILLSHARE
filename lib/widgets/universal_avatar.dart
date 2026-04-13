@@ -7,9 +7,10 @@ import '../utils/web_image_loader.dart';
 ///
 /// Priority order:
 /// 1. DiceBear avatar  (`avatarConfig` with type == 'dicebear')
-/// 2. Static emoji avatar (`avatarKey`) — legacy emoji-based picker
-/// 3. Profile photo URL (`photoUrl`) — Cloudinary / network image
-/// 4. Letter fallback — first character of [fallbackName]
+/// 2. Emoji avatar config (`avatarConfig` with type == 'emoji')
+/// 3. Static emoji avatar (`avatarKey`) — legacy emoji-based picker
+/// 4. Profile photo URL (`photoUrl`) — Cloudinary / network image
+/// 5. Letter fallback — first character of [fallbackName]
 class UniversalAvatar extends StatelessWidget {
   /// Avatar config map from Firestore (DiceBear format).
   final Map<String, dynamic>? avatarConfig;
@@ -55,16 +56,24 @@ class UniversalAvatar extends StatelessWidget {
     if (DiceBearConfig.isDiceBear(avatarConfig)) {
       final config = DiceBearConfig.fromMap(avatarConfig!);
       avatar = ClipOval(
-        child: Image.network(
-          config.url,
+        child: WebImageLoader.loadImage(
+          imageUrl: config.url,
           width: radius * 2,
           height: radius * 2,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _letterFallback(),
+          errorWidget: _letterFallback(),
         ),
       );
     }
-    // 2. Legacy emoji avatar
+    // 2. Emoji avatar stored in avatarConfig
+    else if (avatarConfig?['type'] == 'emoji') {
+      avatar = buildAvatarOrPhoto(
+        avatarKey: avatarConfig?['avatarKey']?.toString(),
+        radius: radius,
+        fallback: _photoOrLetter(),
+      );
+    }
+    // 3. Legacy emoji avatar
     else if (avatarKey != null && avatarKey!.isNotEmpty) {
       avatar = buildAvatarOrPhoto(
         avatarKey: avatarKey,
@@ -72,7 +81,7 @@ class UniversalAvatar extends StatelessWidget {
         fallback: _photoOrLetter(),
       );
     }
-    // 3. Photo URL or letter fallback
+    // 4. Photo URL or letter fallback
     else {
       avatar = _photoOrLetter();
     }

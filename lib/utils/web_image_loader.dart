@@ -1,9 +1,69 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:typed_data';
 
 /// Web-safe image loader that handles CORS issues
 class WebImageLoader {
+  static Color _defaultAvatarTextColor(Color backgroundColor) {
+    final brightness = ThemeData.estimateBrightnessForColor(backgroundColor);
+    return brightness == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF5E35B1);
+  }
+
+  static String _sanitizeUrl(String rawUrl) {
+    var value = rawUrl.trim();
+    if (value.isEmpty) return value;
+
+    // Keep base64 images unchanged.
+    if (value.startsWith('data:image')) return value;
+
+    // Remove wrapping quotes.
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.substring(1, value.length - 1).trim();
+    }
+
+    // Drop any appended text after whitespace/newline.
+    final firstToken = value.split(RegExp(r'\s+')).first.trim();
+    if (firstToken.isNotEmpty) {
+      value = firstToken;
+    }
+
+    // Recover malformed values like "...jpgSpiderPlant" by cutting at the
+    // first image extension when trailing junk is attached.
+    final extensionMatch = RegExp(
+      r'\.(jpg|jpeg|png|webp|gif|bmp)',
+      caseSensitive: false,
+    ).firstMatch(value);
+    if (extensionMatch != null) {
+      final extEnd = extensionMatch.end;
+      if (extEnd < value.length) {
+        final nextChar = value.substring(extEnd, extEnd + 1);
+        if (nextChar != '?' && nextChar != '#' && nextChar != '&') {
+          value = value.substring(0, extEnd);
+        }
+      }
+    }
+
+    return value;
+  }
+
+  static Uint8List? _decodeDataImage(String rawUrl) {
+    final url = _sanitizeUrl(rawUrl);
+    if (!url.startsWith('data:image')) return null;
+    final commaIndex = url.indexOf(',');
+    if (commaIndex <= 0 || commaIndex == url.length - 1) return null;
+    final metadata = url.substring(0, commaIndex).toLowerCase();
+    if (!metadata.contains(';base64')) return null;
+    try {
+      return base64Decode(url.substring(commaIndex + 1));
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Loads an image with proper CORS handling for web
   /// Falls back to standard loading for mobile platforms
   /// Returns error widget if imageUrl is null or empty
@@ -27,16 +87,46 @@ class WebImageLoader {
           );
     }
 
-    if (kIsWeb) {
-      // For web, use Image.network with proper error handling
-      return Image.network(
-        imageUrl,
+    final sanitizedImageUrl = _sanitizeUrl(imageUrl);
+    final decodedDataImage = _decodeDataImage(sanitizedImageUrl);
+
+    if (decodedDataImage != null) {
+      return Image.memory(
+        decodedDataImage,
         width: width,
         height: height,
         fit: fit,
         alignment: alignment,
+        gaplessPlayback: true,
+        filterQuality: FilterQuality.high,
         errorBuilder: (context, error, stackTrace) {
-          debugPrint('Image load error (web): $error');
+          return errorWidget ??
+              Container(
+                width: width,
+                height: height,
+                color: Colors.grey[300],
+                child: const Icon(Icons.broken_image, color: Colors.grey),
+              );
+        },
+      );
+    }
+
+    if (kIsWeb) {
+      // For web, use Image.network with proper error handling
+      return Image.network(
+        // Use the sanitized URL so malformed imports still render when possible.
+        sanitizedImageUrl,
+        width: width,
+        height: height,
+        fit: fit,
+        alignment: alignment,
+        gaplessPlayback: true,
+        filterQuality: FilterQuality.high,
+        errorBuilder: (context, error, stackTrace) {
+          final shortenedUrl = sanitizedImageUrl.length > 140
+              ? '${sanitizedImageUrl.substring(0, 140)}...'
+              : sanitizedImageUrl;
+          debugPrint('Image load error (web): $error | url=$shortenedUrl');
           return errorWidget ??
               Container(
                 width: width,
@@ -63,32 +153,42 @@ class WebImageLoader {
               );
         },
       );
-    } else {
-      // For mobile, use CachedNetworkImage for better performance
-      return CachedNetworkImage(
-        imageUrl: imageUrl,
-        width: width,
-        height: height,
-        fit: fit,
-        alignment: alignment,
-        placeholder: (context, url) =>
-            placeholder ??
-            Container(
-              width: width,
-              height: height,
-              color: Colors.grey[200],
-              child: const Center(child: CircularProgressIndicator()),
-            ),
-        errorWidget: (context, url, error) =>
-            errorWidget ??
+    }
+
+    // For native platforms, prefer Image.network so we avoid cache-manager
+    // startup work and the path_provider channel dependency.
+    return Image.network(
+      sanitizedImageUrl,
+      width: width,
+      height: height,
+      fit: fit,
+      alignment: alignment,
+      gaplessPlayback: true,
+      filterQuality: FilterQuality.high,
+      errorBuilder: (context, error, stackTrace) {
+        final shortenedUrl = sanitizedImageUrl.length > 140
+            ? '${sanitizedImageUrl.substring(0, 140)}...'
+            : sanitizedImageUrl;
+        debugPrint('Image load error (native): $error | url=$shortenedUrl');
+        return errorWidget ??
             Container(
               width: width,
               height: height,
               color: Colors.grey[300],
               child: const Icon(Icons.broken_image, color: Colors.grey),
-            ),
-      );
-    }
+            );
+      },
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return placeholder ??
+            Container(
+              width: width,
+              height: height,
+              color: Colors.grey[200],
+              child: const Center(child: CircularProgressIndicator()),
+            );
+      },
+    );
   }
 
   /// Loads a circular avatar image with CORS handling
@@ -102,20 +202,23 @@ class WebImageLoader {
     BoxFit fit = BoxFit.cover,
     Alignment alignment = Alignment.center,
   }) {
+    final resolvedBackgroundColor = backgroundColor ?? Colors.grey[400]!;
+    final resolvedTextColor = textColor ?? _defaultAvatarTextColor(resolvedBackgroundColor);
+
     // Handle null or empty URLs with fallback
     if (imageUrl == null || imageUrl.trim().isEmpty) {
       return ClipOval(
         child: Container(
           width: radius * 2,
           height: radius * 2,
-          color: backgroundColor ?? Colors.grey[400],
+          color: resolvedBackgroundColor,
           child: Center(
             child: Text(
               fallbackText?.isNotEmpty == true
                   ? fallbackText![0].toUpperCase()
                   : 'U',
               style: TextStyle(
-                color: textColor ?? Colors.white,
+                color: resolvedTextColor,
                 fontSize: radius * 0.8,
                 fontWeight: FontWeight.bold,
               ),
@@ -138,14 +241,14 @@ class WebImageLoader {
           errorWidget: Container(
             width: radius * 2,
             height: radius * 2,
-            color: backgroundColor ?? Colors.grey[300],
+            color: resolvedBackgroundColor,
             child: Center(
               child: Text(
                 fallbackText?.isNotEmpty == true
                     ? fallbackText![0].toUpperCase()
                     : 'U',
                 style: TextStyle(
-                  color: textColor ?? Colors.white,
+                  color: resolvedTextColor,
                   fontSize: radius * 0.8,
                   fontWeight: FontWeight.bold,
                 ),
@@ -164,10 +267,8 @@ class WebImageLoader {
       return null;
     }
 
-    if (kIsWeb) {
-      return NetworkImage(imageUrl);
-    } else {
-      return CachedNetworkImageProvider(imageUrl);
-    }
+    final sanitizedImageUrl = _sanitizeUrl(imageUrl);
+
+    return NetworkImage(sanitizedImageUrl);
   }
 }

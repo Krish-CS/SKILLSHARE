@@ -17,6 +17,12 @@ class PresenceService {
   Timer? _heartbeat;
   String? _uid;
 
+  bool _isExpectedPresenceWriteError(Object error) {
+    if (error is! FirebaseException) return false;
+    return error.code == 'permission-denied' ||
+        error.code == 'unauthenticated';
+  }
+
   /// Call once after login / app start.
   void startTracking(String uid) {
     if (_uid == uid) return; // already tracking
@@ -78,6 +84,7 @@ class PresenceService {
         'lastSeen': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (e) {
+      if (_isExpectedPresenceWriteError(e)) return;
       debugPrint('PresenceService._setOnline error: $e');
     }
   }
@@ -90,6 +97,7 @@ class PresenceService {
         'lastSeen': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (e) {
+      if (_isExpectedPresenceWriteError(e)) return;
       debugPrint('PresenceService._setOffline error: $e');
     }
   }

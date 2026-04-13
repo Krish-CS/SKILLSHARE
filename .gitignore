@@ -80,3 +80,9 @@ aux
 
 # Claude temp files
 cUsersUSERAppDataLocalTempclaude-*
+.gradle-user-home/
+.flutter_tmp/
+android/app/.cxx/
+android/.kotlin/
+android/build/
+build/

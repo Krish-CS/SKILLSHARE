@@ -79,12 +79,21 @@ Future<List<NotificationItem>> loadNotificationsForUser(
         .collection('notifications')
         .where('toUserId', isEqualTo: userId)
         .get(),
+    firestoreService.getUserSettings(userId),
   ]);
 
   final requests = results[0] as List<ServiceRequestModel>;
   final orders = results[1] as List<OrderModel>;
   final chatsSnap = results[2] as QuerySnapshot<Map<String, dynamic>>;
   final reminderSnap = results[3] as QuerySnapshot<Map<String, dynamic>>;
+  final userSettings = results[4] as Map<String, dynamic>;
+
+  final pushNotifications = userSettings['pushNotifications'] as bool? ?? true;
+  final chatNotifications = userSettings['chatNotifications'] as bool? ?? true;
+  final jobNotifications = userSettings['jobNotifications'] as bool? ?? true;
+
+  final allowChatContent = pushNotifications && chatNotifications;
+  final allowJobContent = pushNotifications && jobNotifications;
 
   final userCache = <String, Map<String, String?>>{};
   final chatCache = <String, Map<String, dynamic>?>{};
@@ -121,8 +130,29 @@ Future<List<NotificationItem>> loadNotificationsForUser(
   final requestById = <String, ServiceRequestModel>{
     for (final request in requests) request.id: request,
   };
+  final orderCache = <String, OrderModel?>{};
+  final orderIdsWithEventNotifs = <String>{};
+
+  Future<OrderModel?> loadOrder(String orderId) async {
+    final id = orderId.trim();
+    if (id.isEmpty) return null;
+    if (orderCache.containsKey(id)) return orderCache[id];
+    final doc = await FirebaseFirestore.instance
+        .collection(AppConstants.ordersCollection)
+        .doc(id)
+        .get();
+    if (!doc.exists || doc.data() == null) {
+      orderCache[id] = null;
+      return null;
+    }
+    final order = OrderModel.fromMap(doc.data()!, doc.id);
+    orderCache[id] = order;
+    return order;
+  }
 
   for (final request in requests) {
+    if (!allowJobContent) continue;
+
     final otherUserId = request.customerId == userId
         ? request.skilledUserId
         : request.customerId;
@@ -212,6 +242,56 @@ Future<List<NotificationItem>> loadNotificationsForUser(
   for (final doc in reminderSnap.docs) {
     final data = doc.data();
     final type = (data['type'] as String?)?.trim() ?? '';
+    // ── Shop order notifications ─────────────────────────────────────────
+    const orderTypes = <String>{
+      'shopOrderPlaced',
+      'shopOrderStatusUpdated',
+      'shopDeliveryAssigned',
+      'shopDeliveryStatusUpdated',
+    };
+    if (orderTypes.contains(type)) {
+      if (!pushNotifications) continue;
+      final orderId = (data['orderId'] as String?)?.trim() ?? '';
+      if (orderId.isEmpty) continue;
+
+      final order = await loadOrder(orderId);
+      if (order == null) continue;
+      orderIdsWithEventNotifs.add(orderId);
+
+      final notifTitle = (data['title'] as String?)?.trim();
+      final notifBody = (data['body'] as String?)?.trim();
+      final createdAtTs = data['createdAt'] as Timestamp?;
+      final createdAt = createdAtTs?.toDate() ?? DateTime.now();
+
+      final (icon, color) = switch (type) {
+        'shopOrderPlaced' => (Icons.shopping_bag, const Color(0xFF6A11CB)),
+        'shopOrderStatusUpdated' =>
+          (Icons.local_shipping, const Color(0xFF1E88E5)),
+        'shopDeliveryAssigned' =>
+          (Icons.delivery_dining, const Color(0xFFFF9800)),
+        'shopDeliveryStatusUpdated' =>
+          (Icons.done_all, const Color(0xFF2E7D32)),
+        _ => (Icons.notifications, const Color(0xFF546E7A)),
+      };
+
+      notifications.add(
+        NotificationItem(
+          title: _isMeaningful(notifTitle)
+              ? notifTitle!
+              : 'Order update: ${order.productName}',
+          subtitle: _isMeaningful(notifBody)
+              ? notifBody!
+              : 'Status: ${order.status.toUpperCase()}',
+          createdAt: createdAt,
+          icon: icon,
+          color: color,
+          type: NotificationType.order,
+          orderData: order,
+          rawType: type,
+        ),
+      );
+      continue;
+    }
     // ── Job application notifications ────────────────────────────────────
     const jobDecisionTypes = <String>{
       'jobApplication',
@@ -221,6 +301,7 @@ Future<List<NotificationItem>> loadNotificationsForUser(
       'jobRevoked',
     };
     if (jobDecisionTypes.contains(type)) {
+      if (!allowJobContent) continue;
       final fromUserId = (data['fromUserId'] as String?)?.trim() ?? '';
       final jobTitle = (data['jobTitle'] as String?)?.trim() ?? '';
       final body = (data['body'] as String?)?.trim();
@@ -272,7 +353,7 @@ Future<List<NotificationItem>> loadNotificationsForUser(
       );
       continue;
     }
-    if (type != 'work_request_reminder') continue;
+    if (type != 'work_request_reminder' || !allowJobContent) continue;
 
     final requestId = (data['requestId'] as String?)?.trim();
     final request = requestId != null ? requestById[requestId] : null;
@@ -308,6 +389,9 @@ Future<List<NotificationItem>> loadNotificationsForUser(
   }
 
   for (final order in orders) {
+    if (orderIdsWithEventNotifs.contains(order.id)) {
+      continue;
+    }
     final isBuyer = order.buyerId == userId;
     final isSeller = order.sellerId == userId;
     final actorLabel = isBuyer
@@ -343,6 +427,11 @@ Future<List<NotificationItem>> loadNotificationsForUser(
   }
 
   // Chat messages (unread).
+  if (!allowChatContent) {
+    notifications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return notifications.take(limit).toList();
+  }
+
   for (final doc in chatsSnap.docs) {
     final data = doc.data();
     final unreadMap = data['unreadCount'] as Map<String, dynamic>?;

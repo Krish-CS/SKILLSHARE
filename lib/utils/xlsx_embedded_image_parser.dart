@@ -9,6 +9,10 @@ import 'package:xml/xml.dart';
 /// Returned map key is zero-based worksheet row index.
 class XlsxEmbeddedImageParser {
   static Map<int, Uint8List> extractFirstSheetRowImages(Uint8List bytes) {
+    return extractBestSheetRowImages(bytes);
+  }
+
+  static Map<int, Uint8List> extractBestSheetRowImages(Uint8List bytes) {
     try {
       final archive = ZipDecoder().decodeBytes(bytes, verify: false);
       final files = <String, ArchiveFile>{
@@ -23,107 +27,101 @@ class XlsxEmbeddedImageParser {
         return const {};
       }
 
-      final firstSheetElement = workbookDoc
-          .findAllElements('sheet')
-          .cast<XmlElement?>()
-          .firstWhere((e) => e != null, orElse: () => null);
-      if (firstSheetElement == null) return const {};
+      Map<int, Uint8List> bestRowImages = const {};
+      var bestScore = -1;
 
-      final workbookSheetRid = _attrByLocalName(firstSheetElement, 'id');
-      if (workbookSheetRid == null || workbookSheetRid.isEmpty) {
-        return const {};
-      }
+      for (final sheetElement in workbookDoc.findAllElements('sheet')) {
+        final workbookSheetRid = _attrByLocalName(sheetElement, 'id');
+        if (workbookSheetRid == null || workbookSheetRid.isEmpty) continue;
 
-      final sheetTarget = _resolveRelTargetById(
-        relsDoc: workbookRelsDoc,
-        relId: workbookSheetRid,
-      );
-      if (sheetTarget == null || sheetTarget.isEmpty) {
-        return const {};
-      }
+        final sheetTarget = _resolveRelTargetById(
+          relsDoc: workbookRelsDoc,
+          relId: workbookSheetRid,
+        );
+        if (sheetTarget == null || sheetTarget.isEmpty) continue;
 
-      final worksheetPath = _resolveZipPath(workbookPath, sheetTarget);
-      final worksheetDoc = _readXml(files, worksheetPath);
-      if (worksheetDoc == null) return const {};
+        final worksheetPath = _resolveZipPath(workbookPath, sheetTarget);
+        final worksheetDoc = _readXml(files, worksheetPath);
+        if (worksheetDoc == null) continue;
 
-      final drawingElement = worksheetDoc
-          .descendants
-          .whereType<XmlElement>()
-          .firstWhere((e) => e.name.local == 'drawing', orElse: () => XmlElement(XmlName('')));
-      if (drawingElement.name.local.isEmpty) {
-        return const {};
-      }
-
-      final drawingRid = _attrByLocalName(drawingElement, 'id');
-      if (drawingRid == null || drawingRid.isEmpty) {
-        return const {};
-      }
-
-      final worksheetRelsPath = _relsPathForPart(worksheetPath);
-      final worksheetRelsDoc = _readXml(files, worksheetRelsPath);
-      if (worksheetRelsDoc == null) return const {};
-
-      final drawingTarget = _resolveRelTargetById(
-        relsDoc: worksheetRelsDoc,
-        relId: drawingRid,
-      );
-      if (drawingTarget == null || drawingTarget.isEmpty) {
-        return const {};
-      }
-
-      final drawingPath = _resolveZipPath(worksheetPath, drawingTarget);
-      final drawingDoc = _readXml(files, drawingPath);
-      if (drawingDoc == null) return const {};
-
-      final drawingRelsPath = _relsPathForPart(drawingPath);
-      final drawingRelsDoc = _readXml(files, drawingRelsPath);
-      if (drawingRelsDoc == null) return const {};
-
-      final rowImages = <int, Uint8List>{};
-
-      final anchors = drawingDoc.descendants.whereType<XmlElement>().where(
-            (e) => e.name.local == 'oneCellAnchor' || e.name.local == 'twoCellAnchor',
-          );
-
-      for (final anchor in anchors) {
-        final fromElement = anchor.children
-            .whereType<XmlElement>()
-            .firstWhere((e) => e.name.local == 'from', orElse: () => XmlElement(XmlName('')));
-        if (fromElement.name.local.isEmpty) continue;
-
-        final rowElement = fromElement.children
-            .whereType<XmlElement>()
-            .firstWhere((e) => e.name.local == 'row', orElse: () => XmlElement(XmlName('')));
-        if (rowElement.name.local.isEmpty) continue;
-
-        final rowIndex = int.tryParse(rowElement.innerText.trim());
-        if (rowIndex == null || rowIndex < 0) continue;
-
-        final blip = anchor
+        final drawingElement = worksheetDoc
             .descendants
             .whereType<XmlElement>()
-            .firstWhere((e) => e.name.local == 'blip', orElse: () => XmlElement(XmlName('')));
-        if (blip.name.local.isEmpty) continue;
+            .firstWhere((e) => e.name.local == 'drawing', orElse: () => XmlElement(XmlName('')));
+        if (drawingElement.name.local.isEmpty) continue;
 
-        final embedRid = _attrByLocalName(blip, 'embed');
-        if (embedRid == null || embedRid.isEmpty) continue;
+        final drawingRid = _attrByLocalName(drawingElement, 'id');
+        if (drawingRid == null || drawingRid.isEmpty) continue;
 
-        final imageTarget = _resolveRelTargetById(
-          relsDoc: drawingRelsDoc,
-          relId: embedRid,
+        final worksheetRelsPath = _relsPathForPart(worksheetPath);
+        final worksheetRelsDoc = _readXml(files, worksheetRelsPath);
+        if (worksheetRelsDoc == null) continue;
+
+        final drawingTarget = _resolveRelTargetById(
+          relsDoc: worksheetRelsDoc,
+          relId: drawingRid,
         );
-        if (imageTarget == null || imageTarget.isEmpty) continue;
+        if (drawingTarget == null || drawingTarget.isEmpty) continue;
 
-        final imagePath = _resolveZipPath(drawingPath, imageTarget);
-        final imageFile = files[imagePath];
-        if (imageFile == null || imageFile.isFile == false) continue;
+        final drawingPath = _resolveZipPath(worksheetPath, drawingTarget);
+        final drawingDoc = _readXml(files, drawingPath);
+        if (drawingDoc == null) continue;
 
-        if (!rowImages.containsKey(rowIndex)) {
-          rowImages[rowIndex] = Uint8List.fromList(imageFile.content as List<int>);
+        final drawingRelsPath = _relsPathForPart(drawingPath);
+        final drawingRelsDoc = _readXml(files, drawingRelsPath);
+        if (drawingRelsDoc == null) continue;
+
+        final rowImages = <int, Uint8List>{};
+
+        final anchors = drawingDoc.descendants.whereType<XmlElement>().where(
+              (e) => e.name.local == 'oneCellAnchor' || e.name.local == 'twoCellAnchor',
+            );
+
+        for (final anchor in anchors) {
+          final fromElement = anchor.children
+              .whereType<XmlElement>()
+              .firstWhere((e) => e.name.local == 'from', orElse: () => XmlElement(XmlName('')));
+          if (fromElement.name.local.isEmpty) continue;
+
+          final rowElement = fromElement.children
+              .whereType<XmlElement>()
+              .firstWhere((e) => e.name.local == 'row', orElse: () => XmlElement(XmlName('')));
+          if (rowElement.name.local.isEmpty) continue;
+
+          final rowIndex = int.tryParse(rowElement.innerText.trim());
+          if (rowIndex == null || rowIndex < 0) continue;
+
+          final blip = anchor
+              .descendants
+              .whereType<XmlElement>()
+              .firstWhere((e) => e.name.local == 'blip', orElse: () => XmlElement(XmlName('')));
+          if (blip.name.local.isEmpty) continue;
+
+          final embedRid = _attrByLocalName(blip, 'embed');
+          if (embedRid == null || embedRid.isEmpty) continue;
+
+          final imageTarget = _resolveRelTargetById(
+            relsDoc: drawingRelsDoc,
+            relId: embedRid,
+          );
+          if (imageTarget == null || imageTarget.isEmpty) continue;
+
+          final imagePath = _resolveZipPath(drawingPath, imageTarget);
+          final imageFile = files[imagePath];
+          if (imageFile == null || imageFile.isFile == false) continue;
+
+          if (!rowImages.containsKey(rowIndex)) {
+            rowImages[rowIndex] = Uint8List.fromList(imageFile.content as List<int>);
+          }
+        }
+
+        if (rowImages.length > bestScore) {
+          bestScore = rowImages.length;
+          bestRowImages = rowImages;
         }
       }
 
-      return rowImages;
+      return bestRowImages;
     } catch (_) {
       // Best-effort parser by design. Caller handles empty map fallback.
       return const {};

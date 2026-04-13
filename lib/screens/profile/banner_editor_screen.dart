@@ -5,8 +5,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:matrix_gesture_detector/matrix_gesture_detector.dart';
 import '../../utils/app_dialog.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../services/cloudinary_service.dart';
+import '../../utils/app_fonts.dart';
 import '../../widgets/banner_display.dart';
 
 /// Full-screen banner editor.
@@ -103,22 +103,6 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
     Colors.pinkAccent,
     Colors.black,
     Color(0xFF90CAF9),
-  ];
-
-  // ─── Animation options ─────────────────────────────────────────────────────
-  static const _animations = [
-    ('none', 'None', Icons.text_fields),
-    ('pulse', 'Pulse', Icons.expand),
-    ('fade', 'Fade', Icons.opacity),
-    ('shimmer', 'Shimmer', Icons.auto_awesome),
-    ('slide', 'Slide', Icons.swap_horiz),
-    ('wave', 'Wave', Icons.waves),
-    ('bounce', 'Bounce', Icons.arrow_upward),
-    ('glow', 'Glow', Icons.flare),
-    ('typewriter', 'Typewriter', Icons.keyboard),
-    ('rotate', 'Rotate', Icons.rotate_right),
-    ('float', 'Float', Icons.air),
-    ('flicker', 'Flicker', Icons.bolt),
   ];
 
   static const _textStyles = [
@@ -252,27 +236,27 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
     const base = TextStyle(fontSize: 14, fontWeight: FontWeight.w600);
     switch (key) {
       case 'pacifico':
-        return GoogleFonts.pacifico(textStyle: base);
+        return AppFonts.pacifico(textStyle: base);
       case 'dancing':
-        return GoogleFonts.dancingScript(textStyle: base);
+        return AppFonts.dancingScript(textStyle: base);
       case 'oswald':
-        return GoogleFonts.oswald(textStyle: base);
+        return AppFonts.oswald(textStyle: base);
       case 'lexend':
-        return GoogleFonts.lexend(textStyle: base);
+        return AppFonts.lexend(textStyle: base);
       case 'playfair':
-        return GoogleFonts.playfairDisplay(textStyle: base);
+        return AppFonts.playfairDisplay(textStyle: base);
       case 'lobster':
-        return GoogleFonts.lobster(textStyle: base);
+        return AppFonts.lobster(textStyle: base);
       case 'raleway':
-        return GoogleFonts.raleway(textStyle: base);
+        return AppFonts.raleway(textStyle: base);
       case 'mono':
-        return GoogleFonts.spaceMono(textStyle: base);
+        return AppFonts.spaceMono(textStyle: base);
       case 'caveat':
-        return GoogleFonts.caveat(textStyle: base);
+        return AppFonts.caveat(textStyle: base);
       case 'satisfy':
-        return GoogleFonts.satisfy(textStyle: base);
+        return AppFonts.satisfy(textStyle: base);
       case 'righteous':
-        return GoogleFonts.righteous(textStyle: base);
+        return AppFonts.righteous(textStyle: base);
       default:
         return base;
     }
@@ -312,6 +296,8 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
       appBar: AppBar(
@@ -379,7 +365,7 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
           // ── Editor options ──
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              padding: EdgeInsets.fromLTRB(16, 4, 16, bottomPad + 24),
               child:
                   _mode == 'text' ? _buildTextOptions() : _buildImageOptions(),
             ),
@@ -560,56 +546,10 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
         // Background gradient
         _sectionLabel('Background'),
         _buildGradientPicker(),
-        const SizedBox(height: 16),
-
-        // Animation
-        _sectionLabel('Text Animation'),
-        _buildAnimationPicker(),
-        const SizedBox(height: 16),
-        _sectionLabel(
-            'Animation Speed: ${_animationSpeed.toStringAsFixed(1)}x'),
-        Slider(
-          value: _animationSpeed,
-          min: 0.6,
-          max: 2.2,
-          divisions: 16,
-          activeColor: const Color(0xFF6A11CB),
-          onChanged: (v) => setState(() => _animationSpeed = v),
-        ),
-        const SizedBox(height: 14),
-
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () =>
-                    setState(() => _textMatrix = Matrix4.identity()),
-                icon: const Icon(Icons.replay_rounded, size: 18),
-                label: const Text('Reset Text Position'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF6A11CB),
-                  side: const BorderSide(color: Color(0xFF6A11CB)),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Tip: Drag to move, pinch to zoom, and rotate with two fingers on the preview.',
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[700],
-            fontStyle: FontStyle.italic,
-          ),
-        ),
         const SizedBox(height: 24),
       ],
     );
   }
-
-  // ─── Image options ────────────────────────────────────────────────────────
 
   Widget _buildImageOptions() {
     final hasLocal = _imageBytes != null || _imageFile != null;
@@ -706,75 +646,71 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
   // ─── Color picker ────────────────────────────────────────────────────────
 
   Widget _buildColorPicker() {
-    return Scrollbar(
-      thumbVisibility: true,
-      radius: const Radius.circular(999),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
-          children: [
-            ..._colorPresets.map((c) {
-              final selected = _textColor == c;
-              final tickColor =
-                  c.computeLuminance() > 0.6 ? Colors.black87 : Colors.white;
-              return Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: GestureDetector(
-                  onTap: () => setState(() => _textColor = c),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: c,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: selected
-                            ? const Color(0xFF6A11CB)
-                            : Colors.grey[300]!,
-                        width: selected ? 3 : 1.5,
-                      ),
-                      boxShadow: selected
-                          ? [
-                              BoxShadow(
-                                color: c.withValues(alpha: 0.5),
-                                blurRadius: 8,
-                              )
-                            ]
-                          : [],
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          ..._colorPresets.map((c) {
+            final selected = _textColor == c;
+            final tickColor =
+                c.computeLuminance() > 0.6 ? Colors.black87 : Colors.white;
+            return Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: GestureDetector(
+                onTap: () => setState(() => _textColor = c),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: c,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: selected
+                          ? const Color(0xFF6A11CB)
+                          : Colors.grey[300]!,
+                      width: selected ? 3 : 1.5,
                     ),
-                    child: selected
-                        ? Icon(Icons.check_rounded, color: tickColor, size: 18)
-                        : null,
+                    boxShadow: selected
+                        ? [
+                            BoxShadow(
+                              color: c.withValues(alpha: 0.5),
+                              blurRadius: 8,
+                            )
+                          ]
+                        : [],
                   ),
+                  child: selected
+                      ? Icon(Icons.check_rounded, color: tickColor, size: 18)
+                      : null,
                 ),
-              );
-            }),
-            GestureDetector(
-              onTap: _pickCustomColor,
-              child: Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  gradient: const SweepGradient(colors: [
-                    Colors.red,
-                    Colors.yellow,
-                    Colors.green,
-                    Colors.cyan,
-                    Colors.blue,
-                    Colors.purple,
-                    Colors.red,
-                  ]),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.grey[300]!, width: 1.5),
-                ),
-                child: const Icon(Icons.colorize_rounded,
-                    color: Colors.white, size: 18),
               ),
+            );
+          }),
+          GestureDetector(
+            onTap: _pickCustomColor,
+            child: Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                gradient: const SweepGradient(colors: [
+                  Colors.red,
+                  Colors.yellow,
+                  Colors.green,
+                  Colors.cyan,
+                  Colors.blue,
+                  Colors.purple,
+                  Colors.red,
+                ]),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.grey[300]!, width: 1.5),
+              ),
+              child: const Icon(Icons.colorize_rounded,
+                  color: Colors.white, size: 18),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1005,54 +941,50 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
   // ─── Gradient picker ──────────────────────────────────────────────────────
 
   Widget _buildGradientPicker() {
-    return Scrollbar(
-      thumbVisibility: true,
-      radius: const Radius.circular(999),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
-          children: List.generate(_gradients.length, (i) {
-            final selected = _gradientIndex == i;
-            return Padding(
-              padding: const EdgeInsets.only(right: 10),
-              child: GestureDetector(
-                onTap: () => setState(() => _gradientIndex = i),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 78,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: _gradients[i],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: selected ? Colors.white : Colors.transparent,
-                      width: 2.5,
-                    ),
-                    boxShadow: selected
-                        ? [
-                            BoxShadow(
-                              color: _gradients[i][0].withValues(alpha: 0.5),
-                              blurRadius: 10,
-                            )
-                          ]
-                        : [],
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: List.generate(_gradients.length, (i) {
+          final selected = _gradientIndex == i;
+          return Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: GestureDetector(
+              onTap: () => setState(() => _gradientIndex = i),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 78,
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: _gradients[i],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  child: selected
-                      ? const Center(
-                          child: Icon(Icons.check_rounded,
-                              color: Colors.white, size: 18),
-                        )
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: selected ? Colors.white : Colors.transparent,
+                    width: 2.5,
+                  ),
+                  boxShadow: selected
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.18),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          )
+                        ]
                       : null,
                 ),
+                child: selected
+                    ? const Center(
+                        child: Icon(Icons.check, color: Colors.white, size: 20),
+                      )
+                    : null,
               ),
-            );
-          }),
-        ),
+            ),
+          );
+        }),
       ),
     );
   }
@@ -1112,53 +1044,6 @@ class _BannerEditorScreenState extends State<BannerEditorScreen> {
                     fontSize: 13,
                   ),
                 ),
-              ],
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildAnimationPicker() {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: _animations.map((opt) {
-        final (key, label, icon) = opt;
-        final selected = _animation == key;
-        return GestureDetector(
-          onTap: () => setState(() => _animation = key),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: selected ? const Color(0xFF6A11CB) : Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: selected ? const Color(0xFF6A11CB) : Colors.grey[300]!,
-              ),
-              boxShadow: selected
-                  ? [
-                      BoxShadow(
-                          color: const Color(0xFF6A11CB).withValues(alpha: 0.3),
-                          blurRadius: 6)
-                    ]
-                  : [],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon,
-                    size: 16,
-                    color: selected ? Colors.white : Colors.grey[600]),
-                const SizedBox(width: 5),
-                Text(label,
-                    style: TextStyle(
-                      color: selected ? Colors.white : Colors.black87,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 13,
-                    )),
               ],
             ),
           ),

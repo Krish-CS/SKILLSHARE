@@ -1,13 +1,19 @@
+import 'dart:async';
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
+import 'providers/app_lock_provider.dart';
 import 'providers/user_provider.dart';
 import 'services/admin_bootstrap_service.dart';
 import 'screens/splash_screen.dart';
 import 'utils/app_theme.dart';
+import 'widgets/app_lock_gate.dart';
+import 'widgets/internet_required_gate.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -19,6 +25,12 @@ void main() async {
     FlutterError.presentError(details);
     debugPrint('Flutter Error: ${details.exception}');
     debugPrint('Stack trace: ${details.stack}');
+  };
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('Uncaught async error: $error');
+    debugPrint('Stack trace: $stack');
+    return true;
   };
 
   bool firebaseInitialized = false;
@@ -48,10 +60,15 @@ void main() async {
       debugPrint('✅ Firestore configured for mobile with offline persistence');
     }
 
-    // Ensure default admin account exists in Firebase Auth + Firestore.
-    // This runs in an isolated temporary Firebase app so it won't
-    // interrupt the active session.
-    await AdminBootstrapService().ensureDefaultAdminAccount();
+    // Keep startup fast/stable on end-user devices.
+    // Admin bootstrap can be enabled explicitly when needed.
+    const bootstrapAdmin = bool.fromEnvironment(
+      'SKILLSHARE_BOOTSTRAP_ADMIN',
+      defaultValue: false,
+    );
+    if (bootstrapAdmin && kDebugMode) {
+      unawaited(AdminBootstrapService().ensureDefaultAdminAccount());
+    }
   } catch (e, stackTrace) {
     debugPrint('❌ Firebase initialization error: $e');
     debugPrint('Stack trace: $stackTrace');
@@ -110,12 +127,31 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => UserProvider()),
+        ChangeNotifierProvider(create: (_) => AppLockProvider()),
       ],
       child: MaterialApp(
         title: 'SkillShare',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         home: const SplashScreen(),
+        builder: (context, child) {
+          final guardedChild = SafeArea(
+            top: false,
+            left: false,
+            right: false,
+            bottom: false,
+            child: child ?? const SizedBox.shrink(),
+          );
+
+          return ColoredBox(
+            color: Colors.transparent,
+            child: InternetRequiredGate(
+              child: AppLockGate(
+                child: guardedChild,
+              ),
+            ),
+          );
+        },
       ),
     );
   }

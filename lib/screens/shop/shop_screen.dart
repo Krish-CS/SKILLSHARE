@@ -22,7 +22,6 @@ import 'shop_storefront_screen.dart';
 
 class ShopScreen extends StatefulWidget {
   const ShopScreen({super.key});
-
   @override
   State<ShopScreen> createState() => _ShopScreenState();
 }
@@ -53,7 +52,6 @@ class _ShopScreenState extends State<ShopScreen> {
   double _minPrice = 0;
   double _maxPrice = _productPriceCeiling;
 
-  // Amazon-style category icons
   static const Map<String, IconData> _categoryIcons = {
     'All': Icons.apps_rounded,
     'Electronics': Icons.devices_rounded,
@@ -132,7 +130,6 @@ class _ShopScreenState extends State<ShopScreen> {
         if (!mounted) return;
         _allProducts = products;
         _subscribeToSellerMetadata(products);
-        // Featured = top rated, in stock
         _featuredProducts = _allProducts
             .where((p) => p.isAvailable && p.rating >= 4.0 && p.stock > 0)
             .toList()
@@ -158,7 +155,6 @@ class _ShopScreenState extends State<ShopScreen> {
         .where((id) => id.isNotEmpty)
         .toSet();
 
-    // Cancel subscriptions for sellers no longer present
     final removedIds =
         _sellerUserSubs.keys.where((id) => !sellerIds.contains(id)).toList();
     for (final id in removedIds) {
@@ -167,7 +163,6 @@ class _ShopScreenState extends State<ShopScreen> {
     }
 
     for (final sellerId in sellerIds) {
-      // Stream user model (name, photo)
       if (!_sellerUserSubs.containsKey(sellerId)) {
         _sellerUserSubs[sellerId] =
             _firestoreService.streamUserModel(sellerId).listen((user) {
@@ -179,7 +174,6 @@ class _ShopScreenState extends State<ShopScreen> {
         });
       }
 
-      // Stream shop settings (shop name)
       if (!_sellerShopSubs.containsKey(sellerId)) {
         _sellerShopSubs[sellerId] =
             _firestoreService.streamShopSettings(sellerId).listen((settings) {
@@ -199,7 +193,6 @@ class _ShopScreenState extends State<ShopScreen> {
 
   void _resolveAndSetShopName(String sellerId) {
     final configuredName = _shopNameBySellerId[sellerId];
-    // Only override if no configured shop name already set from settings
     final sellerName = _sellerById[sellerId]?.name.trim() ?? '';
     if ((configuredName == null ||
             configuredName.isEmpty ||
@@ -308,6 +301,7 @@ class _ShopScreenState extends State<ShopScreen> {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final isCompact = MediaQuery.of(context).size.width < 380;
+    final headerExpandedHeight = isCompact ? 176.0 : 168.0;
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       body: CustomScrollView(
@@ -318,7 +312,7 @@ class _ShopScreenState extends State<ShopScreen> {
             pinned: true,
             floating: true,
             snap: true,
-            expandedHeight: 145,
+            expandedHeight: headerExpandedHeight,
             backgroundColor: AppTheme.primaryPurple,
             foregroundColor: Colors.white,
             elevation: 0,
@@ -334,23 +328,25 @@ class _ShopScreenState extends State<ShopScreen> {
                 ),
                 child: SafeArea(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 18),
+                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Title row
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             const Icon(Icons.shopping_bag_rounded,
                                 color: Colors.white, size: 22),
                             const SizedBox(width: 8),
-                            const Expanded(
+                            Expanded(
                               child: Text(
                                 'SkillShare Shop',
                                 style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold),
+                                  color: Colors.white,
+                                  fontSize: isCompact ? 17 : 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -364,15 +360,22 @@ class _ShopScreenState extends State<ShopScreen> {
                                       builder: (_) => const CartScreen())),
                               tooltip: 'My Cart',
                               padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
+                              constraints: const BoxConstraints(
+                                minWidth: 36,
+                                minHeight: 36,
+                              ),
+                              visualDensity: VisualDensity.compact,
+                              splashRadius: 20,
                             ),
                             if (authProvider.isSkilledPerson) ...[
                               const SizedBox(width: 6),
                               GestureDetector(
                                 onTap: () => _handleAddProduct(context),
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 5),
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: isCompact ? 8 : 10,
+                                    vertical: 5,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: AppTheme.primaryOrange,
                                     borderRadius: BorderRadius.circular(6),
@@ -395,13 +398,12 @@ class _ShopScreenState extends State<ShopScreen> {
                             ],
                           ],
                         ),
-                        const SizedBox(height: 10),
-                        // Search bar
+                        const SizedBox(height: 8),
                         Container(
-                          height: 44,
+                          height: 52,
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(14),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withValues(alpha: 0.1),
@@ -414,6 +416,7 @@ class _ShopScreenState extends State<ShopScreen> {
                             controller: _searchController,
                             onChanged: _onSearchChanged,
                             decoration: InputDecoration(
+                              isDense: true,
                               hintText: isCompact
                                   ? 'Search products...'
                                   : 'Search products, skills & more...',
@@ -421,8 +424,19 @@ class _ShopScreenState extends State<ShopScreen> {
                                   color: Colors.grey[500], fontSize: 14),
                               prefixIcon: const Icon(Icons.search_rounded,
                                   color: AppTheme.primaryPink, size: 20),
+                              prefixIconConstraints: const BoxConstraints(
+                                minWidth: 44,
+                                minHeight: 44,
+                              ),
                               suffixIcon: _searchQuery.isNotEmpty
                                   ? IconButton(
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(
+                                        minWidth: 36,
+                                        minHeight: 36,
+                                      ),
+                                      visualDensity: VisualDensity.compact,
+                                      splashRadius: 18,
                                       icon: const Icon(Icons.clear,
                                           size: 18, color: Colors.grey),
                                       onPressed: () {
@@ -434,6 +448,13 @@ class _ShopScreenState extends State<ShopScreen> {
                                   : IconButton(
                                       onPressed: _openFilterSheet,
                                       tooltip: 'Filters',
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(
+                                        minWidth: 36,
+                                        minHeight: 36,
+                                      ),
+                                      visualDensity: VisualDensity.compact,
+                                      splashRadius: 18,
                                       icon: Container(
                                         width: 28,
                                         height: 28,
@@ -453,7 +474,7 @@ class _ShopScreenState extends State<ShopScreen> {
                                     ),
                               border: InputBorder.none,
                               contentPadding:
-                                  const EdgeInsets.symmetric(vertical: 11),
+                                  const EdgeInsets.symmetric(vertical: 12),
                             ),
                           ),
                         ),
@@ -513,9 +534,19 @@ class _ShopScreenState extends State<ShopScreen> {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(10, 4, 10, 16),
               sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  childAspectRatio: 0.50,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: () {
+                    final width = MediaQuery.of(context).size.width;
+                    return (width / 220).floor().clamp(2, 7);
+                  }(),
+                  childAspectRatio: () {
+                    final width = MediaQuery.of(context).size.width;
+                    final columns = (width / 220).floor().clamp(2, 7);
+                    if (columns >= 6) return 0.82;
+                    if (columns >= 4) return 0.78;
+                    if (columns == 3) return 0.74;
+                    return 0.72;
+                  }(),
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
                 ),
@@ -758,18 +789,22 @@ class _ShopScreenState extends State<ShopScreen> {
   }
 
   Widget _buildShimmerLoading() {
+    final width = MediaQuery.of(context).size.width;
+    final shimmerCount = (width / 220).floor().clamp(2, 7);
+    final shimmerRatio = shimmerCount >= 4 ? 0.78 : 0.74;
+
     return Padding(
       padding: const EdgeInsets.all(10),
       child: GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          childAspectRatio: 0.70,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: shimmerCount,
+          childAspectRatio: shimmerRatio,
           crossAxisSpacing: 8,
           mainAxisSpacing: 8,
         ),
-        itemCount: 6,
+        itemCount: shimmerCount * 2,
         itemBuilder: (context, index) {
           return Shimmer.fromColors(
             baseColor: Colors.grey[300]!,

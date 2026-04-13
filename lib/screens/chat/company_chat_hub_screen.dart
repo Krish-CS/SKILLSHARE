@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
@@ -18,6 +17,7 @@ import '../../services/presence_service.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/app_helpers.dart';
 import '../../utils/app_dialog.dart';
+import '../../utils/app_fonts.dart';
 import '../../utils/user_roles.dart';
 import '../../utils/web_image_loader.dart';
 import '../../widgets/universal_avatar.dart';
@@ -401,7 +401,7 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
                       children: [
                         Text(
                           AppHelpers.capitalize(widget.otherUserName),
-                          style: GoogleFonts.lora(
+                          style: AppFonts.lora(
                             color: Colors.white,
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
@@ -412,7 +412,7 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
                         ),
                         Text(
                           subtitle,
-                          style: GoogleFonts.lora(
+                          style: AppFonts.lora(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: isOnline
@@ -671,7 +671,7 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
                             const SizedBox(height: 2),
                             Text(
                               tab.label,
-                              style: GoogleFonts.lora(
+                              style: AppFonts.lora(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
                                 color: isActive
@@ -1199,7 +1199,7 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
 //  Placeholder when no chat exists yet
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _NewChatPlaceholder extends StatelessWidget {
+class _NewChatPlaceholder extends StatefulWidget {
   final String currentUserId;
   final String otherUserId;
   final String otherUserName;
@@ -1213,6 +1213,61 @@ class _NewChatPlaceholder extends StatelessWidget {
     this.otherUserPhoto,
     required this.chatService,
   });
+
+  @override
+  State<_NewChatPlaceholder> createState() => _NewChatPlaceholderState();
+}
+
+class _NewChatPlaceholderState extends State<_NewChatPlaceholder> {
+  final TextEditingController _messageController = TextEditingController();
+  bool _isSending = false;
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendFirstMessage() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty || _isSending) return;
+
+    setState(() => _isSending = true);
+    try {
+      final cid = await widget.chatService.getOrCreateChat(
+        widget.currentUserId,
+        widget.otherUserId,
+        {'name': '', 'photo': ''},
+        {
+          'name': widget.otherUserName,
+          'photo': widget.otherUserPhoto ?? '',
+        },
+      );
+      await widget.chatService.sendMessage(
+        chatId: cid,
+        senderId: widget.currentUserId,
+        receiverId: widget.otherUserId,
+        text: text,
+        type: 'text',
+      );
+      if (!mounted) return;
+      _messageController.clear();
+      AppPopup.show(
+        context,
+        message: 'Chat started successfully.',
+        type: PopupType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'Unable to start chat: $e',
+        type: PopupType.error,
+      );
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1244,27 +1299,8 @@ class _NewChatPlaceholder extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
-                    onSubmitted: (text) async {
-                      if (text.trim().isEmpty) return;
-                      try {
-                        final cid = await chatService.getOrCreateChat(
-                          currentUserId,
-                          otherUserId,
-                          {'name': '', 'photo': ''},
-                          {
-                            'name': otherUserName,
-                            'photo': otherUserPhoto ?? ''
-                          },
-                        );
-                        await chatService.sendMessage(
-                          chatId: cid,
-                          senderId: currentUserId,
-                          receiverId: otherUserId,
-                          text: text.trim(),
-                          type: 'text',
-                        );
-                      } catch (_) {}
-                    },
+                    controller: _messageController,
+                    onSubmitted: (_) => _sendFirstMessage(),
                     decoration: InputDecoration(
                       hintText: 'Type a message...',
                       border: OutlineInputBorder(
@@ -1286,8 +1322,17 @@ class _NewChatPlaceholder extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
-                    icon: const Icon(Icons.send, color: Colors.white),
-                    onPressed: () {},
+                    icon: _isSending
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(Icons.send, color: Colors.white),
+                    onPressed: _isSending ? null : _sendFirstMessage,
                   ),
                 ),
               ],
@@ -1342,11 +1387,14 @@ class _ChatPaneState extends State<_ChatPane> {
   final ScrollController _scrollCtrl = ScrollController();
   final ImagePicker _picker = ImagePicker();
 
-  late final Stream<List<MessageModel>> _messageStream;
+  Stream<List<MessageModel>>? _messageStream;
   bool _isSending = false;
   bool _isLoading = false;
   bool _markingRead = false;
   MessageModel? _editingMsg;
+  bool _isPreparingChat = true;
+  Object? _chatLoadError;
+  String _activeChatId = '';
 
   bool _otherUserOnline = false;
   StreamSubscription<UserPresence>? _presenceSub;
@@ -1354,7 +1402,7 @@ class _ChatPaneState extends State<_ChatPane> {
   @override
   void initState() {
     super.initState();
-    _messageStream = _chatService.getMessages(widget.chatId, limit: 150);
+    _activeChatId = widget.chatId;
 
     _presenceSub =
         PresenceService.instance.watchUser(widget.otherUserId).listen((p) {
@@ -1364,8 +1412,30 @@ class _ChatPaneState extends State<_ChatPane> {
       }
     });
 
-    // Mark on open
-    _chatService.markMessagesAsRead(widget.chatId, widget.currentUserId);
+    unawaited(_initializeChat());
+  }
+
+  Future<void> _initializeChat() async {
+    try {
+      _activeChatId = await _chatService.resolveAccessibleDirectChatId(
+        preferredChatId: widget.chatId,
+        currentUserId: widget.currentUserId,
+        otherUserId: widget.otherUserId,
+      );
+      if (!mounted) return;
+      _messageStream = _chatService.getMessages(_activeChatId, limit: 150);
+      _chatService.markMessagesAsRead(_activeChatId, widget.currentUserId);
+      setState(() {
+        _chatLoadError = null;
+        _isPreparingChat = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _chatLoadError = e;
+        _isPreparingChat = false;
+      });
+    }
   }
 
   @override
@@ -1386,7 +1456,7 @@ class _ChatPaneState extends State<_ChatPane> {
       setState(() => _isSending = true);
       try {
         await _chatService.editMessage(
-          chatId: widget.chatId,
+          chatId: _activeChatId,
           messageId: _editingMsg!.id,
           senderId: widget.currentUserId,
           newText: text,
@@ -1407,7 +1477,7 @@ class _ChatPaneState extends State<_ChatPane> {
     setState(() => _isSending = true);
     try {
       await _chatService.sendMessage(
-        chatId: widget.chatId,
+        chatId: _activeChatId,
         senderId: widget.currentUserId,
         receiverId: widget.otherUserId,
         text: imageUrl != null ? 'Image' : text,
@@ -1466,7 +1536,7 @@ class _ChatPaneState extends State<_ChatPane> {
     if (confirmed != true || !mounted) return;
     try {
       await _chatService.deleteMessage(
-        chatId: widget.chatId,
+        chatId: _activeChatId,
         messageId: msg.id,
         senderId: widget.currentUserId,
       );
@@ -1536,7 +1606,7 @@ class _ChatPaneState extends State<_ChatPane> {
     _markingRead = true;
     try {
       await _chatService.markMessagesAsRead(
-          widget.chatId, widget.currentUserId);
+          _activeChatId, widget.currentUserId);
     } finally {
       _markingRead = false;
     }
@@ -1633,6 +1703,41 @@ class _ChatPaneState extends State<_ChatPane> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isPreparingChat || _messageStream == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_chatLoadError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.chat_bubble_outline,
+                  size: 56, color: Colors.grey),
+              const SizedBox(height: 16),
+              Text(
+                'Unable to open this chat.\n$_chatLoadError',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[700]),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _chatLoadError = null;
+                    _isPreparingChat = true;
+                  });
+                  unawaited(_initializeChat());
+                },
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Column(
       children: [
         Expanded(
@@ -1643,7 +1748,42 @@ class _ChatPaneState extends State<_ChatPane> {
                 return const Center(child: CircularProgressIndicator());
               }
               if (snapshot.hasError) {
-                return Center(child: Text('Error: ${snapshot.error}'));
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.chat_bubble_outline,
+                            size: 56, color: Colors.grey),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'This chat needs to reconnect.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${snapshot.error}',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey[700]),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _chatLoadError = null;
+                              _isPreparingChat = true;
+                            });
+                            unawaited(_initializeChat());
+                          },
+                          child: const Text('Reconnect Chat'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
               }
               if (!snapshot.hasData || snapshot.data!.isEmpty) {
                 return Center(
@@ -2120,12 +2260,17 @@ class _ChatPaneState extends State<_ChatPane> {
       AppDialog.error(context, 'Invalid offer letter attachment link.');
       return;
     }
-    final launched = await launchUrl(
+    var launched = await launchUrl(
       uri,
-      mode:
-          kIsWeb ? LaunchMode.platformDefault : LaunchMode.externalApplication,
+      mode: LaunchMode.platformDefault,
       webOnlyWindowName: '_blank',
     );
+    if (!launched && !kIsWeb) {
+      launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+    }
     if (!launched && mounted) {
       AppDialog.error(context, 'Could not open the attached offer letter PDF.');
     }

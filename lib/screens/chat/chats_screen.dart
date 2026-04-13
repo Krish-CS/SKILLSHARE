@@ -103,57 +103,185 @@ class _ChatsScreenState extends State<ChatsScreen> {
   String _searchQuery = '';
   String? _currentUserId;
   Stream<List<ChatModel>>? _chatsStream;
+  List<ChatModel> _lastKnownChats = const <ChatModel>[];
 
   /// Map of chatId → number of pending work requests for that chat.
   /// Updated via a real subscription so amber badges are always in sync.
   Map<String, int> _pendingWorkCounts = {};
   StreamSubscription<QuerySnapshot>? _workReqSub;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userRoleSub;
+  StreamSubscription<User?>? _authSub;
   String? _currentUserRole;
+  final Set<String> _ghostCleanupScheduled = <String>{};
+
+  String _friendlyChatsError(Object error) {
+    if (error is FirebaseException) {
+      if (error.code == 'permission-denied') {
+        return 'Chat access is restricted for one or more conversations.';
+      }
+      if (error.code == 'unavailable' || error.code == 'deadline-exceeded') {
+        return 'Network issue while loading chats. Please retry.';
+      }
+    }
+    return 'Unable to load chats right now.';
+  }
+
+  bool _isGhostEmptyDirectChat(ChatModel chat) {
+    if (_isJobChat(chat) || _isHiringChat(chat) || chat.isWorkChat || chat.isJobChat) {
+      return false;
+    }
+    if (chat.participants.length != 2) return false;
+    if (chat.lastMessage.trim().isNotEmpty) return false;
+    final hasUnread =
+      chat.unreadCount.values.any((unreadValue) => unreadValue > 0);
+    if (hasUnread) return false;
+    return true;
+  }
+
+  void _scheduleGhostChatCleanup(List<ChatModel> chats) {
+    final uid = _currentUserId;
+    if (uid == null) return;
+
+    final toPrune = chats
+        .where(_isGhostEmptyDirectChat)
+        .where((chat) => !_ghostCleanupScheduled.contains(chat.id))
+        .toList();
+    if (toPrune.isEmpty) return;
+
+    for (final chat in toPrune) {
+      _ghostCleanupScheduled.add(chat.id);
+    }
+
+    unawaited(
+      _chatService.pruneEmptyDirectChatsForUser(uid, toPrune).catchError((_) {
+        for (final chat in toPrune) {
+          _ghostCleanupScheduled.remove(chat.id);
+        }
+      }),
+    );
+  }
+
+  void _bindCurrentUser(String? userId) {
+    _workReqSub?.cancel();
+    _workReqSub = null;
+    _userRoleSub?.cancel();
+    _userRoleSub = null;
+
+    _currentUserId = userId;
+    _chatsStream = null;
+    _currentUserRole = null;
+    _pendingWorkCounts = {};
+    _lastKnownChats = const <ChatModel>[];
+    _ghostCleanupScheduled.clear();
+
+    if (userId == null || userId.isEmpty) {
+      return;
+    }
+
+    _chatsStream = _chatService.getUserChats(userId);
+
+    _userRoleSub = FirebaseFirestore.instance
+        .collection(AppConstants.usersCollection)
+        .doc(userId)
+        .snapshots()
+        .listen((doc) {
+      final role = (doc.data()?['role'] as String?)?.trim();
+      if (!mounted) return;
+      setState(() => _currentUserRole = role);
+    });
+
+    // Listen to pending work requests for this user and keep the count map
+    // updated so chat list badges remain fresh.
+    _workReqSub = FirebaseFirestore.instance
+        .collection(AppConstants.requestsCollection)
+        .where('participants', arrayContains: userId)
+        .snapshots()
+        .listen((snap) {
+      final newCounts = <String, int>{};
+      for (final doc in snap.docs) {
+        final d = doc.data();
+        final type = (d['type'] as String?) ?? '';
+        final serviceId = (d['serviceId'] as String?) ?? '';
+        final status = (d['status'] as String?) ?? '';
+        final chatId = (d['chatId'] as String?) ?? '';
+        if ((type == 'chat_work_request' || serviceId == 'direct_hire') &&
+            status == AppConstants.requestStatusPending &&
+            chatId.isNotEmpty) {
+          newCounts[chatId] = (newCounts[chatId] ?? 0) + 1;
+        }
+      }
+      if (mounted) setState(() => _pendingWorkCounts = newCounts);
+    });
+  }
+
+  Future<void> _openChatSafely(ChatModel chat) async {
+    final liveUserId = FirebaseAuth.instance.currentUser?.uid ?? _currentUserId;
+    if (liveUserId == null || liveUserId.isEmpty) {
+      return;
+    }
+
+    final otherUserId = chat.participants.firstWhere(
+      (id) => id != liveUserId,
+      orElse: () => '',
+    );
+    if (otherUserId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to open this chat right now.')),
+      );
+      return;
+    }
+
+    final otherUserDetails = chat.participantDetails[otherUserId];
+    final otherUserName = otherUserDetails?['name'] ?? 'Unknown';
+    final otherUserPhoto = otherUserDetails?['photo'];
+
+    var targetChatId = chat.id;
+    final isDirectChat = !_isJobChat(chat) && !_isHiringChat(chat);
+    if (isDirectChat) {
+      try {
+        targetChatId = await _chatService.resolveAccessibleDirectChatId(
+          preferredChatId: chat.id,
+          currentUserId: liveUserId,
+          otherUserId: otherUserId,
+        );
+      } on FirebaseException catch (e) {
+        debugPrint('Direct chat resolve failed for ${chat.id}: ${e.code}');
+      } catch (e) {
+        debugPrint('Direct chat resolve failed for ${chat.id}: $e');
+      }
+    }
+
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatDetailScreen(
+          chatId: targetChatId,
+          otherUserId: otherUserId,
+          otherUserName: otherUserName,
+          otherUserPhoto: otherUserPhoto,
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
-    _currentUserId = FirebaseAuth.instance.currentUser?.uid;
-    if (_currentUserId != null) {
-      _chatsStream = _chatService.getUserChats(_currentUserId!);
-      _userRoleSub = FirebaseFirestore.instance
-          .collection(AppConstants.usersCollection)
-          .doc(_currentUserId)
-          .snapshots()
-          .listen((doc) {
-        final role = (doc.data()?['role'] as String?)?.trim();
-        if (!mounted) return;
-        setState(() => _currentUserRole = role);
-      });
+    _bindCurrentUser(FirebaseAuth.instance.currentUser?.uid);
 
-      // Listen to pending work requests for this user and keep the count map
-      // updated via setState so every rebuild of the chat list uses fresh data.
-      _workReqSub = FirebaseFirestore.instance
-          .collection(AppConstants.requestsCollection)
-          .where('participants', arrayContains: _currentUserId)
-          .snapshots()
-          .listen((snap) {
-        final newCounts = <String, int>{};
-        for (final doc in snap.docs) {
-          final d = doc.data();
-          final type = (d['type'] as String?) ?? '';
-          final serviceId = (d['serviceId'] as String?) ?? '';
-          final status = (d['status'] as String?) ?? '';
-          final chatId = (d['chatId'] as String?) ?? '';
-          if ((type == 'chat_work_request' || serviceId == 'direct_hire') &&
-              status == AppConstants.requestStatusPending &&
-              chatId.isNotEmpty) {
-            newCounts[chatId] = (newCounts[chatId] ?? 0) + 1;
-          }
-        }
-        if (mounted) setState(() => _pendingWorkCounts = newCounts);
-      });
-    }
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      final nextUserId = user?.uid;
+      if (nextUserId == _currentUserId) return;
+      if (!mounted) return;
+      setState(() => _bindCurrentUser(nextUserId));
+    });
   }
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _workReqSub?.cancel();
     _userRoleSub?.cancel();
     _searchController.dispose();
@@ -259,17 +387,43 @@ class _ChatsScreenState extends State<ChatsScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
+                if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                  _lastKnownChats = List<ChatModel>.from(snapshot.data!);
+                }
+
+                final hasCachedChats = _lastKnownChats.isNotEmpty;
+                final hasSnapshotChats =
+                    snapshot.hasData && snapshot.data!.isNotEmpty;
+
                 if (snapshot.hasError) {
+                  final isPermissionError =
+                      snapshot.error is FirebaseException &&
+                      (snapshot.error as FirebaseException).code ==
+                          'permission-denied';
+
+                  if (hasCachedChats && !isPermissionError) {
+                    return _buildGroupedChatList(chats: _lastKnownChats);
+                  }
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Icon(Icons.error, size: 64, color: Colors.red),
                         const SizedBox(height: 16),
-                        Text('Error: ${snapshot.error}'),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Text(
+                            _friendlyChatsError(snapshot.error!),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
                       ],
                     ),
                   );
+                }
+
+                if (!hasSnapshotChats && hasCachedChats) {
+                  return _buildGroupedChatList(chats: _lastKnownChats);
                 }
 
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
@@ -277,6 +431,9 @@ class _ChatsScreenState extends State<ChatsScreen> {
                 }
 
                 List<ChatModel> chats = snapshot.data!;
+
+                _scheduleGhostChatCleanup(chats);
+                chats = chats.where((chat) => !_isGhostEmptyDirectChat(chat)).toList();
 
                 // Filter chats based on search
                 if (_searchQuery.isNotEmpty) {
@@ -329,13 +486,17 @@ class _ChatsScreenState extends State<ChatsScreen> {
   Widget _buildGroupedChatList({
     required List<ChatModel> chats,
   }) {
-    final visibleChats = _collapseChatsByParticipant(chats);
+    final visibleChats = _collapseChatsByParticipant(chats)
+        .where((chat) => !_isGhostEmptyDirectChat(chat))
+        .toList();
     _warmRoleCacheForChats(visibleChats);
 
     final jobChats = <ChatModel>[];
     final companyChats = <ChatModel>[];
     final customerChats = <ChatModel>[];
+    final skilledChats = <ChatModel>[];
     final deliveryChats = <ChatModel>[];
+    final unknownChats = <ChatModel>[];
 
     for (final chat in visibleChats) {
       if (_isJobChat(chat)) {
@@ -347,17 +508,34 @@ class _ChatsScreenState extends State<ChatsScreen> {
         companyChats.add(chat);
       } else if (otherRole == UserRoles.deliveryPartner) {
         deliveryChats.add(chat);
+      } else if (otherRole == UserRoles.skilledPerson) {
+        skilledChats.add(chat);
       } else if (otherRole == UserRoles.customer) {
         customerChats.add(chat);
+      } else {
+        unknownChats.add(chat);
       }
     }
 
     final isSkilledPerson =
         UserRoles.normalizeRole(_currentUserRole) == UserRoles.skilledPerson;
+    final isCustomer =
+        UserRoles.normalizeRole(_currentUserRole) == UserRoles.customer;
     if (isSkilledPerson) {
       return _buildSkilledRoleTabs(
         customerChats: customerChats,
+        skilledChats: [...skilledChats, ...unknownChats],
         companyChats: [...jobChats, ...companyChats],
+      );
+    }
+
+    if (isCustomer) {
+      if (visibleChats.isEmpty) {
+        return _buildEmptyState();
+      }
+      return ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: visibleChats.map(_buildChatItem).toList(),
       );
     }
 
@@ -390,6 +568,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
     final orderedRegularSections = [
       ('Customer Chats', Icons.person_outline_rounded, const Color(0xFF2E7D32),
           soloCustomerChats),
+      ('Skilled Chats', Icons.groups_2_outlined, const Color(0xFF7B1FA2),
+        [...skilledChats, ...unknownChats]),
       ('Delivery Chats', Icons.local_shipping_outlined,
           const Color(0xFFEF6C00), deliveryChats),
     ];
@@ -441,6 +621,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
 
   Widget _buildSkilledRoleTabs({
     required List<ChatModel> customerChats,
+    required List<ChatModel> skilledChats,
     required List<ChatModel> companyChats,
   }) {
     Widget buildTabList(List<ChatModel> chatsInTab, String emptyLabel) {
@@ -484,7 +665,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
     }
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Column(
         children: [
           Container(
@@ -494,6 +675,9 @@ class _ChatsScreenState extends State<ChatsScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: const TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.center,
+              labelPadding: EdgeInsets.symmetric(horizontal: 14),
               indicatorSize: TabBarIndicatorSize.tab,
               indicator: BoxDecoration(
                 gradient: LinearGradient(
@@ -511,6 +695,10 @@ class _ChatsScreenState extends State<ChatsScreen> {
                   text: 'Customer Chats',
                 ),
                 Tab(
+                  icon: Icon(Icons.groups_2_outlined),
+                  text: 'Skilled Chats',
+                ),
+                Tab(
                   icon: Icon(Icons.apartment_rounded),
                   text: 'Company Chats',
                 ),
@@ -521,6 +709,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
             child: TabBarView(
               children: [
                 buildTabList(customerChats, 'No customer chats'),
+                buildTabList(skilledChats, 'No skilled chats'),
                 buildCompanyGroupedList(companyChats),
               ],
             ),
@@ -572,10 +761,28 @@ class _ChatsScreenState extends State<ChatsScreen> {
   }
 
   String _resolvedOtherRoleForChat(ChatModel chat) {
+    final category = (chat.chatCategory ?? '').trim().toLowerCase();
+    if (category.contains('company')) return UserRoles.company;
+    if (category.contains('customer')) return UserRoles.customer;
+    if (category.contains('skilled')) return UserRoles.skilledPerson;
+    if (category.contains('delivery')) return UserRoles.deliveryPartner;
+
     final role = _otherUserRoleForChat(chat);
     if (role == UserRoles.company) return UserRoles.company;
     if (role == UserRoles.deliveryPartner) return UserRoles.deliveryPartner;
-    return UserRoles.customer;
+    if (role == UserRoles.skilledPerson) return UserRoles.skilledPerson;
+    if (role == UserRoles.customer) return UserRoles.customer;
+
+    // Fallbacks for partially loaded/legacy participant role metadata.
+    if (_isJobChat(chat)) return UserRoles.company;
+    if (_isHiringChat(chat)) {
+      final normalizedCurrentRole = UserRoles.normalizeRole(_currentUserRole);
+      return normalizedCurrentRole == UserRoles.skilledPerson
+          ? UserRoles.customer
+          : UserRoles.skilledPerson;
+    }
+
+    return 'unknown';
   }
 
   List<ChatModel> _collapseChatsByParticipant(List<ChatModel> chats) {
@@ -857,32 +1064,21 @@ class _ChatsScreenState extends State<ChatsScreen> {
   }
 
   Widget _buildChatItem(ChatModel chat) {
+    final activeUserId = _currentUserId;
     final otherUserId = chat.participants.firstWhere(
-      (id) => id != _currentUserId,
+      (id) => id != activeUserId,
       orElse: () => '',
     );
     final otherUserDetails = chat.participantDetails[otherUserId];
     final name = otherUserDetails?['name'] ?? 'Unknown';
     final photo = otherUserDetails?['photo'];
-    final unreadCount = chat.unreadCount[_currentUserId] ?? 0;
+    final unreadCount = activeUserId == null ? 0 : (chat.unreadCount[activeUserId] ?? 0);
     final pendingWork = _pendingWorkCounts[chat.id] ?? 0;
     final isJobChat = _isJobChat(chat);
     final jobTitle = (chat.jobTitle ?? '').trim();
 
     return InkWell(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ChatDetailScreen(
-              chatId: chat.id,
-              otherUserId: otherUserId,
-              otherUserName: name,
-              otherUserPhoto: photo,
-            ),
-          ),
-        );
-      },
+      onTap: () => _openChatSafely(chat),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(

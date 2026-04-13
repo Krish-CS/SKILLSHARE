@@ -13,6 +13,7 @@ import '../../services/cloudinary_service.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../providers/user_provider.dart';
 import '../../utils/app_dialog.dart';
+import '../../utils/web_image_loader.dart';
 
 class AddProductScreen extends StatefulWidget {
   final ProductModel? existingProduct;
@@ -222,6 +223,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   Future<void> _pasteImageFromClipboard({
     ClipboardReader? reader,
     bool showSuccessDialog = true,
+    bool silentWhenNoImage = false,
   }) async {
     if (_remainingImageSlots <= 0) {
       if (mounted) {
@@ -246,6 +248,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
       final bytes = await _readImageBytesFromReader(clipboardReader);
       if (bytes == null || bytes.isEmpty) {
+        if (silentWhenNoImage) return;
         if (mounted) {
           AppDialog.info(
             context,
@@ -272,6 +275,20 @@ class _AddProductScreenState extends State<AddProductScreen> {
         detail: e.toString(),
       );
     }
+  }
+
+  bool _isTextInputFocused() {
+    final focusedWidget = FocusManager.instance.primaryFocus?.context?.widget;
+    return focusedWidget is EditableText;
+  }
+
+  Future<void> _handleGlobalPasteShortcut() async {
+    if (_isLoading || _isUploading || _remainingImageSlots <= 0) return;
+    if (_isTextInputFocused()) return;
+    await _pasteImageFromClipboard(
+      showSuccessDialog: false,
+      silentWhenNoImage: true,
+    );
   }
 
   Future<Uint8List?> _readImageBytesFromReader(ClipboardReader reader) async {
@@ -545,8 +562,23 @@ class _AddProductScreenState extends State<AddProductScreen> {
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.keyV, control: true):
+            _PasteImageIntent(),
+        SingleActivator(LogicalKeyboardKey.keyV, meta: true): _PasteImageIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _PasteImageIntent: CallbackAction<_PasteImageIntent>(
+            onInvoke: (intent) {
+              unawaited(_handleGlobalPasteShortcut());
+              return null;
+            },
+          ),
+        },
+        child: Scaffold(
+          appBar: AppBar(
         title: Text(_isEditing ? 'Edit Product' : 'Add Product',
             style: const TextStyle(color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
@@ -559,8 +591,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
             ),
           ),
         ),
-      ),
-      body: Form(
+          ),
+          body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -985,7 +1017,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                       border:
                                           Border.all(color: Colors.grey[300]!),
                                       image: DecorationImage(
-                                        image: NetworkImage(_imageUrls[index]),
+                                        image: WebImageLoader.getImageProvider(_imageUrls[index])!,
                                         fit: BoxFit.cover,
                                       ),
                                     ),
@@ -1192,10 +1224,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
             ),
           ],
         ),
-      ),
-      // Upload overlay
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      bottomSheet: _isUploading
+          ),
+          // Upload overlay
+          floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+          bottomSheet: _isUploading
           ? Container(
               width: double.infinity,
               padding: const EdgeInsets.all(24),
@@ -1213,6 +1245,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ),
             )
           : null,
+        ),
+      ),
     );
   }
+}
+
+class _PasteImageIntent extends Intent {
+  const _PasteImageIntent();
 }

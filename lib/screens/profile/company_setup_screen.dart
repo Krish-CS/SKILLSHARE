@@ -10,6 +10,7 @@ import '../../models/company_profile.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/app_dialog.dart';
+import '../../utils/web_image_loader.dart';
 import '../../screens/avatar/avatar_builder_screen.dart';
 import '../main_navigation.dart';
 
@@ -253,7 +254,7 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
       );
     }
 
-    final bottomPad = MediaQuery.of(context).padding.bottom;
+    final bottomPad = MediaQuery.of(context).padding.bottom + 96;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
@@ -323,8 +324,7 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
                                         : (_logoUrl != null &&
                                                 _logoUrl!.isNotEmpty
                                             ? DecorationImage(
-                                                image:
-                                                    NetworkImage(_logoUrl!),
+                                              image: WebImageLoader.getImageProvider(_logoUrl)!,
                                                 fit: BoxFit.cover)
                                             : null)),
                               ),
@@ -363,7 +363,7 @@ class _CompanySetupScreenState extends State<CompanySetupScreen> {
             SliverToBoxAdapter(
               child: Center(
                 child: Padding(
-                  padding: const EdgeInsets.only(top: 12),
+                  padding: const EdgeInsets.only(top: 16),
                   child: GestureDetector(
                     onTap: () async {
                       final config = await Navigator.push<dynamic>(

@@ -21,6 +21,7 @@ import 'company_setup_screen.dart';
 import '../portfolio/portfolio_screen.dart';
 import '../auth/login_screen.dart';
 import 'settings_screen.dart';
+import 'app_lock_settings_screen.dart';
 import '../../utils/app_dialog.dart';
 
 class ProfileTabScreen extends StatefulWidget {
@@ -288,11 +289,18 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                       ),
                     ),
                     // Content
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(
-                          0, MediaQuery.of(context).padding.top + 20, 0, 32),
-                      child: Column(
-                        children: [
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 520),
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                              16,
+                              MediaQuery.of(context).padding.top + 20,
+                              16,
+                              32),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
                           // Avatar with gradient ring
                           GestureDetector(
                             onTap: () {
@@ -570,11 +578,13 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                 ),
                               ),
                           ],
-                          const SizedBox(height: 20),
-                          // Quick action buttons
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
+                              const SizedBox(height: 20),
+                              // Quick action buttons
+                              Wrap(
+                                alignment: WrapAlignment.center,
+                                spacing: 16,
+                                runSpacing: 10,
+                                children: [
                               _headerAction(
                                 icon: Icons.visibility_rounded,
                                 label: 'View Profile',
@@ -590,7 +600,6 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                   }
                                 },
                               ),
-                              const SizedBox(width: 16),
                               _headerAction(
                                 icon: Icons.edit_rounded,
                                 label: 'Edit Profile',
@@ -625,7 +634,6 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                   // Stream auto-updates
                                 },
                               ),
-                              const SizedBox(width: 16),
                               _headerAction(
                                 icon: Icons.face_retouching_natural,
                                 label: 'Avatar',
@@ -647,9 +655,11 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                   }
                                 },
                               ),
+                                ],
+                              ),
                             ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ],
@@ -700,6 +710,20 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                             context,
                             MaterialPageRoute(
                                 builder: (_) => const SettingsScreen()),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1, indent: 60),
+                      _buildMenuTile(
+                        icon: Icons.lock_rounded,
+                        iconColor: const Color(0xFF1E88E5),
+                        title: 'App Lock',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AppLockSettingsScreen(),
+                            ),
                           );
                         },
                       ),
@@ -793,7 +817,7 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                 ),
               ),
 
-              const SizedBox(height: 32),
+              SizedBox(height: MediaQuery.of(context).padding.bottom + 72),
             ],
           ),
         ),

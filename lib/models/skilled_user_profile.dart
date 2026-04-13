@@ -24,15 +24,24 @@ class SkilledUserProfile {
   final bool isVerified;
   final DateTime? verifiedAt;
   final String? rejectionReason;
+
   /// Number of companies that have endorsed (liked) this professional.
   final int companyEndorsementCount;
 
   /// Banner customisation data (image or styled text).
   final Map<String, dynamic>? bannerData;
+
   /// Animated avatar configuration.
   final Map<String, dynamic>? avatarConfig;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  static DateTime? _readDate(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
 
   SkilledUserProfile({
     required this.userId,
@@ -205,11 +214,36 @@ class SkilledUserProfile {
       isVerified: isVerified ?? this.isVerified,
       verifiedAt: verifiedAt ?? this.verifiedAt,
       rejectionReason: rejectionReason ?? this.rejectionReason,
-      companyEndorsementCount: companyEndorsementCount ?? this.companyEndorsementCount,
+      companyEndorsementCount:
+          companyEndorsementCount ?? this.companyEndorsementCount,
       bannerData: clearBanner ? null : (bannerData ?? this.bannerData),
       avatarConfig: avatarConfig ?? this.avatarConfig,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );
   }
+
+  Map<String, dynamic> get credentialSummary {
+    final data = verificationData;
+    if (data == null) return const <String, dynamic>{};
+    final summary = data['credentialSummary'];
+    if (summary is Map) {
+      return Map<String, dynamic>.from(summary);
+    }
+    return const <String, dynamic>{};
+  }
+
+  bool get hasConfidentialCredentials =>
+      credentialSummary['hasConfidentialCredentials'] == true;
+
+  int get confidentialCredentialCount {
+    final value = credentialSummary['verifiedCredentialCount'];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.trim()) ?? 0;
+    return 0;
+  }
+
+  DateTime? get credentialsLastCheckedAt =>
+      _readDate(credentialSummary['lastCheckedAt']);
 }

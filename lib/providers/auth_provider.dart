@@ -98,7 +98,9 @@ class AuthProvider with ChangeNotifier {
           // Use a minimal map that excludes 'role'.
           try {
             await _authService.mergeUserProfileWithoutRole(_currentUser!);
-          } catch (_) {}
+          } catch (e) {
+            debugPrint('Fallback profile merge (without role) failed: $e');
+          }
         }
       }
       _error = null;

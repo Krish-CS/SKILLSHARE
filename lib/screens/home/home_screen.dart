@@ -253,6 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       body: SafeArea(
+        top: false,
         child: RefreshIndicator(
           onRefresh: _loadData,
           child: CustomScrollView(

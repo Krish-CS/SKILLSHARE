@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../utils/app_constants.dart';
+import '../utils/app_fonts.dart';
 
 /// Reusable filter bottom sheet for Home, Shop, and Explore screens.
 ///
@@ -188,7 +188,7 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                       : null,
                   child: Text(
                     'Reset',
-                    style: GoogleFonts.lora(
+                    style: AppFonts.lora(
                       textStyle: TextStyle(color: _primaryColor),
                     ),
                   ),

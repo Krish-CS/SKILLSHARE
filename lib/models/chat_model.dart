@@ -13,6 +13,7 @@ class ChatModel {
   final bool isJobChat;
   final String? jobId;
   final String? jobTitle;
+  final String? chatCategory;
   final DateTime createdAt;
 
   ChatModel({
@@ -28,26 +29,78 @@ class ChatModel {
     this.isJobChat = false,
     this.jobId,
     this.jobTitle,
+    this.chatCategory,
     required this.createdAt,
   });
 
   factory ChatModel.fromMap(Map<String, dynamic> map, String id) {
+    DateTime parseDate(dynamic value) {
+      if (value is Timestamp) return value.toDate();
+      if (value is DateTime) return value;
+      if (value is int) {
+        return DateTime.fromMillisecondsSinceEpoch(value);
+      }
+      if (value is String) {
+        final parsed = DateTime.tryParse(value);
+        if (parsed != null) return parsed;
+      }
+      return DateTime.now();
+    }
+
+    List<String> parseParticipants(dynamic value) {
+      if (value is! Iterable) return const <String>[];
+      return value
+          .map((e) => e?.toString().trim() ?? '')
+          .where((e) => e.isNotEmpty)
+          .toList();
+    }
+
+    Map<String, dynamic> parseParticipantDetails(dynamic value) {
+      if (value is! Map) return <String, dynamic>{};
+      final result = <String, dynamic>{};
+      value.forEach((key, val) {
+        final normalizedKey = key.toString().trim();
+        if (normalizedKey.isEmpty) return;
+        if (val is Map) {
+          result[normalizedKey] = Map<String, dynamic>.from(val);
+        } else {
+          result[normalizedKey] = val;
+        }
+      });
+      return result;
+    }
+
+    Map<String, int> parseUnreadCount(dynamic value) {
+      if (value is! Map) return <String, int>{};
+      final result = <String, int>{};
+      value.forEach((key, val) {
+        final normalizedKey = key.toString().trim();
+        if (normalizedKey.isEmpty) return;
+        if (val is num) {
+          result[normalizedKey] = val.toInt();
+          return;
+        }
+        final parsed = int.tryParse(val?.toString() ?? '');
+        result[normalizedKey] = parsed ?? 0;
+      });
+      return result;
+    }
+
     return ChatModel(
       id: id,
-      participants: List<String>.from(map['participants'] ?? []),
-      participantDetails:
-          Map<String, dynamic>.from(map['participantDetails'] ?? {}),
-      lastMessage: map['lastMessage'] ?? '',
-      lastMessageType: map['lastMessageType'] ?? 'text',
-      lastMessageTime:
-          (map['lastMessageTime'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      unreadCount: Map<String, int>.from(map['unreadCount'] ?? {}),
+      participants: parseParticipants(map['participants']),
+      participantDetails: parseParticipantDetails(map['participantDetails']),
+      lastMessage: (map['lastMessage'] ?? '').toString(),
+      lastMessageType: (map['lastMessageType'] ?? 'text').toString(),
+      lastMessageTime: parseDate(map['lastMessageTime']),
+      unreadCount: parseUnreadCount(map['unreadCount']),
       isWorkChat: map['isWorkChat'] == true,
       workRequestId: (map['workRequestId'] as String?)?.trim(),
       isJobChat: map['isJobChat'] == true,
       jobId: (map['jobId'] as String?)?.trim(),
       jobTitle: (map['jobTitle'] as String?)?.trim(),
-      createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      chatCategory: (map['chatCategory'] as String?)?.trim(),
+      createdAt: parseDate(map['createdAt']),
     );
   }
 
@@ -65,6 +118,8 @@ class ChatModel {
       'isJobChat': isJobChat,
       if (jobId != null && jobId!.isNotEmpty) 'jobId': jobId,
       if (jobTitle != null && jobTitle!.isNotEmpty) 'jobTitle': jobTitle,
+      if (chatCategory != null && chatCategory!.isNotEmpty)
+        'chatCategory': chatCategory,
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }
@@ -100,19 +155,45 @@ class MessageModel {
   });
 
   factory MessageModel.fromMap(Map<String, dynamic> map, String id) {
+    DateTime parseRequiredDate(dynamic value) {
+      if (value is Timestamp) return value.toDate();
+      if (value is DateTime) return value;
+      if (value is int) {
+        return DateTime.fromMillisecondsSinceEpoch(value);
+      }
+      if (value is String) {
+        final parsed = DateTime.tryParse(value);
+        if (parsed != null) return parsed;
+      }
+      return DateTime.now();
+    }
+
+    DateTime? parseOptionalDate(dynamic value) {
+      if (value == null) return null;
+      if (value is Timestamp) return value.toDate();
+      if (value is DateTime) return value;
+      if (value is int) {
+        return DateTime.fromMillisecondsSinceEpoch(value);
+      }
+      if (value is String) {
+        return DateTime.tryParse(value);
+      }
+      return null;
+    }
+
     return MessageModel(
       id: id,
-      chatId: map['chatId'] ?? '',
-      senderId: map['senderId'] ?? '',
-      text: map['text'] ?? '',
-      type: map['type'] ?? 'text',
-      mediaUrl: map['mediaUrl'],
+      chatId: (map['chatId'] ?? '').toString(),
+      senderId: (map['senderId'] ?? '').toString(),
+      text: (map['text'] ?? '').toString(),
+      type: (map['type'] ?? 'text').toString(),
+      mediaUrl: (map['mediaUrl'] as String?)?.trim(),
       attachmentName: (map['attachmentName'] as String?)?.trim(),
       isRead: map['isRead'] ?? false,
-      readAt: (map['readAt'] as Timestamp?)?.toDate(),
+      readAt: parseOptionalDate(map['readAt']),
       isDeleted: map['isDeleted'] ?? false,
-      editedAt: (map['editedAt'] as Timestamp?)?.toDate(),
-      createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      editedAt: parseOptionalDate(map['editedAt']),
+      createdAt: parseRequiredDate(map['createdAt']),
     );
   }
 

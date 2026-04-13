@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:google_fonts/google_fonts.dart';
+import 'app_fonts.dart';
 
 class AppTheme {
   // Colors from the UI reference
@@ -28,17 +27,23 @@ class AppTheme {
   );
 
   static ThemeData get lightTheme {
-    // On web, allow Google Fonts to fall back to platform fonts when CDN
-    // is unreachable so text never renders invisible.
-    if (kIsWeb) {
-      GoogleFonts.config.allowRuntimeFetching = true;
-    }
-
-    // Build the Lora text theme on top of the Material baseline so that
-    // every style has a non-null, visible color even if the font download
-    // hasn't completed yet.
+    // Always use bundled app fonts for consistent rendering and offline safety.
     final baseTextTheme = ThemeData.light(useMaterial3: true).textTheme;
-    final loraTextTheme = GoogleFonts.loraTextTheme(baseTextTheme);
+    final loraTextTheme = AppFonts.loraTextTheme(baseTextTheme);
+
+    final appBarTitleStyle = AppFonts.lora(
+      color: textPrimary,
+      fontSize: 20,
+      fontWeight: FontWeight.w600,
+      letterSpacing: -0.3,
+      height: 1.25,
+    );
+
+    final buttonTextStyle = AppFonts.lora(
+      fontSize: 15,
+      fontWeight: FontWeight.w700,
+      height: 1.1,
+    );
 
     return ThemeData(
       useMaterial3: true,
@@ -53,15 +58,9 @@ class AppTheme {
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: textPrimary),
-        titleTextStyle: GoogleFonts.lora(
-          color: textPrimary,
-          fontSize: 20,
-          fontWeight: FontWeight.w600,
-          letterSpacing: -0.3,
-          height: 1.25,
-        ),
+        titleTextStyle: appBarTitleStyle,
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: cardBackground,
         elevation: 2,
         shape: RoundedRectangleBorder(
@@ -70,11 +69,32 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
+          textStyle: buttonTextStyle,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          minimumSize: const Size(0, 52),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(30),
           ),
           elevation: 0,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          textStyle: buttonTextStyle,
+          minimumSize: const Size(0, 52),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          textStyle: AppFonts.lora(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            height: 1.1,
+          ),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(

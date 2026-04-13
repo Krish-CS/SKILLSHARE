@@ -1,10 +1,35 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/chat_model.dart';
 import '../utils/app_constants.dart';
+import '../utils/user_roles.dart';
 
 class ChatService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  bool _isRecoverableStreamError(FirebaseException e) {
+    switch (e.code) {
+      case 'unavailable':
+      case 'aborted':
+      case 'cancelled':
+      case 'deadline-exceeded':
+      case 'resource-exhausted':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  Future<bool> _isConfidentialProjectChat(String chatId) async {
+    final chatDoc = await _firestore
+        .collection(AppConstants.chatsCollection)
+        .doc(chatId)
+        .get();
+    if (!chatDoc.exists) return false;
+    final data = chatDoc.data() ?? const <String, dynamic>{};
+    return data['isWorkChat'] == true || data['isJobChat'] == true;
+  }
 
   Map<String, dynamic> _normalizeParticipantDetails(
       Map<String, dynamic> details) {
@@ -21,6 +46,68 @@ class ChatService {
       'photo': photo,
       if (role.isNotEmpty) 'role': role,
     };
+  }
+
+  bool _hasRole(Map<String, dynamic> details) {
+    final rawRole = (details['role'] as String?)?.trim() ?? '';
+    return rawRole.isNotEmpty;
+  }
+
+  Map<String, dynamic> _mergeParticipantDetails(
+    Map<String, dynamic> preferred,
+    Map<String, dynamic> fallback,
+  ) {
+    final preferredName = (preferred['name'] as String?)?.trim() ?? '';
+    final preferredPhoto = (preferred['photo'] as String?)?.trim() ?? '';
+    final preferredRole = (preferred['role'] as String?)?.trim() ?? '';
+
+    final fallbackName = (fallback['name'] as String?)?.trim() ?? '';
+    final fallbackPhoto = (fallback['photo'] as String?)?.trim() ?? '';
+    final fallbackRole = (fallback['role'] as String?)?.trim() ?? '';
+
+    final mergedRole = preferredRole.isNotEmpty ? preferredRole : fallbackRole;
+
+    return {
+      'name': preferredName.isNotEmpty
+          ? preferredName
+          : (fallbackName.isNotEmpty ? fallbackName : 'User'),
+      'photo': preferredPhoto.isNotEmpty ? preferredPhoto : fallbackPhoto,
+      if (mergedRole.isNotEmpty) 'role': mergedRole,
+    };
+  }
+
+  String _chatCategoryForRole(String? role) {
+    final normalized = UserRoles.normalizeRole(role);
+    if (normalized == UserRoles.company) return 'company';
+    if (normalized == UserRoles.customer) return 'customer';
+    if (normalized == UserRoles.skilledPerson) return 'skilled';
+    if (normalized == UserRoles.deliveryPartner) return 'delivery';
+    return 'general';
+  }
+
+  String _deriveDirectChatCategory(
+    Map<String, dynamic> user1,
+    Map<String, dynamic> user2,
+  ) {
+    final role1 = UserRoles.normalizeRole((user1['role'] as String?)?.trim());
+    final role2 = UserRoles.normalizeRole((user2['role'] as String?)?.trim());
+
+    if (role1 == UserRoles.skilledPerson && role2 != null) {
+      return _chatCategoryForRole(role2);
+    }
+    if (role2 == UserRoles.skilledPerson && role1 != null) {
+      return _chatCategoryForRole(role1);
+    }
+    if (role1 == UserRoles.company || role2 == UserRoles.company) {
+      return 'company';
+    }
+    if (role1 == UserRoles.customer || role2 == UserRoles.customer) {
+      return 'customer';
+    }
+    if (role1 == UserRoles.skilledPerson || role2 == UserRoles.skilledPerson) {
+      return 'skilled';
+    }
+    return 'general';
   }
 
   bool _isTwoUserChat(
@@ -68,10 +155,16 @@ class ChatService {
     required String preferredChatId,
     required List<String> participants,
     required Map<String, dynamic> participantDetails,
+    required String chatCategory,
   }) async {
     final chatData = {
       'participants': participants,
       'participantDetails': participantDetails,
+      'isWorkChat': false,
+      'isJobChat': false,
+      'chatCategory': chatCategory,
+      'jobId': null,
+      'workRequestId': null,
       'lastMessage': '',
       'lastMessageType': 'text',
       'lastMessageTime': FieldValue.serverTimestamp(),
@@ -107,6 +200,84 @@ class ChatService {
     }
   }
 
+  Future<Map<String, dynamic>> _loadUserChatDetails(String userId) async {
+    try {
+      final doc = await _firestore
+          .collection(AppConstants.usersCollection)
+          .doc(userId)
+          .get();
+      final data = doc.data() ?? const <String, dynamic>{};
+      return _normalizeParticipantDetails({
+        'name': data['name'],
+        'profilePhoto': data['profilePhoto'],
+        'role': data['role'],
+      });
+    } catch (_) {
+      return _normalizeParticipantDetails(const {});
+    }
+  }
+
+  Future<String> resolveAccessibleDirectChatId({
+    required String preferredChatId,
+    required String currentUserId,
+    required String otherUserId,
+  }) async {
+    if (preferredChatId.startsWith('work_') ||
+        preferredChatId.startsWith('jobchat_') ||
+        currentUserId.trim().isEmpty ||
+        otherUserId.trim().isEmpty) {
+      return preferredChatId;
+    }
+
+    final chatRef = _firestore
+        .collection(AppConstants.chatsCollection)
+        .doc(preferredChatId);
+
+    try {
+      final chatDoc = await chatRef.get();
+      if (chatDoc.exists) {
+        final participants =
+            List<String>.from(chatDoc.data()?['participants'] ?? const []);
+        if (_isTwoUserChat(participants, currentUserId, otherUserId)) {
+          return preferredChatId;
+        }
+      }
+    } on FirebaseException catch (e) {
+      if (e.code != 'permission-denied') rethrow;
+      debugPrint('Preferred chat access denied for $preferredChatId');
+    }
+
+    try {
+      final existingChat = await _firestore
+          .collection(AppConstants.chatsCollection)
+          .where('participants', arrayContains: currentUserId)
+          .limit(100)
+          .get();
+
+      for (final doc in existingChat.docs) {
+        final data = doc.data();
+        final participants = List<String>.from(data['participants'] ?? const []);
+        if (_isTwoUserChat(participants, currentUserId, otherUserId) &&
+            data['isWorkChat'] != true &&
+            data['isJobChat'] != true) {
+          return doc.id;
+        }
+      }
+    } on FirebaseException catch (e) {
+      if (e.code != 'permission-denied') rethrow;
+      debugPrint('Accessible chat lookup denied: ${e.message}');
+    }
+
+    final currentUserDetails = await _loadUserChatDetails(currentUserId);
+    final otherUserDetails = await _loadUserChatDetails(otherUserId);
+    return getOrCreateChat(
+      currentUserId,
+      otherUserId,
+      currentUserDetails,
+      otherUserDetails,
+    );
+  }
+
   // Get or create chat between two users
   Future<String> getOrCreateChat(
     String user1Id,
@@ -118,8 +289,40 @@ class ChatService {
       throw Exception('You cannot start a chat with yourself.');
     }
 
-    final normalizedUser1 = _normalizeParticipantDetails(user1Details);
-    final normalizedUser2 = _normalizeParticipantDetails(user2Details);
+    var normalizedUser1 = _normalizeParticipantDetails(user1Details);
+    var normalizedUser2 = _normalizeParticipantDetails(user2Details);
+
+    if (!_hasRole(normalizedUser1)) {
+      final loadedUser1 = await _loadUserChatDetails(user1Id);
+      normalizedUser1 = _mergeParticipantDetails(normalizedUser1, loadedUser1);
+    }
+    if (!_hasRole(normalizedUser2)) {
+      final loadedUser2 = await _loadUserChatDetails(user2Id);
+      normalizedUser2 = _mergeParticipantDetails(normalizedUser2, loadedUser2);
+    }
+
+    final directChatCategory =
+        _deriveDirectChatCategory(normalizedUser1, normalizedUser2);
+
+    // Respect target profile visibility setting for new/lookup direct chat.
+    bool targetProfileVisible = true;
+    try {
+      final targetUserDoc = await _firestore
+          .collection(AppConstants.usersCollection)
+          .doc(user2Id)
+          .get();
+      final targetSettings = targetUserDoc.data()?['settings'];
+      targetProfileVisible = targetSettings is Map
+          ? (targetSettings['profileVisible'] as bool? ?? true)
+          : true;
+    } on FirebaseException catch (e) {
+      if (e.code != 'permission-denied') rethrow;
+      debugPrint('Target profile visibility lookup denied for $user2Id');
+    }
+    if (!targetProfileVisible) {
+      throw Exception('Chat is unavailable due to user privacy settings.');
+    }
+
     final isBlocked = await _isUserBlockedEitherWay(user1Id, user2Id);
     if (isBlocked) {
       throw Exception('Chat is unavailable due to user privacy settings.');
@@ -141,6 +344,7 @@ class ChatService {
             user1Id: normalizedUser1,
             user2Id: normalizedUser2,
           },
+          'chatCategory': directChatCategory,
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
         return deterministicChatId;
@@ -169,6 +373,7 @@ class ChatService {
                 user1Id: normalizedUser1,
                 user2Id: normalizedUser2,
               },
+              'chatCategory': directChatCategory,
               'updatedAt': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true));
           } on FirebaseException catch (e) {
@@ -191,25 +396,92 @@ class ChatService {
         user1Id: normalizedUser1,
         user2Id: normalizedUser2,
       },
+      chatCategory: directChatCategory,
     );
   }
 
   // Get user chats
   Stream<List<ChatModel>> getUserChats(String userId) {
-    return _firestore
+    List<ChatModel> lastGoodChats = const <ChatModel>[];
+
+    final query = _firestore
         .collection(AppConstants.chatsCollection)
         .where('participants', arrayContains: userId)
-        .snapshots()
-        .map((snapshot) {
-      final chats = snapshot.docs
-          .map((doc) => ChatModel.fromMap(doc.data(), doc.id))
-          .toList();
+        .snapshots();
 
-      // Sort by lastMessageTime in memory to avoid composite index
-      chats.sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
+    return query.transform(
+      StreamTransformer<QuerySnapshot<Map<String, dynamic>>, List<ChatModel>>
+          .fromHandlers(
+        handleData: (snapshot, sink) {
+          final chats = <ChatModel>[];
+          for (final doc in snapshot.docs) {
+            try {
+              chats.add(ChatModel.fromMap(doc.data(), doc.id));
+            } catch (e) {
+              // Skip malformed chat docs instead of breaking the entire list.
+              debugPrint('Skipped malformed chat ${doc.id}: $e');
+            }
+          }
 
-      return chats;
-    });
+          // Sort by lastMessageTime in memory to avoid composite index
+          chats.sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
+          lastGoodChats = List<ChatModel>.unmodifiable(chats);
+          sink.add(chats);
+        },
+        handleError: (error, stackTrace, sink) {
+          if (error is FirebaseException &&
+              _isRecoverableStreamError(error)) {
+            debugPrint('getUserChats recoverable error: ${error.message}');
+            if (lastGoodChats.isNotEmpty) {
+              sink.add(lastGoodChats);
+              return;
+            }
+            sink.add(const <ChatModel>[]);
+            return;
+          }
+          sink.addError(error, stackTrace);
+        },
+      ),
+    );
+  }
+
+  Future<void> pruneEmptyDirectChatsForUser(
+    String userId,
+    List<ChatModel> chats,
+  ) async {
+    for (final chat in chats) {
+      final isDirectChat = !chat.isWorkChat &&
+          !chat.isJobChat &&
+          !chat.id.startsWith('work_') &&
+          !chat.id.startsWith('jobchat_');
+      if (!isDirectChat) continue;
+      if (!chat.participants.contains(userId) || chat.participants.length != 2) {
+        continue;
+      }
+      if (chat.lastMessage.trim().isNotEmpty) continue;
+      final hasUnread = chat.unreadCount.values.any((value) => value > 0);
+      if (hasUnread) continue;
+
+      try {
+        final messagesSnap = await _firestore
+            .collection(AppConstants.chatsCollection)
+            .doc(chat.id)
+            .collection(AppConstants.messagesCollection)
+            .limit(1)
+            .get();
+        if (messagesSnap.docs.isNotEmpty) continue;
+
+        await _firestore
+            .collection(AppConstants.chatsCollection)
+            .doc(chat.id)
+            .delete();
+      } on FirebaseException catch (e) {
+        // Ignore permission/network issues so UI flow is not interrupted.
+        debugPrint('pruneEmptyDirectChatsForUser skipped ${chat.id}: ${e.code}');
+      } catch (e) {
+        debugPrint('pruneEmptyDirectChatsForUser skipped ${chat.id}: $e');
+      }
+    }
   }
 
   // Send message
@@ -292,6 +564,8 @@ class ChatService {
 
   // Get messages stream
   Stream<List<MessageModel>> getMessages(String chatId, {int limit = 200}) {
+    List<MessageModel> lastGoodMessages = const <MessageModel>[];
+
     Query<Map<String, dynamic>> query = _firestore
         .collection(AppConstants.chatsCollection)
         .doc(chatId)
@@ -302,11 +576,37 @@ class ChatService {
       query = query.limit(limit);
     }
 
-    return query.snapshots().map((snapshot) {
-      return snapshot.docs
-          .map((doc) => MessageModel.fromMap(doc.data(), doc.id))
-          .toList();
-    });
+    return query.snapshots().transform(
+      StreamTransformer<QuerySnapshot<Map<String, dynamic>>, List<MessageModel>>
+          .fromHandlers(
+        handleData: (snapshot, sink) {
+          final messages = <MessageModel>[];
+          for (final doc in snapshot.docs) {
+            try {
+              messages.add(MessageModel.fromMap(doc.data(), doc.id));
+            } catch (e) {
+              // Skip malformed message docs to keep the thread visible.
+              debugPrint('Skipped malformed message ${doc.id}: $e');
+            }
+          }
+          lastGoodMessages = List<MessageModel>.unmodifiable(messages);
+          sink.add(messages);
+        },
+        handleError: (error, stackTrace, sink) {
+          if (error is FirebaseException &&
+              _isRecoverableStreamError(error)) {
+            debugPrint('getMessages recoverable error for $chatId: ${error.message}');
+            if (lastGoodMessages.isNotEmpty) {
+              sink.add(lastGoodMessages);
+              return;
+            }
+            sink.add(const <MessageModel>[]);
+            return;
+          }
+          sink.addError(error, stackTrace);
+        },
+      ),
+    );
   }
 
   // Mark messages as read
@@ -419,6 +719,12 @@ class ChatService {
     required String senderId,
     required String newText,
   }) async {
+    final isConfidential = await _isConfidentialProjectChat(chatId);
+    if (isConfidential) {
+      throw Exception(
+          'Messages in work/job project chats are confidential and cannot be edited.');
+    }
+
     final trimmed = newText.trim();
     if (trimmed.isEmpty) throw Exception('Message cannot be empty.');
 
@@ -451,6 +757,12 @@ class ChatService {
     required String messageId,
     required String senderId,
   }) async {
+    final isConfidential = await _isConfidentialProjectChat(chatId);
+    if (isConfidential) {
+      throw Exception(
+          'Messages in work/job project chats are confidential and cannot be deleted.');
+    }
+
     final ref = _firestore
         .collection(AppConstants.chatsCollection)
         .doc(chatId)

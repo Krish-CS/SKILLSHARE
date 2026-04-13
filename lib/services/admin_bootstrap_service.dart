@@ -8,11 +8,32 @@ import '../utils/app_constants.dart';
 import '../utils/user_roles.dart';
 
 class AdminBootstrapService {
-  static const String defaultAdminEmail = 'admin@gmail.com';
-  static const String defaultAdminPassword = 'Admin@123';
-  static const String defaultAdminName = 'Admin';
+  static const String defaultAdminEmail =
+      String.fromEnvironment('SKILLSHARE_BOOTSTRAP_ADMIN_EMAIL');
+  static const String defaultAdminPassword =
+      String.fromEnvironment('SKILLSHARE_BOOTSTRAP_ADMIN_PASSWORD');
+  static const String defaultAdminName =
+      String.fromEnvironment('SKILLSHARE_BOOTSTRAP_ADMIN_NAME',
+          defaultValue: 'Admin');
 
   Future<void> ensureDefaultAdminAccount() async {
+    if (defaultAdminEmail.isEmpty || defaultAdminPassword.isEmpty) {
+      debugPrint(
+        'Admin bootstrap skipped: define '
+        'SKILLSHARE_BOOTSTRAP_ADMIN_EMAIL and '
+        'SKILLSHARE_BOOTSTRAP_ADMIN_PASSWORD.',
+      );
+      return;
+    }
+
+    if (defaultAdminPassword.length < 12) {
+      debugPrint(
+        'Admin bootstrap skipped: '
+        'SKILLSHARE_BOOTSTRAP_ADMIN_PASSWORD must be at least 12 characters.',
+      );
+      return;
+    }
+
     final tempAppName =
         'admin-bootstrap-${DateTime.now().microsecondsSinceEpoch}';
 
@@ -92,10 +113,13 @@ class AdminBootstrapService {
     } finally {
       try {
         await tempAuth?.signOut();
-      } catch (_) {}
-      try {
-        await tempApp?.delete();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Default admin bootstrap signOut cleanup failed: $e');
+      }
+      // Do not delete the temporary app immediately. On some Android devices,
+      // plugin callbacks can still arrive briefly and then crash with
+      // "FirebaseApp was deleted" when any Firestore stream is active.
+      tempApp = null;
     }
   }
 }

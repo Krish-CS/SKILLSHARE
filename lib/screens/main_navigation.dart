@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
@@ -31,15 +32,46 @@ class _MainNavigationState extends State<MainNavigation> {
 
   // ── In-app notification banners ─────────────────────────────────────────
   StreamSubscription<QuerySnapshot>? _notifSub;
+  StreamSubscription<QuerySnapshot>? _orderNotifSub;
+  StreamSubscription<Map<String, dynamic>>? _settingsSub;
   int _prevNotifCount = -1; // -1 means "not yet initialised"
+  int _prevOrderNotifCount = -1;
   OverlayEntry? _bannerEntry;
   Timer? _bannerTimer;
   String? _watchingUserId;
+  bool _pushNotificationsEnabled = true;
+  bool _jobNotificationsEnabled = true;
 
   @override
   void initState() {
     super.initState();
+    _applyInAppSystemUi();
     WidgetsBinding.instance.addPostFrameCallback((_) => _initBannerStream());
+  }
+
+  void _applyInAppSystemUi() {
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.white,
+        systemNavigationBarIconBrightness: Brightness.dark,
+        systemNavigationBarDividerColor: Color(0xFFE0E0E0),
+      ),
+    );
+  }
+
+  void _restoreAuthSystemUi() {
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.black,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+    );
   }
 
   void _initBannerStream() {
@@ -51,6 +83,16 @@ class _MainNavigationState extends State<MainNavigation> {
     if (uid == null || uid == _watchingUserId) return;
     _watchingUserId = uid;
     _notifSub?.cancel();
+    _orderNotifSub?.cancel();
+    _settingsSub?.cancel();
+
+    _settingsSub = _firestoreService.userSettingsStream(uid).listen((settings) {
+      _pushNotificationsEnabled = settings['pushNotifications'] as bool? ?? true;
+      _jobNotificationsEnabled = settings['jobNotifications'] as bool? ?? true;
+    });
+
+    _prevNotifCount = -1;
+    _prevOrderNotifCount = -1;
     _notifSub = FirebaseFirestore.instance
         .collection(AppConstants.requestsCollection)
         .where('participants', arrayContains: uid)
@@ -63,6 +105,10 @@ class _MainNavigationState extends State<MainNavigation> {
         return;
       }
       if (count > _prevNotifCount) {
+        if (!_pushNotificationsEnabled || !_jobNotificationsEnabled) {
+          _prevNotifCount = count;
+          return;
+        }
         // New notification arrived
         final newDocs = snap.docs.where((d) {
           final ts = d.data()['updatedAt'] as Timestamp?;
@@ -85,6 +131,41 @@ class _MainNavigationState extends State<MainNavigation> {
       }
       _prevNotifCount = count;
     });
+
+    if (capturedRole == UserRoles.skilledPerson) {
+      _orderNotifSub = FirebaseFirestore.instance
+          .collection(AppConstants.ordersCollection)
+          .where('sellerId', isEqualTo: uid)
+          .snapshots()
+          .listen((snap) {
+        final count = snap.docs.length;
+        if (_prevOrderNotifCount == -1) {
+          _prevOrderNotifCount = count;
+          return;
+        }
+        if (count > _prevOrderNotifCount) {
+          if (!_pushNotificationsEnabled) {
+            _prevOrderNotifCount = count;
+            return;
+          }
+          final newDocs = snap.docs.where((d) {
+            final ts = d.data()['createdAt'] as Timestamp?;
+            return ts != null &&
+                ts.toDate().isAfter(
+                    DateTime.now().subtract(const Duration(minutes: 5)));
+          }).toList();
+          if (newDocs.isNotEmpty) {
+            final data = newDocs.first.data();
+            _showTopBanner(
+              'New shop order',
+              '${(data['productName'] as String?) ?? 'Product'} • Qty ${(data['quantity'] as num?)?.toInt() ?? 1}',
+              navigateToIndex: 2, // My Shop tab for skilled users
+            );
+          }
+        }
+        _prevOrderNotifCount = count;
+      });
+    }
   }
 
   void _showTopBanner(String title, String subtitle, {int? navigateToIndex}) {
@@ -118,7 +199,10 @@ class _MainNavigationState extends State<MainNavigation> {
 
   @override
   void dispose() {
+    _restoreAuthSystemUi();
     _notifSub?.cancel();
+    _orderNotifSub?.cancel();
+    _settingsSub?.cancel();
     _bannerTimer?.cancel();
     _bannerEntry?.remove();
     _bannerEntry = null;

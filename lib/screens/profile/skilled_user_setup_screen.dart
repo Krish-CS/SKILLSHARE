@@ -10,10 +10,13 @@ import '../../providers/auth_provider.dart';
 import '../../models/skilled_user_profile.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/app_dialog.dart';
+import '../../utils/user_roles.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/app_popup.dart';
+import '../../widgets/avatar_picker.dart';
 import '../../widgets/universal_avatar.dart';
+import '../../utils/web_image_loader.dart';
 import '../../screens/avatar/avatar_builder_screen.dart';
 import '../../services/biometric_service.dart';
 import '../main_navigation.dart';
@@ -40,10 +43,12 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
   final _customCategoryController = TextEditingController();
   final _locationController = TextEditingController();
   final _shopNameController = TextEditingController();
+  final List<TextEditingController> _credentialLinkControllers =
+      <TextEditingController>[TextEditingController()];
   final ImagePicker _picker = ImagePicker();
   final CloudinaryService _cloudinaryService = CloudinaryService();
   final FirestoreService _firestoreService = FirestoreService();
-  
+
   String? _selectedCategory;
   List<String> _skills = [];
   List<String> _skillSuggestions = []; // Global skill suggestions
@@ -54,7 +59,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
   String _verificationStatus = 'pending';
   String _uploadStatusMessage = 'Saving profile...';
   String _visibility = 'private';
-  
+
   // Image variables
   File? _profileImage;
   Uint8List? _profileImageBytes;
@@ -75,9 +80,17 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
     'Videography',
     'Editing',
     ...AppConstants.categories.where((c) => ![
-      'Home Baking', 'Handicrafts', 'Content Creation', 'Beauty & Wellness',
-      'Carpentry', 'Tailoring', 'Photography', 'Videography', 'Editing', 'Other'
-    ].contains(c)),
+          'Home Baking',
+          'Handicrafts',
+          'Content Creation',
+          'Beauty & Wellness',
+          'Carpentry',
+          'Tailoring',
+          'Photography',
+          'Videography',
+          'Editing',
+          'Other'
+        ].contains(c)),
     'Other',
   ];
 
@@ -95,7 +108,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       final profile = userProvider.currentProfile!;
       _bioController.text = profile.bio;
       _locationController.text = profile.address ?? '';
-      
+
       // Handle custom category - if not in list, set as Other + custom
       if (profile.category != null && !_categories.contains(profile.category)) {
         _selectedCategory = 'Other';
@@ -103,7 +116,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       } else {
         _selectedCategory = profile.category;
       }
-      
+
       _skills = List.from(profile.skills);
       _visibility = profile.visibility;
       _profileImageUrl = profile.profilePicture;
@@ -111,11 +124,20 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       _portfolioImageUrls = List.from(profile.portfolioImages);
       _isVerified = profile.isVerified;
       _verificationStatus = profile.verificationStatus;
-      
+
       // Load Aadhaar if exists
-      if (profile.verificationData != null && profile.verificationData!['aadhaarNumber'] != null) {
+      if (profile.verificationData != null &&
+          profile.verificationData!['aadhaarNumber'] != null) {
         _aadhaarController.text = profile.verificationData!['aadhaarNumber'];
       }
+    }
+
+    try {
+      final credentialLinks = await _firestoreService
+          .getPrivateSkilledCredentialLinks(widget.userId);
+      _seedCredentialControllers(credentialLinks);
+    } catch (e) {
+      debugPrint('Error loading private credential links: $e');
     }
 
     // Load global skill suggestions
@@ -128,7 +150,8 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
     // Load shop name (only relevant when editing)
     if (widget.isEditing) {
       try {
-        final shopSettings = await _firestoreService.getShopSettings(widget.userId);
+        final shopSettings =
+            await _firestoreService.getShopSettings(widget.userId);
         _shopNameController.text = shopSettings['shopName'] as String? ?? '';
       } catch (e) {
         debugPrint('Error loading shop settings: $e');
@@ -148,7 +171,46 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
     _customCategoryController.dispose();
     _locationController.dispose();
     _shopNameController.dispose();
+    for (final controller in _credentialLinkControllers) {
+      controller.dispose();
+    }
     super.dispose();
+  }
+
+  void _seedCredentialControllers(List<String> links) {
+    for (final controller in _credentialLinkControllers) {
+      controller.dispose();
+    }
+    _credentialLinkControllers
+      ..clear()
+      ..addAll(
+        (links.isEmpty ? const <String>[''] : links)
+            .map((link) => TextEditingController(text: link)),
+      );
+  }
+
+  List<String> _readCredentialLinks() {
+    return _credentialLinkControllers
+        .map((controller) => controller.text.trim())
+        .where((link) => link.isNotEmpty)
+        .toList();
+  }
+
+  void _addCredentialField() {
+    setState(() {
+      _credentialLinkControllers.add(TextEditingController());
+    });
+  }
+
+  void _removeCredentialField(int index) {
+    if (_credentialLinkControllers.length == 1) {
+      _credentialLinkControllers.first.clear();
+      setState(() {});
+      return;
+    }
+    final controller = _credentialLinkControllers.removeAt(index);
+    controller.dispose();
+    setState(() {});
   }
 
   void _addSkill([String? skillName]) {
@@ -161,7 +223,8 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       // Add to global suggestions in background
       _firestoreService.addCustomSkill(skill);
       // Add to local suggestions list so it appears immediately
-      if (!_skillSuggestions.any((s) => s.toLowerCase() == skill.toLowerCase())) {
+      if (!_skillSuggestions
+          .any((s) => s.toLowerCase() == skill.toLowerCase())) {
         _skillSuggestions.add(skill);
       }
     }
@@ -199,7 +262,9 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       }
     } on Exception catch (e) {
       // Only show error for actual errors, not cancellations
-      if (mounted && e.toString().isNotEmpty && !e.toString().contains('cancel')) {
+      if (mounted &&
+          e.toString().isNotEmpty &&
+          !e.toString().contains('cancel')) {
         AppDialog.error(context, 'Error picking image', detail: e.toString());
       }
     }
@@ -207,8 +272,11 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
 
   Future<void> _pickPortfolioImages() async {
     try {
-      if ((kIsWeb ? _portfolioImageBytes.length : _portfolioImages.length) + _portfolioImageUrls.length >= 10) {
-        AppDialog.info(context, 'Maximum 10 portfolio images allowed', title: 'Limit Reached');
+      if ((kIsWeb ? _portfolioImageBytes.length : _portfolioImages.length) +
+              _portfolioImageUrls.length >=
+          10) {
+        AppDialog.info(context, 'Maximum 10 portfolio images allowed',
+            title: 'Limit Reached');
         return;
       }
 
@@ -221,7 +289,8 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       // User cancelled - do nothing
       if (images.isEmpty) return;
 
-      final remaining = 10 - (_portfolioImages.length + _portfolioImageUrls.length);
+      final remaining =
+          10 - (_portfolioImages.length + _portfolioImageUrls.length);
       if (kIsWeb) {
         final selected = images.take(remaining).toList();
         final bytesList = <Uint8List>[];
@@ -240,7 +309,9 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       }
     } on Exception catch (e) {
       // Only show error for actual errors, not cancellations
-      if (mounted && e.toString().isNotEmpty && !e.toString().contains('cancel')) {
+      if (mounted &&
+          e.toString().isNotEmpty &&
+          !e.toString().contains('cancel')) {
         AppDialog.error(context, 'Error picking images', detail: e.toString());
       }
     }
@@ -259,6 +330,53 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
   void _removePortfolioUrl(int index) {
     setState(() {
       _portfolioImageUrls.removeAt(index);
+    });
+  }
+
+  bool _isDiceBearAvatarConfig(Map<String, dynamic>? config) {
+    return config?['type']?.toString() == 'dicebear';
+  }
+
+  bool _isEmojiAvatarConfig(Map<String, dynamic>? config) {
+    return config?['type']?.toString() == 'emoji';
+  }
+
+  Future<void> _pickEmojiAvatar() async {
+    final currentAvatar = _isEmojiAvatarConfig(_avatarConfig)
+        ? _avatarConfig!['avatarKey']?.toString()
+        : null;
+    final avatarKey = await AvatarPickerSheet.show(
+      context,
+      currentAvatar: currentAvatar,
+    );
+    if (!mounted || avatarKey == null) return;
+
+    setState(() {
+      if (avatarKey == 'remove_avatar') {
+        _avatarConfig = null;
+      } else {
+        _avatarConfig = {
+          'type': 'emoji',
+          'avatarKey': avatarKey,
+        };
+      }
+    });
+  }
+
+  Future<void> _pickAnimatedAvatar() async {
+    final config = await Navigator.push<dynamic>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AvatarBuilderScreen(
+          initialConfig:
+              _isDiceBearAvatarConfig(_avatarConfig) ? _avatarConfig : null,
+        ),
+      ),
+    );
+    if (!mounted || config == null) return;
+
+    setState(() {
+      _avatarConfig = config as Map<String, dynamic>;
     });
   }
 
@@ -335,7 +453,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
     final maskedAadhaar = _maskAadhaar(aadhaar);
     final otpController = TextEditingController();
     bool isVerifying = false;
-    bool isAutoFilling = true;  // starts in "reading SMS" state
+    bool isAutoFilling = true; // starts in "reading SMS" state
     bool autoFilled = false;
     String? otpError;
 
@@ -359,10 +477,12 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                     });
                     if (i < generatedOtp.length) {
                       i++;
-                      Future.delayed(const Duration(milliseconds: 80), typeNext);
+                      Future.delayed(
+                          const Duration(milliseconds: 80), typeNext);
                     }
                   }
                 }
+
                 i = 1;
                 typeNext();
               }
@@ -370,7 +490,8 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
           }
 
           return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: Column(
               children: [
                 Container(
@@ -384,7 +505,8 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                 ),
                 const SizedBox(height: 10),
                 const Text('OTP Verification',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
               ],
             ),
             content: Column(
@@ -395,7 +517,9 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                   text: TextSpan(
                     style: const TextStyle(color: Colors.black87, fontSize: 13),
                     children: [
-                      const TextSpan(text: 'An OTP has been sent to the mobile\nnumber linked with Aadhaar '),
+                      const TextSpan(
+                          text:
+                              'An OTP has been sent to the mobile\nnumber linked with Aadhaar '),
                       TextSpan(
                         text: maskedAadhaar,
                         style: const TextStyle(fontWeight: FontWeight.bold),
@@ -410,7 +534,8 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                   child: isAutoFilling
                       ? Container(
                           key: const ValueKey('reading'),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
                             color: Colors.blue.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(8),
@@ -420,7 +545,8 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               SizedBox(
-                                width: 12, height: 12,
+                                width: 12,
+                                height: 12,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 1.5,
                                   color: Colors.blue.shade600,
@@ -428,13 +554,15 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                               ),
                               const SizedBox(width: 8),
                               const Text('Reading SMS...',
-                                  style: TextStyle(fontSize: 12, color: Colors.blue)),
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.blue)),
                             ],
                           ),
                         )
                       : Container(
                           key: const ValueKey('filled'),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
                             color: Colors.green.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(8),
@@ -462,19 +590,26 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                   maxLength: 6,
                   textAlign: TextAlign.center,
                   readOnly: isAutoFilling,
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 8),
+                  style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 8),
                   decoration: InputDecoration(
                     hintText: '------',
                     counterText: '',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12)),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF9C27B0), width: 2),
+                      borderSide:
+                          const BorderSide(color: Color(0xFF9C27B0), width: 2),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide(
-                        color: !isAutoFilling ? const Color(0xFF9C27B0) : Colors.grey.shade300,
+                        color: !isAutoFilling
+                            ? const Color(0xFF9C27B0)
+                            : Colors.grey.shade300,
                         width: !isAutoFilling ? 2 : 1,
                       ),
                     ),
@@ -528,7 +663,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
     );
   }
 
-  /// Step 3 — biometric scan, then mark verified
+  /// Step 3 — biometric scan, then mark verification submitted for review
   Future<void> _runBiometricStep(String aadhaar) async {
     // Show biometric prompt dialog while waiting
     if (mounted) {
@@ -543,15 +678,20 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       reason: 'Scan your fingerprint to complete Aadhaar verification',
     );
 
-    if (mounted) Navigator.of(context, rootNavigator: true).pop(); // close wait dialog
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).pop(); // close wait dialog
+    }
     if (!mounted) return;
 
     if (result == BiometricResult.success) {
       setState(() {
-        _isVerified = true;
-        _verificationStatus = 'verified';
+        _isVerified = false;
+        _verificationStatus = 'submitted';
       });
-      AppDialog.success(context, '✓ Aadhaar & fingerprint verified! Profile is now public.');
+      AppDialog.success(
+        context,
+        'Identity checks completed. Your verification request is submitted for admin approval.',
+      );
     } else {
       AppDialog.error(context, BiometricService.resultMessage(result));
     }
@@ -601,13 +741,16 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final currentProfile = userProvider.currentProfile;
-      
+      final requestedCredentialLinks = _readCredentialLinks();
+
       String? finalProfileUrl = _profileImageUrl;
       List<String> finalPortfolioUrls = List.from(_portfolioImageUrls);
 
       // Upload profile image if selected
       if (_profileImage != null || _profileImageBytes != null) {
-        if (mounted) setState(() => _uploadStatusMessage = 'Uploading profile photo...');
+        if (mounted) {
+          setState(() => _uploadStatusMessage = 'Uploading profile photo...');
+        }
         if (kIsWeb && _profileImageBytes != null) {
           finalProfileUrl = await _cloudinaryService.uploadImageBytes(
             _profileImageBytes!,
@@ -623,7 +766,10 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
 
       // Upload portfolio images if selected
       if (_portfolioImages.isNotEmpty || _portfolioImageBytes.isNotEmpty) {
-        if (mounted) setState(() => _uploadStatusMessage = 'Uploading portfolio images...');
+        if (mounted) {
+          setState(
+              () => _uploadStatusMessage = 'Uploading portfolio images...');
+        }
         if (kIsWeb) {
           for (final bytes in _portfolioImageBytes) {
             final url = await _cloudinaryService.uploadImageBytes(
@@ -648,16 +794,20 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       }
 
       // Prepare verification data
-      Map<String, dynamic>? verificationData;
+      final verificationData = Map<String, dynamic>.from(
+        currentProfile?.verificationData ?? const <String, dynamic>{},
+      );
       if (_aadhaarController.text.isNotEmpty) {
-        verificationData = {
+        verificationData.addAll({
           'aadhaarNumber': _aadhaarController.text.trim().replaceAll(' ', ''),
           'maskedAadhaar': _maskAadhaar(_aadhaarController.text.trim()),
           'verifiedAt': _isVerified ? DateTime.now().toIso8601String() : null,
-        };
+        });
       }
 
-      if (mounted) setState(() => _uploadStatusMessage = 'Saving to database...');
+      if (mounted) {
+        setState(() => _uploadStatusMessage = 'Saving to database...');
+      }
 
       // Get user name to denormalize into skilled_users collection
       final userName = authProvider.currentUser?.name;
@@ -666,7 +816,8 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       final String? effectiveProfileUrl;
       if (finalProfileUrl != null && finalProfileUrl.isNotEmpty) {
         effectiveProfileUrl = finalProfileUrl;
-      } else if (currentProfile?.profilePicture != null && currentProfile!.profilePicture!.isNotEmpty) {
+      } else if (currentProfile?.profilePicture != null &&
+          currentProfile!.profilePicture!.isNotEmpty) {
         effectiveProfileUrl = currentProfile.profilePicture;
       } else {
         effectiveProfileUrl = null;
@@ -680,14 +831,21 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
         category: finalCategory,
         profilePicture: effectiveProfileUrl,
         verificationStatus: _verificationStatus,
-        visibility: widget.isEditing ? _visibility : (_isVerified ? AppConstants.visibilityPublic : AppConstants.visibilityPrivate),
+        visibility: widget.isEditing
+            ? _visibility
+            : (_isVerified
+                ? AppConstants.visibilityPublic
+                : AppConstants.visibilityPrivate),
         portfolioImages: finalPortfolioUrls,
         portfolioVideos: currentProfile?.portfolioVideos ?? [],
-        verificationData: verificationData,
-        address: _locationController.text.trim().isNotEmpty ? _locationController.text.trim() : null,
+        verificationData: verificationData.isEmpty ? null : verificationData,
+        address: _locationController.text.trim().isNotEmpty
+            ? _locationController.text.trim()
+            : null,
         rating: currentProfile?.rating ?? 0.0,
         reviewCount: currentProfile?.reviewCount ?? 0,
         projectCount: currentProfile?.projectCount ?? 0,
+        companyEndorsementCount: currentProfile?.companyEndorsementCount ?? 0,
         isVerified: _isVerified,
         verifiedAt: _isVerified ? DateTime.now() : null,
         avatarConfig: _avatarConfig,
@@ -696,6 +854,19 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       );
 
       final success = await userProvider.updateProfile(profile);
+      List<String> validCredentialLinks = const <String>[];
+      if (success) {
+        if (mounted) {
+          setState(
+              () => _uploadStatusMessage = 'Checking certification links...');
+        }
+        validCredentialLinks =
+            await _firestoreService.savePrivateSkilledCredentialLinks(
+          userId: widget.userId,
+          rawLinks: requestedCredentialLinks,
+        );
+        await userProvider.loadProfile(widget.userId);
+      }
 
       // Save animated avatar config to users collection
       if (_avatarConfig != null) {
@@ -709,8 +880,10 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
         // render across Home/Profile without waiting for a full reload.
         if (authProvider.currentUser != null) {
           final syncedUser = authProvider.currentUser!.copyWith(
-            profilePhoto: effectiveProfileUrl ?? authProvider.currentUser!.profilePhoto,
-            avatarConfig: _avatarConfig ?? authProvider.currentUser!.avatarConfig,
+            profilePhoto:
+                effectiveProfileUrl ?? authProvider.currentUser!.profilePhoto,
+            avatarConfig:
+                _avatarConfig ?? authProvider.currentUser!.avatarConfig,
           );
           await authProvider.updateProfile(syncedUser);
         }
@@ -719,9 +892,11 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
         try {
           if (effectiveProfileUrl != null && effectiveProfileUrl.isNotEmpty) {
             // Update via Firestore service directly for reliability
-            await FirestoreService().updateUserProfilePhoto(widget.userId, effectiveProfileUrl);
+            await FirestoreService()
+                .updateUserProfilePhoto(widget.userId, effectiveProfileUrl);
 
-            debugPrint('Profile photo saved to both collections: $effectiveProfileUrl');
+            debugPrint(
+                'Profile photo saved to both collections: $effectiveProfileUrl');
           }
         } catch (e) {
           debugPrint('Error updating user profile photo: $e');
@@ -742,7 +917,10 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
         if (widget.isEditing) {
           AppPopup.show(
             context,
-            message: 'Profile updated successfully!',
+            message: requestedCredentialLinks.length ==
+                    validCredentialLinks.length
+                ? 'Profile updated successfully!'
+                : 'Profile updated. Only valid certification links were saved.',
             type: PopupType.success,
           );
           await Future.delayed(const Duration(milliseconds: 900));
@@ -750,7 +928,10 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
         } else {
           AppPopup.show(
             context,
-            message: 'Profile saved successfully!',
+            message: requestedCredentialLinks.length ==
+                    validCredentialLinks.length
+                ? 'Profile saved successfully!'
+                : 'Profile saved. Only valid certification links were kept.',
             type: PopupType.success,
           );
           await Future.delayed(const Duration(milliseconds: 900));
@@ -761,7 +942,6 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
             );
           }
         }
-        
       } else {
         throw Exception(userProvider.error ?? 'Failed to save profile');
       }
@@ -780,6 +960,10 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
+    final canUseEmojiAvatar = authProvider.userRole != UserRoles.company;
+    final bottomPadding = MediaQuery.of(context).padding.bottom + 96;
+
     if (_isLoading) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
@@ -788,7 +972,8 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isEditing ? 'Edit Profile' : 'Setup Profile', style: const TextStyle(color: Colors.white)),
+        title: Text(widget.isEditing ? 'Edit Profile' : 'Setup Profile',
+            style: const TextStyle(color: Colors.white)),
         actions: [
           TextButton(
             onPressed: _saveProfile,
@@ -811,7 +996,7 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
       body: Stack(
         children: [
           SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.fromLTRB(16, 16, 16, bottomPadding),
             child: Form(
               key: _formKey,
               child: Column(
@@ -826,26 +1011,38 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                           child: Stack(
                             children: [
                               _avatarConfig != null
-                                ? UniversalAvatar(
-                                    avatarConfig: _avatarConfig,
-                                    photoUrl: _profileImageUrl,
-                                    fallbackName: _bioController.text.isNotEmpty ? _bioController.text : 'U',
-                                    radius: 60,
-                                  )
-                                : CircleAvatar(
-                                radius: 60,
-                                backgroundColor: Colors.grey[300],
-                                backgroundImage: (kIsWeb && _profileImageBytes != null)
-                                  ? MemoryImage(_profileImageBytes!)
-                                  : (_profileImage != null
-                                    ? FileImage(_profileImage!)
-                                    : (_profileImageUrl != null && _profileImageUrl!.isNotEmpty
-                                      ? NetworkImage(_profileImageUrl!)
-                                      : null)) as ImageProvider?,
-                                child: (_profileImage == null && _profileImageBytes == null && (_profileImageUrl == null || _profileImageUrl!.isEmpty))
-                                  ? const Icon(Icons.person, size: 60, color: Colors.grey)
-                                  : null,
-                                ),
+                                  ? UniversalAvatar(
+                                      avatarConfig: _avatarConfig,
+                                      photoUrl: _profileImageUrl,
+                                      fallbackName:
+                                          _bioController.text.isNotEmpty
+                                              ? _bioController.text
+                                              : 'U',
+                                      radius: 60,
+                                    )
+                                  : CircleAvatar(
+                                      radius: 60,
+                                      backgroundColor: Colors.grey[300],
+                                      backgroundImage: ((kIsWeb &&
+                                              _profileImageBytes != null)
+                                          ? MemoryImage(_profileImageBytes!)
+                                          : (_profileImage != null
+                                              ? FileImage(_profileImage!)
+                                              : (_profileImageUrl != null &&
+                                                      _profileImageUrl!
+                                                          .isNotEmpty
+                                                  ? WebImageLoader
+                                                      .getImageProvider(
+                                                          _profileImageUrl)
+                                                  : null))),
+                                      child: (_profileImage == null &&
+                                              _profileImageBytes == null &&
+                                              (_profileImageUrl == null ||
+                                                  _profileImageUrl!.isEmpty))
+                                          ? const Icon(Icons.person,
+                                              size: 60, color: Colors.grey)
+                                          : null,
+                                    ),
                               Positioned(
                                 bottom: 0,
                                 right: 0,
@@ -868,49 +1065,88 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                         const SizedBox(height: 8),
                         Text(
                           'Tap to ${_profileImage != null || (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) ? 'change' : 'add'} photo',
-                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                          style:
+                              TextStyle(color: Colors.grey[600], fontSize: 12),
                         ),
                         const SizedBox(height: 6),
-                        GestureDetector(
-                          onTap: () async {
-                            final config = await Navigator.push<dynamic>(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => AvatarBuilderScreen(
-                                  initialConfig: _avatarConfig,
-                                ),
-                              ),
-                            );
-                            if (config != null) {
-                              setState(() {
-                                _avatarConfig = config as Map<String, dynamic>;
-                              });
-                            }
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF9C27B0).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: const Color(0xFF9C27B0).withValues(alpha: 0.4)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.face_retouching_natural,
-                                    color: Color(0xFF9C27B0), size: 14),
-                                const SizedBox(width: 4),
-                                Text(
-                                  _avatarConfig != null ? 'Edit Avatar' : 'Create Avatar',
-                                  style: const TextStyle(
-                                    color: Color(0xFF9C27B0),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            if (canUseEmojiAvatar)
+                              GestureDetector(
+                                onTap: _pickEmojiAvatar,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF2563EB)
+                                        .withValues(alpha: 0.14),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                        color: const Color(0xFF2563EB)
+                                            .withValues(alpha: 0.35)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _isEmojiAvatarConfig(_avatarConfig)
+                                            ? Icons.emoji_emotions
+                                            : Icons.emoji_emotions_outlined,
+                                        color: const Color(0xFF2563EB),
+                                        size: 14,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _isEmojiAvatarConfig(_avatarConfig)
+                                            ? 'Change Emoji'
+                                            : 'Choose Emoji',
+                                        style: const TextStyle(
+                                          color: Color(0xFF2563EB),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
+                              ),
+                            GestureDetector(
+                              onTap: _pickAnimatedAvatar,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF9C27B0)
+                                      .withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                      color: const Color(0xFF9C27B0)
+                                          .withValues(alpha: 0.4)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.face_retouching_natural,
+                                        color: Color(0xFF9C27B0), size: 14),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      _isDiceBearAvatarConfig(_avatarConfig)
+                                          ? 'Edit Avatar'
+                                          : 'Create Avatar',
+                                      style: const TextStyle(
+                                        color: Color(0xFF9C27B0),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                       ],
                     ),
@@ -918,34 +1154,47 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
                   const SizedBox(height: 24),
 
                   // ── Edit-only: Visibility + Shop Name ─────────────────
-                  if (widget.isEditing) ...[  
+                  if (widget.isEditing) ...[
                     Card(
                       elevation: 1,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 4),
                         child: Row(
                           children: [
                             Icon(
-                              _visibility == 'public' ? Icons.visibility : Icons.visibility_off,
-                              color: _visibility == 'public' ? Colors.green : Colors.orange,
+                              _visibility == 'public'
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
+                              color: _visibility == 'public'
+                                  ? Colors.green
+                                  : Colors.orange,
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('Profile Visibility', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                                  const Text('Profile Visibility',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 15)),
                                   Text(
-                                    _visibility == 'public' ? 'Visible to everyone' : 'Hidden from search',
-                                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                    _visibility == 'public'
+                                        ? 'Visible to everyone'
+                                        : 'Hidden from search',
+                                    style: TextStyle(
+                                        color: Colors.grey[600], fontSize: 12),
                                   ),
                                 ],
                               ),
                             ),
                             Switch(
                               value: _visibility == 'public',
-                              onChanged: (v) => setState(() => _visibility = v ? 'public' : 'private'),
+                              onChanged: (v) => setState(
+                                  () => _visibility = v ? 'public' : 'private'),
                               activeColor: Colors.green,
                             ),
                           ],
@@ -967,476 +1216,628 @@ class _SkilledUserSetupScreenState extends State<SkilledUserSetupScreen> {
 
                   // Category Selection
                   DropdownButtonFormField<String>(
-                    value: _categories.contains(_selectedCategory) ? _selectedCategory : null,
+                    value: _categories.contains(_selectedCategory)
+                        ? _selectedCategory
+                        : null,
                     decoration: const InputDecoration(
                       labelText: 'Category',
                       prefixIcon: Icon(Icons.category),
                     ),
                     items: _categories.map((category) {
                       return DropdownMenuItem(
-                    value: category,
-                    child: Text(category),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedCategory = value;
-                    if (value != 'Other') {
-                      _customCategoryController.clear();
-                    }
-                  });
-                },
-                validator: (value) {
-                  if (value == null) return 'Please select a category';
-                  return null;
-                },
-              ),
-              // Custom category input when "Other" is selected
-              if (_selectedCategory == 'Other') ...[
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _customCategoryController,
-                  decoration: const InputDecoration(
-                    labelText: 'Your Custom Category',
-                    hintText: 'e.g., Mehndi Design, Pottery, etc.',
-                    prefixIcon: Icon(Icons.edit),
-                  ),
-                  validator: (value) {
-                    if (_selectedCategory == 'Other' && (value == null || value.trim().isEmpty)) {
-                      return 'Please enter your category';
-                    }
-                    return null;
-                  },
-                ),
-              ],
-              const SizedBox(height: 16),
-
-              // Location
-              TextFormField(
-                controller: _locationController,
-                decoration: const InputDecoration(
-                  labelText: 'Location',
-                  hintText: 'City, State',
-                  prefixIcon: Icon(Icons.location_on),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Bio
-              TextFormField(
-                controller: _bioController,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Bio',
-                  hintText: 'Tell people about yourself and your skills...',
-                  alignLabelWithHint: true,
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your bio';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Skills with suggestions
-              const Text(
-                'Skills',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Type a skill or pick from suggestions below',
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: Autocomplete<String>(
-                      optionsBuilder: (TextEditingValue textEditingValue) {
-                        if (textEditingValue.text.isEmpty) {
-                          return const Iterable<String>.empty();
+                        value: category,
+                        child: Text(category),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedCategory = value;
+                        if (value != 'Other') {
+                          _customCategoryController.clear();
                         }
-                        return _skillSuggestions.where((s) =>
-                          s.toLowerCase().contains(textEditingValue.text.toLowerCase()) &&
-                          !_skills.contains(s)
-                        );
+                      });
+                    },
+                    validator: (value) {
+                      if (value == null) return 'Please select a category';
+                      return null;
+                    },
+                  ),
+                  // Custom category input when "Other" is selected
+                  if (_selectedCategory == 'Other') ...[
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _customCategoryController,
+                      decoration: const InputDecoration(
+                        labelText: 'Your Custom Category',
+                        hintText: 'e.g., Mehndi Design, Pottery, etc.',
+                        prefixIcon: Icon(Icons.edit),
+                      ),
+                      validator: (value) {
+                        if (_selectedCategory == 'Other' &&
+                            (value == null || value.trim().isEmpty)) {
+                          return 'Please enter your category';
+                        }
+                        return null;
                       },
-                      onSelected: (String selection) {
-                        _addSkill(selection);
-                        _skillController.clear();
-                      },
-                      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                        // Sync custom controller reference
-                        controller.addListener(() {
-                          if (_skillController.text != controller.text) {
-                            _skillController.text = controller.text;
-                          }
-                        });
-                        return TextField(
-                          controller: controller,
-                          focusNode: focusNode,
-                          decoration: InputDecoration(
-                            hintText: 'Add a skill',
-                            suffixIcon: IconButton(
-                              onPressed: () {
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+
+                  // Location
+                  TextFormField(
+                    controller: _locationController,
+                    decoration: const InputDecoration(
+                      labelText: 'Location',
+                      hintText: 'City, State',
+                      prefixIcon: Icon(Icons.location_on),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Bio
+                  TextFormField(
+                    controller: _bioController,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: 'Bio',
+                      hintText: 'Tell people about yourself and your skills...',
+                      alignLabelWithHint: true,
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your bio';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Skills with suggestions
+                  const Text(
+                    'Skills',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Type a skill or pick from suggestions below',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Autocomplete<String>(
+                          optionsBuilder: (TextEditingValue textEditingValue) {
+                            if (textEditingValue.text.isEmpty) {
+                              return const Iterable<String>.empty();
+                            }
+                            return _skillSuggestions.where((s) =>
+                                s.toLowerCase().contains(
+                                    textEditingValue.text.toLowerCase()) &&
+                                !_skills.contains(s));
+                          },
+                          onSelected: (String selection) {
+                            _addSkill(selection);
+                            _skillController.clear();
+                          },
+                          fieldViewBuilder: (context, controller, focusNode,
+                              onFieldSubmitted) {
+                            // Sync custom controller reference
+                            controller.addListener(() {
+                              if (_skillController.text != controller.text) {
+                                _skillController.text = controller.text;
+                              }
+                            });
+                            return TextField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              decoration: InputDecoration(
+                                hintText: 'Add a skill',
+                                suffixIcon: IconButton(
+                                  onPressed: () {
+                                    _addSkill(controller.text);
+                                    controller.clear();
+                                  },
+                                  icon: const Icon(Icons.add_circle,
+                                      color: Color(0xFF2196F3)),
+                                ),
+                              ),
+                              onSubmitted: (_) {
                                 _addSkill(controller.text);
                                 controller.clear();
                               },
-                              icon: const Icon(Icons.add_circle, color: Color(0xFF2196F3)),
-                            ),
-                          ),
-                          onSubmitted: (_) {
-                            _addSkill(controller.text);
-                            controller.clear();
+                            );
                           },
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _skills.map((skill) {
-                  return Chip(
-                    label: Text(skill),
-                    onDeleted: () => _removeSkill(skill),
-                    backgroundColor: const Color(0xFF2196F3).withValues(alpha: 0.1),
-                    labelStyle: const TextStyle(color: Color(0xFF2196F3)),
-                    deleteIconColor: const Color(0xFF2196F3),
-                  );
-                }).toList(),
-              ),
-              // Show suggested skills from global list
-              if (_skillSuggestions.where((s) => !_skills.contains(s)).isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text('Suggested skills:', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: _skillSuggestions
-                      .where((s) => !_skills.contains(s))
-                      .take(10)
-                      .map((skill) => ActionChip(
-                            label: Text(skill, style: const TextStyle(fontSize: 12)),
-                            onPressed: () {
-                              setState(() => _skills.add(skill));
-                            },
-                            backgroundColor: Colors.grey[100],
-                            side: BorderSide(color: Colors.grey[300]!),
-                          ))
-                      .toList(),
-                ),
-              ],
-              const SizedBox(height: 24),
-              
-              // Portfolio Images Section
-              const Text(
-                'Portfolio Images',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Showcase your work (Max 10 images)',
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-              
-              // Display existing portfolio images
-              if (_portfolioImageUrls.isNotEmpty || _portfolioImages.isNotEmpty || _portfolioImageBytes.isNotEmpty)
-                SizedBox(
-                  height: 120,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _portfolioImageUrls.length + (kIsWeb ? _portfolioImageBytes.length : _portfolioImages.length),
-                    itemBuilder: (context, index) {
-                      if (index < _portfolioImageUrls.length) {
-                        // Display existing URL images
-                        return Stack(
-                          children: [
-                            Container(
-                              width: 120,
-                              height: 120,
-                              margin: const EdgeInsets.only(right: 12),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                image: DecorationImage(
-                                  image: NetworkImage(_portfolioImageUrls[index]),
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              top: 4,
-                              right: 16,
-                              child: GestureDetector(
-                                onTap: () => _removePortfolioUrl(index),
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.close,
-                                    color: Colors.white,
-                                    size: 16,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        );
-                      } else {
-                        // Display newly selected images
-                        final fileIndex = index - _portfolioImageUrls.length;
-                        return Stack(
-                          children: [
-                            Container(
-                              width: 120,
-                              height: 120,
-                              margin: const EdgeInsets.only(right: 12),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                image: DecorationImage(
-                                  image: kIsWeb
-                                      ? MemoryImage(_portfolioImageBytes[fileIndex])
-                                      : FileImage(_portfolioImages[fileIndex]) as ImageProvider,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              top: 4,
-                              right: 16,
-                              child: GestureDetector(
-                                onTap: () => _removePortfolioImage(fileIndex),
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.close,
-                                    color: Colors.white,
-                                    size: 16,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        );
-                      }
-                    },
-                  ),
-                ),
-              
-              const SizedBox(height: 12),
-              
-              // Add Portfolio Images Button
-              OutlinedButton.icon(
-                onPressed: ((kIsWeb ? _portfolioImageBytes.length : _portfolioImages.length) + _portfolioImageUrls.length < 10)
-                    ? _pickPortfolioImages
-                    : null,
-                icon: const Icon(Icons.add_photo_alternate),
-                label: Text(
-                  'Add Portfolio Images (${(kIsWeb ? _portfolioImageBytes.length : _portfolioImages.length) + _portfolioImageUrls.length}/10)',
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF2196F3),
-                  side: const BorderSide(color: Color(0xFF2196F3)),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
-              const SizedBox(height: 24),
-              
-              // Verification Section
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Identity Verification',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Complete identity verification to make your profile visible to customers',
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                      const SizedBox(height: 16),
-                      
-                      // Verification Status
-                      if (_isVerified)
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.green.shade300),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Row(
-                                children: [
-                                  Icon(Icons.verified, color: Colors.green, size: 22),
-                                  SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'Identity Verified ✓',
-                                      style: TextStyle(
-                                        color: Colors.green,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15,
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _skills.map((skill) {
+                      return Chip(
+                        label: Text(skill),
+                        onDeleted: () => _removeSkill(skill),
+                        backgroundColor:
+                            const Color(0xFF2196F3).withValues(alpha: 0.1),
+                        labelStyle: const TextStyle(color: Color(0xFF2196F3)),
+                        deleteIconColor: const Color(0xFF2196F3),
+                      );
+                    }).toList(),
+                  ),
+                  // Show suggested skills from global list
+                  if (_skillSuggestions
+                      .where((s) => !_skills.contains(s))
+                      .isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text('Suggested skills:',
+                        style:
+                            TextStyle(fontSize: 12, color: Colors.grey[600])),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: _skillSuggestions
+                          .where((s) => !_skills.contains(s))
+                          .take(10)
+                          .map((skill) => ActionChip(
+                                label: Text(skill,
+                                    style: const TextStyle(fontSize: 12)),
+                                onPressed: () {
+                                  setState(() => _skills.add(skill));
+                                },
+                                backgroundColor: Colors.grey[100],
+                                side: BorderSide(color: Colors.grey[300]!),
+                              ))
+                          .toList(),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+
+                  // Portfolio Images Section
+                  const Text(
+                    'Portfolio Images',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Showcase your work (Max 10 images)',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Display existing portfolio images
+                  if (_portfolioImageUrls.isNotEmpty ||
+                      _portfolioImages.isNotEmpty ||
+                      _portfolioImageBytes.isNotEmpty)
+                    SizedBox(
+                      height: 120,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _portfolioImageUrls.length +
+                            (kIsWeb
+                                ? _portfolioImageBytes.length
+                                : _portfolioImages.length),
+                        itemBuilder: (context, index) {
+                          if (index < _portfolioImageUrls.length) {
+                            // Display existing URL images
+                            return Stack(
+                              children: [
+                                Container(
+                                  width: 120,
+                                  height: 120,
+                                  margin: const EdgeInsets.only(right: 12),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(12),
+                                    image: DecorationImage(
+                                      image: WebImageLoader.getImageProvider(
+                                          _portfolioImageUrls[index])!,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 4,
+                                  right: 16,
+                                  child: GestureDetector(
+                                    onTap: () => _removePortfolioUrl(index),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
                                       ),
+                                      child: const Icon(
+                                        Icons.close,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          } else {
+                            // Display newly selected images
+                            final fileIndex =
+                                index - _portfolioImageUrls.length;
+                            return Stack(
+                              children: [
+                                Container(
+                                  width: 120,
+                                  height: 120,
+                                  margin: const EdgeInsets.only(right: 12),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(12),
+                                    image: DecorationImage(
+                                      image: kIsWeb
+                                          ? MemoryImage(
+                                              _portfolioImageBytes[fileIndex])
+                                          : FileImage(
+                                                  _portfolioImages[fileIndex])
+                                              as ImageProvider,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 4,
+                                  right: 16,
+                                  child: GestureDetector(
+                                    onTap: () =>
+                                        _removePortfolioImage(fileIndex),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.close,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }
+                        },
+                      ),
+                    ),
+
+                  const SizedBox(height: 12),
+
+                  // Add Portfolio Images Button
+                  OutlinedButton.icon(
+                    onPressed: ((kIsWeb
+                                    ? _portfolioImageBytes.length
+                                    : _portfolioImages.length) +
+                                _portfolioImageUrls.length <
+                            10)
+                        ? _pickPortfolioImages
+                        : null,
+                    icon: const Icon(Icons.add_photo_alternate),
+                    label: Text(
+                      'Add Portfolio Images (${(kIsWeb ? _portfolioImageBytes.length : _portfolioImages.length) + _portfolioImageUrls.length}/10)',
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF2196F3),
+                      side: const BorderSide(color: Color(0xFF2196F3)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Professional Credentials',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Add certification or portfolio proof links if you have them. The raw links stay confidential, and viewers only see that valid credentials are on file.',
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
+                          const SizedBox(height: 14),
+                          ...List.generate(_credentialLinkControllers.length,
+                              (index) {
+                            final controller =
+                                _credentialLinkControllers[index];
+                            return Padding(
+                              padding: EdgeInsets.only(
+                                bottom: index ==
+                                        _credentialLinkControllers.length - 1
+                                    ? 0
+                                    : 12,
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: controller,
+                                      keyboardType: TextInputType.url,
+                                      decoration: InputDecoration(
+                                        labelText:
+                                            'Certification Link ${index + 1}',
+                                        hintText:
+                                            'https://example.com/certificate',
+                                        prefixIcon:
+                                            const Icon(Icons.verified_outlined),
+                                      ),
+                                      validator: (value) {
+                                        final link = (value ?? '').trim();
+                                        if (link.isEmpty) return null;
+                                        final uri = Uri.tryParse(link);
+                                        if (uri == null ||
+                                            !uri.hasScheme ||
+                                            !uri.hasAuthority ||
+                                            !(uri.scheme == 'http' ||
+                                                uri.scheme == 'https')) {
+                                          return 'Enter a valid http/https link';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  IconButton(
+                                    onPressed: () =>
+                                        _removeCredentialField(index),
+                                    icon:
+                                        const Icon(Icons.remove_circle_outline),
+                                    color: Colors.redAccent,
+                                    tooltip: 'Remove link',
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: _addCredentialField,
+                            icon: const Icon(Icons.add_link_rounded),
+                            label: const Text('Add Another Credential Link'),
+                          ),
+                          const SizedBox(height: 10),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE8F5E9),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(Icons.lock_outline_rounded,
+                                    color: Color(0xFF2E7D32), size: 18),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Only working links are saved. Customers and companies see only a trusted credential badge, not your private URLs.',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF1B5E20),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Verification Section
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Identity Verification',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Complete identity verification to make your profile visible to customers',
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Verification Status
+                          if (_isVerified)
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                                border:
+                                    Border.all(color: Colors.green.shade300),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Row(
+                                    children: [
+                                      Icon(Icons.verified,
+                                          color: Colors.green, size: 22),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Identity Verified ✓',
+                                          style: TextStyle(
+                                            color: Colors.green,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  if (_aadhaarController.text.trim().isNotEmpty)
+                                    Text(
+                                      'Aadhaar: ${_maskAadhaar(_aadhaarController.text.trim().replaceAll(' ', ''))}',
+                                      style: TextStyle(
+                                        color: Colors.grey[700],
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Your profile is public and visible to customers.',
+                                    style: TextStyle(
+                                      color: Colors.green[700],
+                                      fontSize: 12,
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 8),
-                              if (_aadhaarController.text.trim().isNotEmpty)
-                                Text(
-                                  'Aadhaar: ${_maskAadhaar(_aadhaarController.text.trim().replaceAll(' ', ''))}',
-                                  style: TextStyle(
-                                    color: Colors.grey[700],
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Your profile is public and visible to customers.',
-                                style: TextStyle(
-                                  color: Colors.green[700],
-                                  fontSize: 12,
+                            )
+                          else ...[
+                            TextFormField(
+                              controller: _aadhaarController,
+                              decoration: InputDecoration(
+                                labelText: 'Aadhaar Number',
+                                hintText: '1234 5678 9012',
+                                prefixIcon: const Icon(Icons.credit_card),
+                                helperText: 'Enter 12-digit Aadhaar number',
+                                suffixIcon: _isVerified
+                                    ? const Icon(Icons.check_circle,
+                                        color: Colors.green)
+                                    : null,
+                              ),
+                              keyboardType: TextInputType.number,
+                              maxLength: 14, // 12 digits + 2 spaces
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return null; // Optional field
+                                }
+                                if (!_validateAadhaar(value)) {
+                                  return 'Invalid Aadhaar number';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _isVerifying ? null : _verifyAadhaar,
+                                icon: _isVerifying
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2))
+                                    : const Icon(Icons.fingerprint),
+                                label: Text(_isVerifying
+                                    ? 'Sending OTP...'
+                                    : 'Verify Identity'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF4CAF50),
+                                  foregroundColor: Colors.white,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
                                 ),
                               ),
-                            ],
-                          ),
-                        )
-                      else ...[  
-                        TextFormField(
-                          controller: _aadhaarController,
-                          decoration: InputDecoration(
-                            labelText: 'Aadhaar Number',
-                            hintText: '1234 5678 9012',
-                            prefixIcon: const Icon(Icons.credit_card),
-                            helperText: 'Enter 12-digit Aadhaar number',
-                            suffixIcon: _isVerified
-                                ? const Icon(Icons.check_circle, color: Colors.green)
-                                : null,
-                          ),
-                          keyboardType: TextInputType.number,
-                          maxLength: 14, // 12 digits + 2 spaces
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return null; // Optional field
-                            }
-                            if (!_validateAadhaar(value)) {
-                              return 'Invalid Aadhaar number';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: _isVerifying ? null : _verifyAadhaar,
-                            icon: _isVerifying
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                        color: Colors.white, strokeWidth: 2))
-                                : const Icon(Icons.fingerprint),
-                            label: Text(_isVerifying
-                                ? 'Sending OTP...'
-                                : 'Verify Identity'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF4CAF50),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        // Steps explanation
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF9C27B0).withValues(alpha: 0.06),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Verification steps:',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                      color: Color(0xFF9C27B0))),
-                              SizedBox(height: 6),
-                              _StepRow(step: '1', text: 'Enter 12-digit Aadhaar number'),
-                              SizedBox(height: 4),
-                              _StepRow(step: '2', text: 'OTP auto-fills via SMS (just like real apps)'),
-                              SizedBox(height: 4),
-                              _StepRow(step: '3', text: 'Scan fingerprint / Face ID'),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '✔ After verification: profile becomes public, shop & products unlocked',
-                          style: TextStyle(
-                            color: Colors.green[700],
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ],
+                            const SizedBox(height: 8),
+                            // Steps explanation
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF9C27B0)
+                                    .withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Verification steps:',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: Color(0xFF9C27B0))),
+                                  SizedBox(height: 6),
+                                  _StepRow(
+                                      step: '1',
+                                      text: 'Enter 12-digit Aadhaar number'),
+                                  SizedBox(height: 4),
+                                  _StepRow(
+                                      step: '2',
+                                      text:
+                                          'OTP auto-fills via SMS (just like real apps)'),
+                                  SizedBox(height: 4),
+                                  _StepRow(
+                                      step: '3',
+                                      text: 'Scan fingerprint / Face ID'),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '✔ After verification: profile becomes public, shop & products unlocked',
+                              style: TextStyle(
+                                color: Colors.green[700],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      
-      // Loading overlay
-      if (_isUploading || _isVerifying)
-        Container(
-          color: Colors.black.withValues(alpha: 0.5),
-          child: Center(
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const CircularProgressIndicator(),
-                    const SizedBox(height: 16),
-                    Text(_isVerifying ? 'Verifying Aadhaar...' : _uploadStatusMessage),
-                  ],
-                ),
+                ],
               ),
             ),
           ),
-        ),
-      ],
-    ),
+
+          // Loading overlay
+          if (_isUploading || _isVerifying)
+            Container(
+              color: Colors.black.withValues(alpha: 0.5),
+              child: Center(
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 16),
+                        Text(_isVerifying
+                            ? 'Verifying Aadhaar...'
+                            : _uploadStatusMessage),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

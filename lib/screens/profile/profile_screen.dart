@@ -43,6 +43,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final ChatService _chatService = ChatService();
+  final ScrollController _profileScrollController = ScrollController();
 
   SkilledUserProfile? _profile;
   CustomerProfile? _customerProfile;
@@ -53,6 +54,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   StreamSubscription? _profileSub;
   StreamSubscription<UserModel?>? _userDataSub;
+  StreamSubscription<Map<String, dynamic>>? _userSettingsSub;
+  Future<SkilledCompanySocialProof>? _companySocialProofFuture;
+
+  bool _targetProfileVisible = true;
+  bool _targetShowEmail = false;
+  bool _targetShowPhone = false;
 
   // Company endorsement state
   int _companyEndorsementCount = 0;
@@ -63,6 +70,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // Check if user is viewing their own profile
   bool get isOwnProfile =>
       FirebaseAuth.instance.currentUser?.uid == widget.userId;
+
+  void _resetProfileScrollPosition() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_profileScrollController.hasClients) return;
+      _profileScrollController.jumpTo(0);
+    });
+  }
 
   String? get _currentViewerRole {
     final auth = Provider.of<app_auth.AuthProvider>(context, listen: false);
@@ -464,6 +478,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _resetProfileScrollPosition();
+    _subscribeToUserSettingsStream();
+    _loadProfile().then((_) {
+      _subscribeToProfileStream();
+      _subscribeToEndorsementStreams();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant ProfileScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.userId == widget.userId) return;
+
+    _resetProfileScrollPosition();
+    _profileSub?.cancel();
+    _userDataSub?.cancel();
+    _endorsementCountSub?.cancel();
+    _endorsementStateSub?.cancel();
+
+    _profile = null;
+    _customerProfile = null;
+    _companyProfile = null;
+    _reviews = [];
+    _userData = null;
+    _userRole = null;
+    _companySocialProofFuture = null;
+    _targetProfileVisible = true;
+    _targetShowEmail = false;
+    _targetShowPhone = false;
+    _companyEndorsementCount = 0;
+    _hasCurrentCompanyEndorsed = false;
+
+    _subscribeToUserSettingsStream();
     _loadProfile().then((_) {
       _subscribeToProfileStream();
       _subscribeToEndorsementStreams();
@@ -472,11 +519,152 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
+    _profileScrollController.dispose();
     _profileSub?.cancel();
     _userDataSub?.cancel();
+    _userSettingsSub?.cancel();
     _endorsementCountSub?.cancel();
     _endorsementStateSub?.cancel();
     super.dispose();
+  }
+
+  void _subscribeToUserSettingsStream() {
+    _userSettingsSub?.cancel();
+    _userSettingsSub =
+        _firestoreService.userSettingsStream(widget.userId).listen((settings) {
+      if (!mounted) return;
+      setState(() {
+        _targetProfileVisible = settings['profileVisible'] as bool? ?? true;
+        _targetShowEmail = settings['showEmail'] as bool? ?? false;
+        _targetShowPhone = settings['showPhone'] as bool? ?? false;
+      });
+    }, onError: (_) {
+      if (!mounted) return;
+      setState(() {
+        _targetProfileVisible = true;
+        _targetShowEmail = false;
+        _targetShowPhone = false;
+      });
+    });
+  }
+
+  String? get _publicEmail {
+    final email = _userData?.email.trim();
+    if (email == null || email.isEmpty) return null;
+    if (isOwnProfile) return email;
+    return _targetShowEmail ? email : null;
+  }
+
+  String? get _publicPhone {
+    final phone = _userData?.phone?.trim();
+    if (phone == null || phone.isEmpty) return null;
+    if (isOwnProfile) return phone;
+    return _targetShowPhone ? phone : null;
+  }
+
+  Widget _buildContactVisibilitySection(List<Color> colors) {
+    final email = _publicEmail;
+    final phone = _publicPhone;
+    if (email == null && phone == null) {
+      return const SizedBox.shrink();
+    }
+
+    Widget chip({
+      required IconData icon,
+      required String text,
+      required Color color,
+    }) {
+      return Container(
+        margin: const EdgeInsets.only(right: 8, bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.28)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 6),
+            Text(
+              text,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Colors.white,
+              colors.first.withValues(alpha: 0.06),
+              colors.last.withValues(alpha: 0.08),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: colors.first.withValues(alpha: 0.2)),
+        ),
+        child: Wrap(
+          children: [
+            if (email != null)
+              chip(
+                icon: Icons.alternate_email_rounded,
+                text: email,
+                color: const Color(0xFF1565C0),
+              ),
+            if (phone != null)
+              chip(
+                icon: Icons.phone_rounded,
+                text: phone,
+                color: const Color(0xFF2E7D32),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileHiddenView() {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Profile')),
+      body: const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.visibility_off_rounded,
+                  size: 58, color: Color(0xFF8E24AA)),
+              SizedBox(height: 12),
+              Text(
+                'This profile is private',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'The user has disabled profile visibility in Settings.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _subscribeToEndorsementStreams() {
@@ -534,9 +722,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _subscribeToProfileStream() {
     // Keep _userData always fresh via stream
     _userDataSub?.cancel();
-    _userDataSub = _firestoreService
-        .streamUserModel(widget.userId)
-        .listen((user) {
+    _userDataSub =
+        _firestoreService.streamUserModel(widget.userId).listen((user) {
       if (mounted && user != null) {
         setState(() => _userData = user);
       }
@@ -580,7 +767,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // Load user basic info
       try {
         _userData = await _firestoreService.getUserById(widget.userId);
-        _userRole = _userData?.role;
+        _userRole = UserRoles.normalizeRole(_userData?.role ?? '') ??
+            _userData?.role;
       } catch (e) {
         debugPrint('Could not load user data: $e');
       }
@@ -597,6 +785,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (maybeSkilledProfile != null) {
             _profile = maybeSkilledProfile;
             _userRole = AppConstants.roleSkilledUser;
+            _companySocialProofFuture =
+                _firestoreService.getSkilledCompanySocialProof(widget.userId);
             // Fix the corrupted role in Firestore so this doesn't repeat
             try {
               await _firestoreService.updateUserRole(
@@ -604,8 +794,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             } catch (_) {}
             await _trackSkilledProfileViewIfEligible();
             try {
-              _reviews =
-                  await _firestoreService.getUserReviews(widget.userId);
+              _reviews = await _firestoreService.getUserReviews(widget.userId);
             } catch (_) {
               _reviews = [];
             }
@@ -629,6 +818,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             await _firestoreService.getCompanyProfile(widget.userId);
       } else {
         _profile = await _firestoreService.getSkilledUserProfile(widget.userId);
+        _companySocialProofFuture =
+            _firestoreService.getSkilledCompanySocialProof(widget.userId);
         await _trackSkilledProfileViewIfEligible();
 
         // Try to load reviews, but don't fail if reviews collection doesn't exist or has permission issues
@@ -706,7 +897,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() {
       if (_userRole == AppConstants.roleCustomer && _customerProfile != null) {
         _customerProfile = _customerProfile!.copyWith(bannerData: result);
-      } else if (_userRole == AppConstants.roleCompany && _companyProfile != null) {
+      } else if (_userRole == AppConstants.roleCompany &&
+          _companyProfile != null) {
         _companyProfile = _companyProfile!.copyWith(bannerData: result);
       } else if (_profile != null) {
         _profile = _profile!.copyWith(bannerData: result);
@@ -848,6 +1040,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
+    if (!isOwnProfile && !_targetProfileVisible) {
+      return _buildProfileHiddenView();
+    }
+
     if (_userRole == AppConstants.roleCustomer) {
       if (_customerProfile == null) {
         if (isOwnProfile) {
@@ -953,6 +1149,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: Container(
         decoration: _bodyGradient(coverColors),
         child: CustomScrollView(
+          controller: _profileScrollController,
           clipBehavior: Clip.none,
           slivers: [
             // ── Pinned app-bar ──
@@ -1003,9 +1200,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               flexibleSpace: LayoutBuilder(
                 builder: (context, constraints) {
                   final top = MediaQuery.of(context).padding.top;
-                  final t = ((constraints.biggest.height - kToolbarHeight - top) /
-                          (coverHeight - kToolbarHeight))
-                      .clamp(0.0, 1.0);
+                  final t =
+                      ((constraints.biggest.height - kToolbarHeight - top) /
+                              (coverHeight - kToolbarHeight))
+                          .clamp(0.0, 1.0);
                   return Stack(
                     clipBehavior: Clip.none,
                     fit: StackFit.expand,
@@ -1014,19 +1212,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         background: BannerDisplay(
                           enableAnimations: true,
                           bannerData: _normalizedBannerData(
-                                    _profile?.bannerData,
-                                    fallbackName: _userData?.name,
-                                  ) ??
-                                  {
-                                    'type': 'text',
-                                    'text': _displayNameUpper(
-                                        _userData?.name,
-                                        fallback: 'User'),
-                                    'fontKey': 'default',
-                                    'textColor': 0xFFFFFFFF,
-                                    'fontSize': 28.0,
-                                    'animation': 'none',
-                                  },
+                                _profile?.bannerData,
+                                fallbackName: _userData?.name,
+                              ) ??
+                              {
+                                'type': 'text',
+                                'text': _displayNameUpper(_userData?.name,
+                                    fallback: 'User'),
+                                'fontKey': 'default',
+                                'textColor': 0xFFFFFFFF,
+                                'fontSize': 28.0,
+                                'animation': 'none',
+                              },
                           defaultColors: coverColors,
                           height: coverHeight,
                         ),
@@ -1066,8 +1263,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color:
-                                        coverColors.last.withValues(alpha: 0.45),
+                                    color: coverColors.last
+                                        .withValues(alpha: 0.45),
                                     blurRadius: 20,
                                     spreadRadius: 2,
                                     offset: const Offset(0, 6),
@@ -1099,11 +1296,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: _buildProfileIdentitySection(avatarRadius, coverColors),
             ),
 
+            SliverToBoxAdapter(
+              child: _buildContactVisibilitySection(coverColors),
+            ),
+
             // ── Action buttons ──
             if (!isOwnProfile)
               SliverToBoxAdapter(
                 child: _buildActionButtons(coverColors),
               ),
+            SliverToBoxAdapter(
+              child: _buildTrustAndBulkSection(),
+            ),
             if (!isOwnProfile && _isCurrentUserCompany)
               SliverToBoxAdapter(
                 child: _buildCompanyHiringInsightsSection(),
@@ -1128,7 +1332,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             // ── Reviews ──
             SliverToBoxAdapter(child: _buildReviewsSection()),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 48)),
+            SliverPadding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).padding.bottom + 88,
+              ),
+              sliver: const SliverToBoxAdapter(child: SizedBox.shrink()),
+            ),
           ],
         ),
       ),
@@ -1254,11 +1463,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             'profilePhoto': _userData!.profilePhoto
                           },
                         );
+                        final safeChatId =
+                            await _chatService.resolveAccessibleDirectChatId(
+                          preferredChatId: chatId,
+                          currentUserId: cu.uid,
+                          otherUserId: widget.userId,
+                        );
                         if (!mounted) return;
                         nav.pop();
                         nav.push(MaterialPageRoute(
                             builder: (_) => ChatDetailScreen(
-                                chatId: chatId,
+                                chatId: safeChatId,
                                 otherUserId: widget.userId,
                                 otherUserName: _userData!.name,
                                 otherUserPhoto: _userData!.profilePhoto)));
@@ -1274,9 +1489,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               flexibleSpace: LayoutBuilder(
                 builder: (context, constraints) {
                   final top = MediaQuery.of(context).padding.top;
-                  final t = ((constraints.biggest.height - kToolbarHeight - top) /
-                          (coverHeight - kToolbarHeight))
-                      .clamp(0.0, 1.0);
+                  final t =
+                      ((constraints.biggest.height - kToolbarHeight - top) /
+                              (coverHeight - kToolbarHeight))
+                          .clamp(0.0, 1.0);
                   return Stack(
                     clipBehavior: Clip.none,
                     fit: StackFit.expand,
@@ -1411,6 +1627,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
+            SliverToBoxAdapter(
+              child: _buildContactVisibilitySection(coverColors),
+            ),
+
             // ── Own-profile edit button ──
             if (isOwnProfile)
               SliverToBoxAdapter(
@@ -1432,7 +1652,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 48)),
+            SliverPadding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).padding.bottom + 88,
+              ),
+              sliver: const SliverToBoxAdapter(child: SizedBox.shrink()),
+            ),
           ],
         ),
       ),
@@ -1442,7 +1667,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildProfileIdentitySection(
       double avatarRadius, List<Color> coverColors) {
     const avatarBorder = 3.0;
-    final avatarDiameter = 2 * (avatarRadius + avatarBorder);
+    final rawDisplayName = (_userData?.name ?? '').trim();
+    final displayName = rawDisplayName.isEmpty ? 'User' : rawDisplayName;
 
     // Content below — top padding leaves room for the overflowing avatar
     return Padding(
@@ -1454,15 +1680,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Padding(
             padding: const EdgeInsets.only(left: 4),
             child: SizedBox(
-              width: avatarDiameter,
+              width: MediaQuery.of(context).size.width - 40,
               child: Text(
-                _displayNameUpper(_userData?.name, fallback: 'User'),
-                textAlign: TextAlign.center,
+                displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+                textAlign: TextAlign.left,
                 style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
                   color: Color(0xFF1A1A2E),
-                  letterSpacing: 1.2,
+                  letterSpacing: 0.4,
                 ),
               ),
             ),
@@ -1596,6 +1825,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
 
           // ── Company endorsement button (visible to company viewers only) ──
+          if (_profile!.hasConfidentialCredentials)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFE8F5E9), Color(0xFFD7F4E3)],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: const Color(0xFF2E7D32).withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.verified_user_rounded,
+                        color: Color(0xFF1B5E20), size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      _profile!.confidentialCredentialCount > 0
+                          ? '${_profile!.confidentialCredentialCount} validated credential ${_profile!.confidentialCredentialCount == 1 ? 'link' : 'links'} on file'
+                          : 'Validated credentials on file',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1B5E20),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           if (_isCurrentUserCompany && !isOwnProfile)
             Padding(
               padding: const EdgeInsets.only(top: 12),
@@ -1603,18 +1868,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onTap: _toggleEndorsement,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 18, vertical: 9),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
                   decoration: BoxDecoration(
                     gradient: _hasCurrentCompanyEndorsed
-                        ? const LinearGradient(colors: [
-                            Color(0xFFE53935),
-                            Color(0xFFE91E63)
-                          ])
-                        : const LinearGradient(colors: [
-                            Color(0xFFF5F5F5),
-                            Color(0xFFEEEEEE)
-                          ]),
+                        ? const LinearGradient(
+                            colors: [Color(0xFFE53935), Color(0xFFE91E63)])
+                        : const LinearGradient(
+                            colors: [Color(0xFFF5F5F5), Color(0xFFEEEEEE)]),
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(
                         color: _hasCurrentCompanyEndorsed
@@ -1661,7 +1922,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
-
         ],
       ),
     );
@@ -1730,11 +1990,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       'profilePhoto': _userData!.profilePhoto
                     },
                   );
+                  final safeChatId =
+                      await _chatService.resolveAccessibleDirectChatId(
+                    preferredChatId: chatId,
+                    currentUserId: currentUser.uid,
+                    otherUserId: widget.userId,
+                  );
                   if (!mounted) return;
                   nav.pop();
                   nav.push(MaterialPageRoute(
                     builder: (_) => ChatDetailScreen(
-                      chatId: chatId,
+                      chatId: safeChatId,
                       otherUserId: widget.userId,
                       otherUserName: _userData!.name,
                       otherUserPhoto: _userData!.profilePhoto,
@@ -1797,6 +2063,259 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTrustAndBulkSection() {
+    if (_profile == null) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: StreamBuilder<List<ProductModel>>(
+        stream: _firestoreService.streamUserProducts(widget.userId),
+        builder: (context, productSnapshot) {
+          final availableProducts =
+              (productSnapshot.data ?? const <ProductModel>[])
+                  .where((product) => product.isAvailable)
+                  .toList();
+          final hasShopProducts = availableProducts.isNotEmpty;
+
+          return FutureBuilder<SkilledCompanySocialProof>(
+            future: _companySocialProofFuture,
+            builder: (context, snapshot) {
+              final socialProof =
+                  snapshot.data ?? const SkilledCompanySocialProof();
+              final showSection = _profile!.hasConfidentialCredentials ||
+                  hasShopProducts ||
+                  socialProof.companyOrdersCount > 0;
+              if (!showSection) {
+                return const SizedBox.shrink();
+              }
+
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFE6E9F2)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.verified_rounded, color: Color(0xFF1565C0)),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Trust, Verification and Bulk Orders',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF1A1A2E),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        if (_profile!.hasConfidentialCredentials)
+                          _insightChip(
+                            value: _profile!.confidentialCredentialCount > 0
+                                ? _profile!.confidentialCredentialCount
+                                    .toString()
+                                : 'Yes',
+                            label: 'Credential Checks',
+                            icon: Icons.fact_check_rounded,
+                            color: const Color(0xFF2E7D32),
+                          ),
+                        if (socialProof.uniqueCompanyBuyers > 0)
+                          _insightChip(
+                            value: socialProof.uniqueCompanyBuyers.toString(),
+                            label: 'Company Buyers',
+                            icon: Icons.apartment_rounded,
+                            color: const Color(0xFF6A1B9A),
+                          ),
+                        if (socialProof.companyUnitsBought > 0)
+                          _insightChip(
+                            value: socialProof.companyUnitsBought.toString(),
+                            label: 'Units Bought by Companies',
+                            icon: Icons.inventory_2_rounded,
+                            color: const Color(0xFFEF6C00),
+                          ),
+                        if (hasShopProducts)
+                          _insightChip(
+                            value: availableProducts.length.toString(),
+                            label: 'Bulk-ready Products',
+                            icon: Icons.storefront_rounded,
+                            color: const Color(0xFF1565C0),
+                          ),
+                      ],
+                    ),
+                    if (_profile!.hasConfidentialCredentials) ...[
+                      const SizedBox(height: 14),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F5E9),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Text(
+                          'Confidential verification evidence is on file for this skilled person. Viewers see the trust status, but the actual credential URLs remain private.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.5,
+                            color: Color(0xFF1B5E20),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (socialProof.topCompanyBuyers.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      const Text(
+                        'Highlighted company buyers',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF2E2E2E),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ...socialProof.topCompanyBuyers.map((buyer) => Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF8E1),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xFFFFB300)
+                                    .withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 38,
+                                  height: 38,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFB300)
+                                        .withValues(alpha: 0.16),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.business_center_rounded,
+                                    color: Color(0xFFE65100),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        buyer.companyName,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF1A1A2E),
+                                        ),
+                                      ),
+                                      Text(
+                                        '${buyer.totalUnits} units across ${buyer.totalOrders} order${buyer.totalOrders == 1 ? '' : 's'}',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF616161),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Text(
+                                  'Rs ${buyer.totalSpend.toStringAsFixed(0)}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFFE65100),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )),
+                    ],
+                    if (hasShopProducts) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE3F2FD),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _isCurrentUserCompany
+                                  ? 'Bulk product buying is available for company users.'
+                                  : 'Bulk product buying is available from this skilled person.',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF0D47A1),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Use the shop quantity selector or cart checkout to place larger orders. Company reviews stay highlighted first in the profile below.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                height: 1.45,
+                                color: Color(0xFF1565C0),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: _openSellerShopStorefront,
+                            icon: Icon(_isCurrentUserCompany
+                                ? Icons.shopping_bag_rounded
+                                : Icons.storefront_rounded),
+                            label: Text(_isCurrentUserCompany
+                                ? 'Buy in Bulk'
+                                : 'Open Shop'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF1565C0),
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
@@ -1884,12 +2403,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   final requests =
                       requestSnapshot.data ?? const <ServiceRequestModel>[];
                   // Projects = accepted + completed (projectCount increments on acceptance)
-                  final doneProjects = requests
-                      .where((r) {
-                        final s = r.status.toLowerCase().trim();
-                        return s == AppConstants.requestStatusCompleted;
-                      })
-                      .toList();
+                  final doneProjects = requests.where((r) {
+                    final s = r.status.toLowerCase().trim();
+                    return s == AppConstants.requestStatusCompleted;
+                  }).toList();
                   final activeProjects = requests
                       .where((r) =>
                           r.status.toLowerCase().trim() ==
@@ -1903,12 +2420,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           r.serviceId.toLowerCase().trim() == 'direct_hire')
                       .toList();
                   // Split all projects by client type (for project history)
-                  final companyProjects = allProjects
-                      .where((r) => r.isCompanyProject)
-                      .toList();
-                  final customerProjects = allProjects
-                      .where((r) => !r.isCompanyProject)
-                      .toList();
+                  final companyProjects =
+                      allProjects.where((r) => r.isCompanyProject).toList();
+                  final customerProjects =
+                      allProjects.where((r) => !r.isCompanyProject).toList();
                   final portfolioCount = _profile?.portfolioImages.length ?? 0;
                   final topSkills = _profile?.skills.length ?? 0;
                   final profileViews = _profile?.profileViews ?? 0;
@@ -2012,8 +2527,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               color: const Color(0xFF546E7A),
                             ),
                             _insightChip(
-                              value: _profile?.rating.toStringAsFixed(1) ??
-                                  '0.0',
+                              value:
+                                  _profile?.rating.toStringAsFixed(1) ?? '0.0',
                               label: 'Rating',
                               icon: Icons.star_rounded,
                               color: const Color(0xFFF9A825),
@@ -2076,8 +2591,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         ? 'No joint projects with your company yet. This person has completed ${_profile!.projectCount} project${_profile!.projectCount == 1 ? '' : 's'} overall.'
                                         : 'No projects completed yet.',
                                     style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Color(0xFF9E9E9E)),
+                                        fontSize: 12, color: Color(0xFF9E9E9E)),
                                   ),
                                 ),
                               ],
@@ -2085,8 +2599,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           )
                         else
                           // Company projects first, then customer projects
-                          ...[ ...companyProjects, ...customerProjects ]
-                              .map((r) {
+                          ...[...companyProjects, ...customerProjects].map((r) {
                             final isCompany = r.isCompanyProject;
                             final badgeColor = isCompany
                                 ? const Color(0xFF1A237E)
@@ -2095,7 +2608,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 isCompany ? '🏢 Company' : '👤 Customer';
                             final isActive = r.status.toLowerCase().trim() ==
                                 AppConstants.requestStatusAccepted;
-                            final dateStr = '${r.updatedAt.day}/${r.updatedAt.month}/${r.updatedAt.year}';
+                            final dateStr =
+                                '${r.updatedAt.day}/${r.updatedAt.month}/${r.updatedAt.year}';
                             return Container(
                               margin: const EdgeInsets.only(bottom: 8),
                               padding: const EdgeInsets.all(10),
@@ -2110,24 +2624,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                                 boxShadow: const [
                                   BoxShadow(
-                                    color:
-                                        Color.fromRGBO(0, 0, 0, 0.04),
+                                    color: Color.fromRGBO(0, 0, 0, 0.04),
                                     blurRadius: 4,
                                     offset: Offset(0, 2),
                                   ),
                                 ],
                               ),
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
                                     children: [
                                       Container(
-                                        padding:
-                                            const EdgeInsets.symmetric(
-                                                horizontal: 8,
-                                                vertical: 2),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 2),
                                         decoration: BoxDecoration(
                                           color: badgeColor,
                                           borderRadius:
@@ -2142,14 +2652,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           ),
                                         ),
                                       ),
-                                      if (isActive || (r.hireType != null &&
-                                          r.hireType!.isNotEmpty)) ...[
+                                      if (isActive ||
+                                          (r.hireType != null &&
+                                              r.hireType!.isNotEmpty)) ...[
                                         const SizedBox(width: 6),
                                         Container(
-                                          padding:
-                                              const EdgeInsets.symmetric(
-                                                  horizontal: 7,
-                                                  vertical: 2),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 7, vertical: 2),
                                           decoration: BoxDecoration(
                                             color: isActive
                                                 ? const Color(0xFFFF8F00)
@@ -2172,12 +2681,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ],
                                       const Spacer(),
                                       Text(
-                                          dateStr,
-                                          style: const TextStyle(
-                                            fontSize: 10,
-                                            color: Color(0xFF9E9E9E),
-                                          ),
+                                        dateStr,
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          color: Color(0xFF9E9E9E),
                                         ),
+                                      ),
                                     ],
                                   ),
                                   const SizedBox(height: 5),
@@ -2721,8 +3230,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ...companyReviews.map((r) => _buildReviewCard(r)),
                     if (otherReviews.isNotEmpty)
                       Padding(
-                        padding: const EdgeInsets.only(
-                            top: 6, left: 2, bottom: 6),
+                        padding:
+                            const EdgeInsets.only(top: 6, left: 2, bottom: 6),
                         child: Text(
                           'Customer Reviews',
                           style: TextStyle(
@@ -2751,7 +3260,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         borderRadius: BorderRadius.circular(16),
         border: isCompany
             ? Border.all(
-                color: const Color(0xFFFFB300).withValues(alpha: 0.7), width: 1.5)
+                color: const Color(0xFFFFB300).withValues(alpha: 0.7),
+                width: 1.5)
             : null,
         boxShadow: [
           BoxShadow(
@@ -2771,8 +3281,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(colors: [
                         Color(0xFFFF8F00),
@@ -2843,8 +3353,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         RatingBarIndicator(
                           rating: review.rating,
-                          itemBuilder: (_, __) =>
-                              const Icon(Icons.star_rounded, color: Colors.amber),
+                          itemBuilder: (_, __) => const Icon(Icons.star_rounded,
+                              color: Colors.amber),
                           itemCount: 5,
                           itemSize: 14,
                         ),
@@ -2964,11 +3474,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             'profilePhoto': _userData!.profilePhoto
                           },
                         );
+                        final safeChatId =
+                            await _chatService.resolveAccessibleDirectChatId(
+                          preferredChatId: chatId,
+                          currentUserId: cu.uid,
+                          otherUserId: widget.userId,
+                        );
                         if (!mounted) return;
                         nav.pop();
                         nav.push(MaterialPageRoute(
                             builder: (_) => ChatDetailScreen(
-                                chatId: chatId,
+                                chatId: safeChatId,
                                 otherUserId: widget.userId,
                                 otherUserName: _userData!.name,
                                 otherUserPhoto: _userData!.profilePhoto)));
@@ -2984,9 +3500,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               flexibleSpace: LayoutBuilder(
                 builder: (context, constraints) {
                   final top = MediaQuery.of(context).padding.top;
-                  final t = ((constraints.biggest.height - kToolbarHeight - top) /
-                          (coverHeight - kToolbarHeight))
-                      .clamp(0.0, 1.0);
+                  final t =
+                      ((constraints.biggest.height - kToolbarHeight - top) /
+                              (coverHeight - kToolbarHeight))
+                          .clamp(0.0, 1.0);
                   return Stack(
                     clipBehavior: Clip.none,
                     fit: StackFit.expand,
@@ -3133,8 +3650,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             borderRadius: BorderRadius.circular(30),
                             boxShadow: [
                               BoxShadow(
-                                  color: coverColors.last
-                                      .withValues(alpha: 0.35),
+                                  color:
+                                      coverColors.last.withValues(alpha: 0.35),
                                   blurRadius: 10,
                                   offset: const Offset(0, 3))
                             ],
@@ -3182,11 +3699,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 'profilePhoto': _userData!.profilePhoto
                               },
                             );
+                            final safeChatId = await _chatService
+                                .resolveAccessibleDirectChatId(
+                              preferredChatId: chatId,
+                              currentUserId: cu.uid,
+                              otherUserId: widget.userId,
+                            );
                             if (!mounted) return;
                             nav.pop();
                             nav.push(MaterialPageRoute(
                                 builder: (_) => ChatDetailScreen(
-                                    chatId: chatId,
+                                    chatId: safeChatId,
                                     otherUserId: widget.userId,
                                     otherUserName: _userData!.name,
                                     otherUserPhoto: _userData!.profilePhoto)));
@@ -3201,10 +3724,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 18, vertical: 10),
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(colors: [
-                              Color(0xFF2979FF),
-                              Color(0xFF00B0FF)
-                            ]),
+                            gradient: const LinearGradient(
+                                colors: [Color(0xFF2979FF), Color(0xFF00B0FF)]),
                             borderRadius: BorderRadius.circular(30),
                             boxShadow: [
                               BoxShadow(
@@ -3234,7 +3755,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 20)),
+            SliverToBoxAdapter(
+              child: _buildContactVisibilitySection(coverColors),
+            ),
+
+            SliverPadding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).padding.bottom + 72,
+              ),
+              sliver: const SliverToBoxAdapter(child: SizedBox.shrink()),
+            ),
 
             // Bio
             if (profile.bio.isNotEmpty)
@@ -3395,7 +3925,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 48)),
+            SliverPadding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).padding.bottom + 88,
+              ),
+              sliver: const SliverToBoxAdapter(child: SizedBox.shrink()),
+            ),
           ],
         ),
       ),
@@ -3478,9 +4013,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               flexibleSpace: LayoutBuilder(
                 builder: (context, constraints) {
                   final top = MediaQuery.of(context).padding.top;
-                  final t = ((constraints.biggest.height - kToolbarHeight - top) /
-                          (coverHeight - kToolbarHeight))
-                      .clamp(0.0, 1.0);
+                  final t =
+                      ((constraints.biggest.height - kToolbarHeight - top) /
+                              (coverHeight - kToolbarHeight))
+                          .clamp(0.0, 1.0);
                   return Stack(
                     clipBehavior: Clip.none,
                     fit: StackFit.expand,
@@ -3752,11 +4288,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 'profilePhoto': _userData!.profilePhoto
                               },
                             );
+                            final safeChatId = await _chatService
+                                .resolveAccessibleDirectChatId(
+                              preferredChatId: chatId,
+                              currentUserId: cu.uid,
+                              otherUserId: widget.userId,
+                            );
                             if (!mounted) return;
                             nav.pop();
                             nav.push(MaterialPageRoute(
                                 builder: (_) => ChatDetailScreen(
-                                    chatId: chatId,
+                                    chatId: safeChatId,
                                     otherUserId: widget.userId,
                                     otherUserName: _userData!.name,
                                     otherUserPhoto: _userData!.profilePhoto)));
@@ -3803,7 +4345,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 20)),
+            SliverToBoxAdapter(
+              child: _buildContactVisibilitySection(coverColors),
+            ),
+
+            SliverPadding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).padding.bottom + 72,
+              ),
+              sliver: const SliverToBoxAdapter(child: SizedBox.shrink()),
+            ),
 
             // About
             if (profile.description.isNotEmpty)
@@ -3920,7 +4471,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 48)),
+            SliverPadding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).padding.bottom + 88,
+              ),
+              sliver: const SliverToBoxAdapter(child: SizedBox.shrink()),
+            ),
           ],
         ),
       ),

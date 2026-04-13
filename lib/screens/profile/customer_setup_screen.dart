@@ -30,6 +30,12 @@ class CustomerSetupScreen extends StatefulWidget {
 }
 
 class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
+  static const Color _accent = Color(0xFF2563EB);
+  static const Color _accentEnd = Color(0xFF7C3AED);
+  static const Color _accentSoft = Color(0xFFEAF2FF);
+  static const Color _accentBorder = Color(0xFFBFDBFE);
+  static const Color _neutralBorder = Color(0xFFD1D9E6);
+
   final _formKey = GlobalKey<FormState>();
   final _bioController = TextEditingController();
   final _interestController = TextEditingController();
@@ -273,7 +279,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
       );
     }
 
-    final bottomPad = MediaQuery.of(context).padding.bottom;
+    final bottomPad = MediaQuery.of(context).padding.bottom + 96;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
@@ -286,7 +292,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
               expandedHeight: 240,
               pinned: true,
               stretch: true,
-              backgroundColor: const Color(0xFF00695C),
+              backgroundColor: _accent,
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
                 onPressed: () => Navigator.pop(context),
@@ -304,7 +310,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                 background: Container(
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Color(0xFF00695C), Color(0xFF26A69A)],
+                      colors: [_accent, _accentEnd],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -345,7 +351,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                                   child: Container(
                                     padding: const EdgeInsets.all(6),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF00695C),
+                                      color: _accent,
                                       shape: BoxShape.circle,
                                       border: Border.all(
                                           color: Colors.white, width: 2),
@@ -357,101 +363,108 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                               ],
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          // Avatar option button
-                          GestureDetector(
-                            onTap: () async {
-                              final key = await AvatarPickerSheet.show(
-                                context,
-                                currentAvatar: _avatarKey,
-                              );
-                              if (key == null) return;
-                              setState(() {
-                                if (key == 'remove_avatar') {
-                                  _avatarKey = null;
-                                } else {
-                                  _avatarKey = key;
-                                }
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.25),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.6),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.face_rounded,
-                                      color: Colors.white, size: 14),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    _avatarKey != null
-                                        ? 'Change Emoji'
-                                        : 'Use Emoji',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
+                          const SizedBox(height: 12),
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              GestureDetector(
+                                onTap: () async {
+                                  final key = await AvatarPickerSheet.show(
+                                    context,
+                                    currentAvatar: _avatarKey,
+                                  );
+                                  if (key == null) return;
+                                  setState(() {
+                                    if (key == 'remove_avatar') {
+                                      _avatarKey = null;
+                                    } else {
+                                      _avatarKey = key;
+                                    }
+                                  });
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.18),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.48),
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          // Create animated avatar button
-                          GestureDetector(
-                            onTap: () async {
-                              final config = await Navigator.push<dynamic>(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => AvatarBuilderScreen(
-                                    initialConfig: _avatarConfig,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.face_rounded,
+                                          color: Colors.white, size: 14),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _avatarKey != null
+                                            ? 'Change Emoji'
+                                            : 'Use Emoji',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              );
-                              if (config != null) {
-                                setState(() {
-                                  _avatarConfig = config as Map<String, dynamic>;
-                                  _avatarKey = null;
-                                });
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.25),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.6),
-                                ),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.face_retouching_natural,
-                                      color: Colors.white, size: 14),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    _avatarConfig != null
-                                        ? 'Edit Avatar'
-                                        : 'Create Avatar',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
+                              GestureDetector(
+                                onTap: () async {
+                                  final config = await Navigator.push<dynamic>(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => AvatarBuilderScreen(
+                                        initialConfig: _avatarConfig,
+                                      ),
+                                    ),
+                                  );
+                                  if (config != null) {
+                                    setState(() {
+                                      _avatarConfig =
+                                          config as Map<String, dynamic>;
+                                      _avatarKey = null;
+                                    });
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.18),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.48),
                                     ),
                                   ),
-                                ],
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.face_retouching_natural,
+                                          color: Colors.white, size: 14),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _avatarConfig != null
+                                            ? 'Edit Avatar'
+                                            : 'Create Avatar',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
                         ],
                       ),
@@ -527,7 +540,7 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                               ),
                               const SizedBox(width: 8),
                               Material(
-                                color: const Color(0xFF00695C),
+                                color: _accent,
                                 borderRadius: BorderRadius.circular(12),
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(12),
@@ -548,13 +561,13 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                               children: _interests.map((interest) {
                                 return Chip(
                                   label: Text(interest,
-                                      style: const TextStyle(color: Color(0xFF00695C))),
-                                  deleteIcon: const Icon(Icons.close, size: 16, color: Color(0xFF00695C)),
+                                      style: const TextStyle(color: _accent)),
+                                  deleteIcon: const Icon(Icons.close, size: 16, color: _accent),
                                   onDeleted: () => _removeInterest(interest),
-                                  backgroundColor: const Color(0xFFE0F2F1),
+                                  backgroundColor: _accentSoft,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(20),
-                                    side: const BorderSide(color: Color(0xFF80CBC4)),
+                                    side: const BorderSide(color: _accentBorder),
                                   ),
                                 );
                               }).toList(),
@@ -582,16 +595,16 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                               duration: const Duration(milliseconds: 200),
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                               decoration: BoxDecoration(
-                                color: isSelected ? const Color(0xFF00695C) : Colors.white,
+                                color: isSelected ? _accent : Colors.white,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: isSelected ? const Color(0xFF00695C) : const Color(0xFFCFD8DC),
+                                  color: isSelected ? _accent : _neutralBorder,
                                   width: 1.5,
                                 ),
                                 boxShadow: isSelected
                                     ? [
                                         BoxShadow(
-                                          color: const Color(0xFF00695C).withValues(alpha: 0.3),
+                                          color: _accent.withValues(alpha: 0.3),
                                           blurRadius: 6,
                                           offset: const Offset(0, 2),
                                         )
@@ -630,14 +643,14 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [Color(0xFF00695C), Color(0xFF26A69A)],
+                            colors: [_accent, _accentEnd],
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
                           ),
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF00695C).withValues(alpha: 0.4),
+                              color: _accent.withValues(alpha: 0.35),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),
@@ -706,10 +719,10 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE0F2F1),
+                  color: _accentSoft,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: const Color(0xFF00695C), size: 18),
+                child: Icon(icon, color: _accent, size: 18),
               ),
               const SizedBox(width: 10),
               Column(
@@ -747,22 +760,22 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
     return InputDecoration(
       labelText: label,
       hintText: hint,
-      prefixIcon: Icon(icon, color: const Color(0xFF00695C)),
+      prefixIcon: Icon(icon, color: _accent),
       filled: true,
       fillColor: const Color(0xFFF5F7FA),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFCFD8DC)),
+        borderSide: const BorderSide(color: _neutralBorder),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFCFD8DC)),
+        borderSide: const BorderSide(color: _neutralBorder),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF00695C), width: 2),
+        borderSide: const BorderSide(color: _accent, width: 2),
       ),
-      labelStyle: const TextStyle(color: Color(0xFF607D8B)),
+      labelStyle: const TextStyle(color: Color(0xFF5B6472)),
     );
   }
 }

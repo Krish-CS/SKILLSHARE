@@ -40,7 +40,10 @@ class _ChatWorkRequestSectionState extends State<ChatWorkRequestSection> {
   void initState() {
     super.initState();
     _firestoreService = FirestoreService();
-    _requestStream = _firestoreService.streamChatWorkRequests(widget.chatId);
+    _requestStream = _firestoreService.streamChatWorkRequests(
+      widget.chatId,
+      currentUserId: widget.currentUserId,
+    );
   }
 
   @override
@@ -143,46 +146,52 @@ class _ChatWorkRequestSectionState extends State<ChatWorkRequestSection> {
 
   void _showAllRequests(
       BuildContext context, List<ServiceRequestModel> reqs) {
+    final bottomInset = MediaQuery.of(context).padding.bottom;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(
           borderRadius:
               BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.65,
-        maxChildSize: 0.9,
-        builder: (_, sc) => ListView(
-          controller: sc,
-          padding: const EdgeInsets.all(16),
-          children: [
-            Center(
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
+      builder: (_) => SafeArea(
+        top: false,
+        child: DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.62,
+          maxChildSize: 0.88,
+          builder: (_, sc) => ListView(
+            controller: sc,
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomInset),
+            children: [
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-            ),
-            Center(
-              child: Text('All Work Requests (${reqs.length})',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold)),
-            ),
-            const SizedBox(height: 12),
-            ...reqs.map((req) => _WorkRequestCard(
-                  request: req,
-                  currentUserId: widget.currentUserId,
-                  otherUserId: widget.otherUserId,
-                  otherUserName: widget.otherUserName,
-                  isCurrentUserSkilledPerson: widget.isCurrentUserSkilledPerson,
-                  isCurrentUserCustomer: widget.isCurrentUserCustomer,
-                )),
-          ],
+              Center(
+                child: Text('All Work Requests (${reqs.length})',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(height: 12),
+              ...reqs.map((req) => _WorkRequestCard(
+                    request: req,
+                    currentUserId: widget.currentUserId,
+                    otherUserId: widget.otherUserId,
+                    otherUserName: widget.otherUserName,
+                    isCurrentUserSkilledPerson:
+                        widget.isCurrentUserSkilledPerson,
+                    isCurrentUserCustomer: widget.isCurrentUserCustomer,
+                  )),
+            ],
+          ),
         ),
       ),
     );

@@ -15,6 +15,7 @@ import '../profile/profile_screen.dart';
 import '../chat/chat_detail_screen.dart';
 import '../../widgets/gpay_simulation_dialog.dart';
 import 'shop_storefront_screen.dart';
+import '../../utils/app_dialog.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final ProductModel product;
@@ -63,7 +64,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         _resolveShopName();
       });
     });
-    _sellerShopSub = _firestoreService.streamShopSettings(sellerId).listen((settings) {
+    _sellerShopSub =
+        _firestoreService.streamShopSettings(sellerId).listen((settings) {
       if (!mounted) return;
       final configuredName = (settings['shopName'] as String?)?.trim() ?? '';
       if (configuredName.isNotEmpty) {
@@ -280,15 +282,28 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
     if (transactionId != null && mounted) {
       try {
-        for (int i = 0; i < _qty; i++) {
-          await _firestoreService.addToCart(
-              userId: currentUser.uid, product: widget.product);
-        }
+        final checkoutDetails = await _collectCheckoutDetails(currentUser.uid);
+        if (!mounted || checkoutDetails == null) return;
+
+        final order = await _firestoreService.purchaseProductDirect(
+          userId: currentUser.uid,
+          product: widget.product,
+          quantity: _qty,
+          paymentMethod: 'gpay_simulation',
+          paymentReference: transactionId,
+          deliveryAddress: checkoutDetails.address,
+          deliveryLocation: checkoutDetails.location,
+        );
+
         if (!mounted) return;
-        AppPopup.show(
+        await AppDialog.success(
           context,
-          message: 'Payment successful! Order placed.\nRef: $transactionId',
-          type: PopupType.success,
+          'Payment successful!\n'
+          'Order placed for ${order.productName}${order.quantity > 1 ? ' x${order.quantity}' : ''}.\n\n'
+          'Ref: $transactionId\n'
+          'Delivery code: ${order.deliveryVerificationCode ?? 'N/A'}',
+          title: 'Order Placed',
+          buttonText: 'OK',
         );
       } catch (e) {
         if (!mounted) return;
@@ -296,6 +311,95 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             message: 'Error placing order: $e', type: PopupType.error);
       }
     }
+  }
+
+  Future<_CheckoutDetails?> _collectCheckoutDetails(String userId) async {
+    final profile = await _firestoreService.getCustomerProfile(userId);
+    if (!mounted) return null;
+
+    final addressController = TextEditingController(
+      text: (profile?.location ?? '').trim(),
+    );
+    final locationController = TextEditingController(
+      text: [
+        (profile?.city ?? '').trim(),
+        (profile?.state ?? '').trim(),
+      ].where((part) => part.isNotEmpty).join(', '),
+    );
+
+    final result = await showDialog<_CheckoutDetails>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('Confirm Delivery Address'),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Please confirm this address before payment. You can change it for this order.',
+                style: TextStyle(fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: addressController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'Address',
+                  hintText: 'House / street / area',
+                  prefixIcon: const Icon(Icons.home_outlined),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: locationController,
+                decoration: InputDecoration(
+                  labelText: 'Location',
+                  hintText: 'City, State',
+                  prefixIcon: const Icon(Icons.location_on_outlined),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final address = addressController.text.trim();
+              final location = locationController.text.trim();
+              if (address.isEmpty || location.isEmpty) {
+                AppPopup.show(
+                  ctx,
+                  message: 'Address and location are required',
+                  type: PopupType.warning,
+                );
+                return;
+              }
+              Navigator.of(ctx).pop(
+                _CheckoutDetails(address: address, location: location),
+              );
+            },
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+
+    addressController.dispose();
+    locationController.dispose();
+    return result;
   }
 
   void _viewFullscreenImage(int initialIndex) {
@@ -704,14 +808,17 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           // Add to Cart
           SizedBox(
             width: double.infinity,
-            height: 46,
+            height: 52,
             child: ElevatedButton.icon(
               onPressed: inStock ? _addToCart : null,
-              icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
+              icon: const Icon(Icons.add_shopping_cart_rounded, size: 20),
               label: Text(
                 inStock ? 'Add to Cart' : 'Out of Stock',
-                style:
-                    const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  height: 1.1,
+                ),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryOrange,
@@ -729,13 +836,17 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           // Buy Now (GPay)
           SizedBox(
             width: double.infinity,
-            height: 46,
+            height: 52,
             child: ElevatedButton.icon(
               onPressed: inStock ? _buyNow : null,
-              icon: const Icon(Icons.bolt_rounded, size: 18),
+              icon: const Icon(Icons.bolt_rounded, size: 20),
               label: const Text(
                 'Buy Now',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  height: 1.1,
+                ),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryPink,
@@ -753,12 +864,18 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           // Chat with Seller
           SizedBox(
             width: double.infinity,
-            height: 42,
+            height: 50,
             child: OutlinedButton.icon(
               onPressed: _contactSeller,
-              icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
-              label: const Text('Chat with Seller',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+              label: const Text(
+                'Chat with Seller',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  height: 1.1,
+                ),
+              ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.primaryPurple,
                 side: BorderSide(
@@ -954,18 +1071,32 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ],
           ),
           const SizedBox(height: 14),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 0.72,
-            ),
-            itemCount: _sellerProducts.length > 6 ? 6 : _sellerProducts.length,
-            itemBuilder: (_, i) =>
-                _ProductGridCard(product: _sellerProducts[i]),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              final columns = (width / 220).floor().clamp(2, 6);
+              final ratio = columns >= 5
+                  ? 0.82
+                  : columns >= 4
+                      ? 0.78
+                      : columns == 3
+                          ? 0.74
+                          : 0.72;
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: ratio,
+                ),
+                itemCount:
+                    _sellerProducts.length > 6 ? 6 : _sellerProducts.length,
+                itemBuilder: (_, i) =>
+                    _ProductGridCard(product: _sellerProducts[i]),
+              );
+            },
           ),
         ],
       ),
@@ -995,17 +1126,31 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ],
           ),
           const SizedBox(height: 14),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 0.72,
-            ),
-            itemCount: _recommended.length,
-            itemBuilder: (_, i) => _ProductGridCard(product: _recommended[i]),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              final columns = (width / 220).floor().clamp(2, 6);
+              final ratio = columns >= 5
+                  ? 0.82
+                  : columns >= 4
+                      ? 0.78
+                      : columns == 3
+                          ? 0.74
+                          : 0.72;
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: ratio,
+                ),
+                itemCount: _recommended.length,
+                itemBuilder: (_, i) =>
+                    _ProductGridCard(product: _recommended[i]),
+              );
+            },
           ),
         ],
       ),
@@ -1040,12 +1185,12 @@ class _ProductGridCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: Colors.grey.shade200),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 6,
+              blurRadius: 5,
               offset: const Offset(0, 2),
             ),
           ],
@@ -1074,13 +1219,13 @@ class _ProductGridCard extends StatelessWidget {
                           errorWidget: Container(
                             color: Colors.grey[50],
                             child: const Icon(Icons.broken_image,
-                                color: Colors.grey, size: 32),
+                                color: Colors.grey, size: 28),
                           ),
                         )
                       : Container(
                           color: Colors.grey[50],
                           child: const Icon(Icons.shopping_bag_outlined,
-                              size: 36, color: Colors.grey),
+                              size: 30, color: Colors.grey),
                         ),
                   // Out of stock overlay
                   if (!inStock)
@@ -1101,7 +1246,7 @@ class _ProductGridCard extends StatelessWidget {
             Expanded(
               flex: 4,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1110,10 +1255,10 @@ class _ProductGridCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                             fontWeight: FontWeight.w600,
-                            fontSize: 13,
+                            fontSize: 12,
                             color: AppTheme.textPrimary,
                             height: 1.3)),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 3),
                     if (product.reviewCount > 0)
                       Row(
                         children: [
@@ -1124,22 +1269,22 @@ class _ProductGridCard extends StatelessWidget {
                                   ? Icons.star_rounded
                                   : Icons.star_outline_rounded,
                               color: Colors.amber,
-                              size: 13,
+                              size: 11,
                             ),
                           ),
-                          const SizedBox(width: 3),
+                          const SizedBox(width: 2),
                           Text('(${product.reviewCount})',
                               style: TextStyle(
-                                  fontSize: 10, color: Colors.grey[500])),
+                                  fontSize: 9, color: Colors.grey[500])),
                         ],
                       ),
-                    const Spacer(),
+                    const SizedBox(height: 4),
                     Text(
                       AppHelpers.formatCurrency(product.price),
                       style: const TextStyle(
                         color: AppTheme.primaryPink,
                         fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                        fontSize: 14,
                       ),
                     ),
                   ],
@@ -1163,6 +1308,13 @@ class _FullScreenImageViewer extends StatefulWidget {
 
   @override
   State<_FullScreenImageViewer> createState() => _FullScreenImageViewerState();
+}
+
+class _CheckoutDetails {
+  final String address;
+  final String location;
+
+  const _CheckoutDetails({required this.address, required this.location});
 }
 
 class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {

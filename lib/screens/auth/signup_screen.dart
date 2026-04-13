@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../utils/app_constants.dart';
+import '../../utils/app_fonts.dart';
 import '../../widgets/google_g_logo.dart';
 import '../main_navigation.dart';
 import '../profile/skilled_user_setup_screen.dart';
@@ -408,7 +408,7 @@ class _SignUpScreenState extends State<SignUpScreen>
                           // Brand name
                           Text(
                             'SkillShare',
-                            style: GoogleFonts.pacifico(
+                            style: AppFonts.pacifico(
                               fontSize: 36,
                               color: Colors.white,
                               shadows: [

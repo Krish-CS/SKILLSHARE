@@ -270,40 +270,69 @@ class _ExploreScreenState extends State<ExploreScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             color: Colors.white,
-            child: Row(
-              children: [
-                const Icon(Icons.sort, size: 18, color: Colors.grey),
-                const SizedBox(width: 8),
-                DropdownButton<String>(
-                  value: _sortBy,
-                  underline: const SizedBox(),
-                  isDense: true,
-                  items: _sortOptions
-                      .map((s) => DropdownMenuItem(
-                            value: s,
-                            child: Text(_sortLabels[s]!,
-                                style: const TextStyle(fontSize: 13)),
-                          ))
-                      .toList(),
-                  onChanged: (v) => setState(() => _sortBy = v!),
-                ),
-                const Spacer(),
-                const Icon(Icons.star, size: 16, color: Colors.amber),
-                const SizedBox(width: 4),
-                Text('${_minRating.toStringAsFixed(1)}+',
-                    style: const TextStyle(fontSize: 13)),
-                SizedBox(
-                  width: 100,
-                  child: Slider(
-                    value: _minRating,
-                    min: 0,
-                    max: 5,
-                    divisions: 10,
-                    activeColor: const Color(0xFF6A11CB),
-                    onChanged: (v) => setState(() => _minRating = v),
-                  ),
-                ),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 380;
+
+                Widget sortControl = Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.sort, size: 18, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    DropdownButton<String>(
+                      value: _sortBy,
+                      underline: const SizedBox(),
+                      isDense: true,
+                      items: _sortOptions
+                          .map((s) => DropdownMenuItem(
+                                value: s,
+                                child: Text(_sortLabels[s]!,
+                                    style: const TextStyle(fontSize: 13)),
+                              ))
+                          .toList(),
+                      onChanged: (v) => setState(() => _sortBy = v!),
+                    ),
+                  ],
+                );
+
+                Widget ratingControl = Row(
+                  children: [
+                    const Icon(Icons.star, size: 16, color: Colors.amber),
+                    const SizedBox(width: 4),
+                    Text('${_minRating.toStringAsFixed(1)}+',
+                        style: const TextStyle(fontSize: 13)),
+                    Expanded(
+                      child: Slider(
+                        value: _minRating,
+                        min: 0,
+                        max: 5,
+                        divisions: 10,
+                        activeColor: const Color(0xFF6A11CB),
+                        onChanged: (v) => setState(() => _minRating = v),
+                      ),
+                    ),
+                  ],
+                );
+
+                if (isNarrow) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      sortControl,
+                      const SizedBox(height: 6),
+                      ratingControl,
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    sortControl,
+                    const Spacer(),
+                    SizedBox(width: 170, child: ratingControl),
+                  ],
+                );
+              },
             ),
           ),
 

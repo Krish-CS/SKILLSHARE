@@ -64,8 +64,8 @@ class _ShopStorefrontScreenState extends State<ShopStorefrontScreen> {
 
     // One-time Aadhaar verification gate
     try {
-      final isVerified = await _firestoreService
-          .isSkilledUserAadhaarVerified(widget.sellerId);
+      final isVerified =
+          await _firestoreService.isSkilledUserAadhaarVerified(widget.sellerId);
       if (!mounted) return;
       if (!isVerified) {
         setState(() {
@@ -84,9 +84,8 @@ class _ShopStorefrontScreenState extends State<ShopStorefrontScreen> {
     }
 
     // Live streams — all viewers see changes the moment they happen
-    _sellerSub = _firestoreService
-        .streamUserModel(widget.sellerId)
-        .listen((seller) {
+    _sellerSub =
+        _firestoreService.streamUserModel(widget.sellerId).listen((seller) {
       if (mounted) setState(() => _seller = seller);
     }, onError: (_) {});
 
@@ -102,9 +101,8 @@ class _ShopStorefrontScreenState extends State<ShopStorefrontScreen> {
       if (mounted) setState(() => _shopSettings = settings);
     }, onError: (_) {});
 
-    _productsSub = _firestoreService
-        .streamUserProducts(widget.sellerId)
-        .listen((all) {
+    _productsSub =
+        _firestoreService.streamUserProducts(widget.sellerId).listen((all) {
       if (mounted) {
         setState(() {
           _products = all.where((p) => p.isAvailable).toList()
@@ -178,60 +176,63 @@ class _ShopStorefrontScreenState extends State<ShopStorefrontScreen> {
                   ),
                 )
               : ListView(
-                    padding: const EdgeInsets.all(12),
-                    children: [
-                      _buildShopHeader(shopName),
-                      const SizedBox(height: 12),
-                      Text(
-                        '${_products.length} product${_products.length == 1 ? '' : 's'}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
-                        ),
+                  padding: const EdgeInsets.all(12),
+                  children: [
+                    _buildShopHeader(shopName),
+                    const SizedBox(height: 12),
+                    Text(
+                      '${_products.length} product${_products.length == 1 ? '' : 's'}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
                       ),
-                      const SizedBox(height: 10),
-                      if (_products.isEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(18),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child:
-                              const Text('No products available in this shop.'),
-                        )
-                      else
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final width = constraints.maxWidth;
-                            final columns = width >= 900
-                                ? 4
-                                : width >= 600
-                                    ? 3
-                                    : 2;
-                            return GridView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              gridDelegate:
-                                  SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: columns,
-                                childAspectRatio: 0.72,
-                                crossAxisSpacing: 10,
-                                mainAxisSpacing: 10,
-                              ),
-                              itemCount: _products.length,
-                              itemBuilder: (context, index) {
-                                final product = _products[index];
-                                return ProductCard(
-                                  product: product,
-                                  onTap: () => _openProduct(product),
-                                );
-                              },
-                            );
-                          },
+                    ),
+                    const SizedBox(height: 10),
+                    if (_products.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                    ],
-                  ),
+                        child:
+                            const Text('No products available in this shop.'),
+                      )
+                    else
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final width = constraints.maxWidth;
+                          final columns = (width / 220).floor().clamp(2, 7);
+                          final ratio = columns >= 6
+                              ? 0.82
+                              : columns >= 4
+                                  ? 0.78
+                                  : columns == 3
+                                      ? 0.74
+                                      : 0.72;
+                          return GridView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: columns,
+                              childAspectRatio: ratio,
+                              crossAxisSpacing: 10,
+                              mainAxisSpacing: 10,
+                            ),
+                            itemCount: _products.length,
+                            itemBuilder: (context, index) {
+                              final product = _products[index];
+                              return ProductCard(
+                                product: product,
+                                onTap: () => _openProduct(product),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                  ],
+                ),
     );
   }
 
@@ -243,6 +244,8 @@ class _ShopStorefrontScreenState extends State<ShopStorefrontScreen> {
             : 'Skilled Person');
     final bio = (_profile?.bio ?? '').trim();
     final skills = _profile?.skills ?? const <String>[];
+    final hasCredentialBadge = _profile?.hasConfidentialCredentials == true;
+    final credentialCount = _profile?.confidentialCredentialCount ?? 0;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -337,6 +340,51 @@ class _ShopStorefrontScreenState extends State<ShopStorefrontScreen> {
                     ),
                   )
                   .toList(),
+            ),
+          ],
+          if (hasCredentialBadge || _products.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (hasCredentialBadge)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8F5E9),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      credentialCount > 0
+                          ? '$credentialCount validated credential ${credentialCount == 1 ? 'link' : 'links'} on file'
+                          : 'Validated credentials on file',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF1B5E20),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                if (_products.isNotEmpty)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryPurple.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'Bulk orders supported from product pages and cart',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.primaryPurple,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ],
         ],
