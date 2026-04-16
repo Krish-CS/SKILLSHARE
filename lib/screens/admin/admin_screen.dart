@@ -7,9 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/user_model.dart';
+import '../../services/auth_service.dart';
 import '../../services/delivery_partner_admin_service.dart';
 import '../../services/firestore_service.dart';
-import '../splash_screen.dart';
+import '../../services/presence_service.dart';
+import '../auth/login_screen.dart';
 import '../../utils/app_dialog.dart';
 import '../../utils/user_roles.dart';
 import '../../widgets/universal_avatar.dart';
@@ -193,7 +195,8 @@ class _AdminScreenState extends State<AdminScreen>
                           ),
                         ),
                         SizedBox(width: 6),
-                        Icon(Icons.logout_rounded, color: Colors.white, size: 18),
+                        Icon(Icons.logout_rounded,
+                            color: Colors.white, size: 18),
                       ],
                     ),
                   ),
@@ -242,7 +245,8 @@ class _AdminScreenState extends State<AdminScreen>
               [Color(0xFFEAF4FF), Color(0xFFF1EEFF), Color(0xFFF4FCFF)],
               [Color(0xFFFFF2F8), Color(0xFFEFF7FF), Color(0xFFF6F3FF)],
             ],
-            child: _UsersTab(key: _usersTabKey, firestoreService: _firestoreService),
+            child: _UsersTab(
+                key: _usersTabKey, firestoreService: _firestoreService),
           ),
           _AnimatedTabGradientShell(
             colors: const [
@@ -274,11 +278,12 @@ class _AdminScreenState extends State<AdminScreen>
     );
     if (confirmed != true) return;
 
-    await FirebaseAuth.instance.signOut();
+    PresenceService.instance.stopTracking();
+    await AuthService().signOut();
     if (!mounted) return;
 
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const SplashScreen()),
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
     );
   }
@@ -377,10 +382,12 @@ class _DashboardTab extends StatelessWidget {
         final reports = dashboard.reports;
         final pendingVerifs = dashboard.pendingVerifications;
 
-        final customers = users.where((u) => u.role == UserRoles.customer).length;
+        final customers =
+            users.where((u) => u.role == UserRoles.customer).length;
         final skilledPersons =
             users.where((u) => u.role == UserRoles.skilledPerson).length;
-        final companies = users.where((u) => u.role == UserRoles.company).length;
+        final companies =
+            users.where((u) => u.role == UserRoles.company).length;
         final deliveryPartners =
             users.where((u) => u.role == UserRoles.deliveryPartner).length;
         final suspended = users.where((u) => u.isSuspended == true).length;
@@ -433,7 +440,11 @@ class _DashboardTab extends StatelessWidget {
             Container(
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFFFFFFFF), Color(0xFFF6F7FF), Color(0xFFEFFBFF)],
+                  colors: [
+                    Color(0xFFFFFFFF),
+                    Color(0xFFF6F7FF),
+                    Color(0xFFEFFBFF)
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -453,18 +464,20 @@ class _DashboardTab extends StatelessWidget {
                       const Color(0xFF1565C0)),
                   _MetricListRow('Customers', '$customers', Icons.person,
                       const Color(0xFF2E7D32)),
-                  _MetricListRow('Skilled Persons', '$skilledPersons', Icons.build,
-                      const Color(0xFFE65100)),
+                  _MetricListRow('Skilled Persons', '$skilledPersons',
+                      Icons.build, const Color(0xFFE65100)),
                   _MetricListRow('Companies', '$companies', Icons.business,
                       const Color(0xFF4A148C)),
                   _MetricListRow('Delivery Partners', '$deliveryPartners',
                       Icons.local_shipping, const Color(0xFF00838F)),
                   _MetricListRow(
                       'Suspended', '$suspended', Icons.block, Colors.red),
-                  _MetricListRow('Pending Reports', '$pendingReports', Icons.flag,
-                      Colors.orange),
-                  _MetricListRow('Pending Verifications',
-                      '${pendingVerifs.length}', Icons.verified_user,
+                  _MetricListRow('Pending Reports', '$pendingReports',
+                      Icons.flag, Colors.orange),
+                  _MetricListRow(
+                      'Pending Verifications',
+                      '${pendingVerifs.length}',
+                      Icons.verified_user,
                       const Color(0xFF00695C)),
                 ],
               ),
@@ -866,7 +879,8 @@ class _UsersTabState extends State<_UsersTab> {
         throw Exception('CSV needs a header and at least one data row.');
       }
 
-      final headers = rows.first.map((e) => e.toString().trim().toLowerCase()).toList();
+      final headers =
+          rows.first.map((e) => e.toString().trim().toLowerCase()).toList();
       int idx(String key) => headers.indexOf(key);
 
       final nameIdx = idx('name');
@@ -875,8 +889,12 @@ class _UsersTabState extends State<_UsersTab> {
       final roleIdx = idx('role');
       final phoneIdx = idx('phone');
 
-      if (nameIdx == -1 || emailIdx == -1 || passwordIdx == -1 || roleIdx == -1) {
-        throw Exception('CSV columns required: name,email,password,role (phone optional).');
+      if (nameIdx == -1 ||
+          emailIdx == -1 ||
+          passwordIdx == -1 ||
+          roleIdx == -1) {
+        throw Exception(
+            'CSV columns required: name,email,password,role (phone optional).');
       }
 
       for (var i = 1; i < rows.length; i++) {
@@ -908,7 +926,8 @@ class _UsersTabState extends State<_UsersTab> {
           );
           successCount++;
         } catch (e) {
-          failures.add('Row $rowNumber: ${e.toString().replaceFirst('Exception: ', '')}');
+          failures.add(
+              'Row $rowNumber: ${e.toString().replaceFirst('Exception: ', '')}');
         }
       }
 
@@ -1217,150 +1236,164 @@ class _UsersTabState extends State<_UsersTab> {
             ),
             child: Column(
               children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Manage user profiles, roles, status and bulk user creation.',
-                      style: TextStyle(
-                        color: Colors.grey[700],
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: _createUserWithRole,
-                        icon: const Icon(Icons.person_add, size: 18),
-                        label: const Text('Add User'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1565C0),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Manage user profiles, roles, status and bulk user creation.',
+                        style: TextStyle(
+                          color: Colors.grey[700],
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
-                      OutlinedButton.icon(
-                        onPressed:
-                            _isBulkCreatingUsers ? null : _bulkCreateUsersFromCsv,
-                        icon: _isBulkCreatingUsers
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.upload_file, size: 18),
-                        label: const Text('Bulk CSV'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: _createDeliveryPartner,
-                        icon: const Icon(Icons.local_shipping, size: 18),
-                        label: const Text('Add Delivery'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                onChanged: (v) {
-                  _searchQuery = v.toLowerCase();
-                  _applyFilter();
-                },
-                decoration: InputDecoration(
-                  hintText: 'Search users...',
-                  prefixIcon: const Icon(Icons.search),
-                  filled: true,
-                  fillColor: const Color(0xFFF9FBFF),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFFD3DCF7)),
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                ),
-              ),
-              const SizedBox(height: 8),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _filterChip(
-                        'All',
-                        null,
-                      _pendingVerificationOnly ? '__pending__' : _roleFilter,
-                        const [Color(0xFF1565C0), Color(0xFF5E35B1)],
-                        (v) => setState(() {
-                        _pendingVerificationOnly = false;
-                              _roleFilter = v;
-                              _applyFilter();
-                            })),
-                    _filterChip(
-                        'Customers',
-                        UserRoles.customer,
-                      _pendingVerificationOnly ? '__pending__' : _roleFilter,
-                        const [Color(0xFF1565C0), Color(0xFF5E35B1)],
-                        (v) => setState(() {
-                        _pendingVerificationOnly = false;
-                              _roleFilter = v;
-                              _applyFilter();
-                            })),
-                    _filterChip(
-                        'Skilled',
-                        UserRoles.skilledPerson,
-                      _pendingVerificationOnly ? '__pending__' : _roleFilter,
-                        const [Color(0xFF1565C0), Color(0xFF5E35B1)],
-                        (v) => setState(() {
-                        _pendingVerificationOnly = false;
-                              _roleFilter = v;
-                              _applyFilter();
-                            })),
-                    _filterChip(
-                        'Companies',
-                        UserRoles.company,
-                      _pendingVerificationOnly ? '__pending__' : _roleFilter,
-                        const [Color(0xFF1565C0), Color(0xFF5E35B1)],
-                        (v) => setState(() {
-                        _pendingVerificationOnly = false;
-                              _roleFilter = v;
-                              _applyFilter();
-                            })),
-                    _filterChip(
-                        'Delivery',
-                        UserRoles.deliveryPartner,
-                      _pendingVerificationOnly ? '__pending__' : _roleFilter,
-                      const [Color(0xFF1565C0), Color(0xFF5E35B1)],
-                      (v) => setState(() {
-                        _pendingVerificationOnly = false;
-                        _roleFilter = v;
-                        _applyFilter();
-                          })),
-                      _filterChip(
-                      'Pending Verifications',
-                      '__pending__',
-                      _pendingVerificationOnly ? '__pending__' : _roleFilter,
-                        const [Color(0xFF1565C0), Color(0xFF5E35B1)],
-                        (v) => setState(() {
-                        _pendingVerificationOnly = v == '__pending__';
-                        _roleFilter = v == '__pending__'
-                            ? UserRoles.skilledPerson
-                            : v;
-                              _applyFilter();
-                            })),
+                    ),
+                    const SizedBox(width: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: _createUserWithRole,
+                          icon: const Icon(Icons.person_add, size: 18),
+                          label: const Text('Add User'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1565C0),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _isBulkCreatingUsers
+                              ? null
+                              : _bulkCreateUsersFromCsv,
+                          icon: _isBulkCreatingUsers
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.upload_file, size: 18),
+                          label: const Text('Bulk CSV'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _createDeliveryPartner,
+                          icon: const Icon(Icons.local_shipping, size: 18),
+                          label: const Text('Add Delivery'),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 12),
+                TextField(
+                  onChanged: (v) {
+                    _searchQuery = v.toLowerCase();
+                    _applyFilter();
+                  },
+                  decoration: InputDecoration(
+                    hintText: 'Search users...',
+                    prefixIcon: const Icon(Icons.search),
+                    filled: true,
+                    fillColor: const Color(0xFFF9FBFF),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFD3DCF7)),
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _filterChip(
+                          'All',
+                          null,
+                          _pendingVerificationOnly
+                              ? '__pending__'
+                              : _roleFilter,
+                          const [Color(0xFF1565C0), Color(0xFF5E35B1)],
+                          (v) => setState(() {
+                                _pendingVerificationOnly = false;
+                                _roleFilter = v;
+                                _applyFilter();
+                              })),
+                      _filterChip(
+                          'Customers',
+                          UserRoles.customer,
+                          _pendingVerificationOnly
+                              ? '__pending__'
+                              : _roleFilter,
+                          const [Color(0xFF1565C0), Color(0xFF5E35B1)],
+                          (v) => setState(() {
+                                _pendingVerificationOnly = false;
+                                _roleFilter = v;
+                                _applyFilter();
+                              })),
+                      _filterChip(
+                          'Skilled',
+                          UserRoles.skilledPerson,
+                          _pendingVerificationOnly
+                              ? '__pending__'
+                              : _roleFilter,
+                          const [Color(0xFF1565C0), Color(0xFF5E35B1)],
+                          (v) => setState(() {
+                                _pendingVerificationOnly = false;
+                                _roleFilter = v;
+                                _applyFilter();
+                              })),
+                      _filterChip(
+                          'Companies',
+                          UserRoles.company,
+                          _pendingVerificationOnly
+                              ? '__pending__'
+                              : _roleFilter,
+                          const [Color(0xFF1565C0), Color(0xFF5E35B1)],
+                          (v) => setState(() {
+                                _pendingVerificationOnly = false;
+                                _roleFilter = v;
+                                _applyFilter();
+                              })),
+                      _filterChip(
+                          'Delivery',
+                          UserRoles.deliveryPartner,
+                          _pendingVerificationOnly
+                              ? '__pending__'
+                              : _roleFilter,
+                          const [Color(0xFF1565C0), Color(0xFF5E35B1)],
+                          (v) => setState(() {
+                                _pendingVerificationOnly = false;
+                                _roleFilter = v;
+                                _applyFilter();
+                              })),
+                      _filterChip(
+                          'Pending Verifications',
+                          '__pending__',
+                          _pendingVerificationOnly
+                              ? '__pending__'
+                              : _roleFilter,
+                          const [Color(0xFF1565C0), Color(0xFF5E35B1)],
+                          (v) => setState(() {
+                                _pendingVerificationOnly = v == '__pending__';
+                                _roleFilter = v == '__pending__'
+                                    ? UserRoles.skilledPerson
+                                    : v;
+                                _applyFilter();
+                              })),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -1517,149 +1550,153 @@ class _UserCard extends StatelessWidget {
           ],
         ),
         child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            UniversalAvatar(
-              avatarConfig: user.avatarConfig,
-              photoUrl: user.profilePhoto,
-              fallbackName: user.name,
-              radius: 24,
-              animate: false,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          user.name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              UniversalAvatar(
+                avatarConfig: user.avatarConfig,
+                photoUrl: user.profilePhoto,
+                fallbackName: user.name,
+                radius: 24,
+                animate: false,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            user.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                      if (isSuspended)
+                        if (isSuspended)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.red[50],
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text('SUSPENDED',
+                                style: TextStyle(
+                                    color: Colors.red,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                      ],
+                    ),
+                    Text(user.email,
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                              horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.red[50],
-                            borderRadius: BorderRadius.circular(6),
+                            color: _roleColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Text('SUSPENDED',
-                              style: TextStyle(
-                                  color: Colors.red,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold)),
+                          child: Text(
+                            _roleLabel,
+                            style: TextStyle(
+                                color: _roleColor,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600),
+                          ),
                         ),
-                    ],
-                  ),
-                  Text(user.email,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _roleColor.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          _roleLabel,
-                          style: TextStyle(
-                              color: _roleColor,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? Colors.green.withValues(alpha: 0.14)
+                                : Colors.grey.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            isActive ? 'ACTIVE' : 'INACTIVE',
+                            style: TextStyle(
+                              color: isActive
+                                  ? Colors.green[700]
+                                  : Colors.grey[700],
                               fontSize: 11,
-                              fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: isActive
-                              ? Colors.green.withValues(alpha: 0.14)
-                              : Colors.grey.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          isActive ? 'ACTIVE' : 'INACTIVE',
-                          style: TextStyle(
-                            color: isActive ? Colors.green[700] : Colors.grey[700],
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuButton<String>(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                color: Colors.white,
+                elevation: 8,
+                onSelected: (v) {
+                  if (v == 'edit') onEdit();
+                  if (v == 'suspend') onSuspend();
+                  if (v == 'delete') onDelete();
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'edit',
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit, color: Color(0xFF1565C0), size: 18),
+                        SizedBox(width: 8),
+                        Text('Edit User'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'suspend',
+                    child: Row(
+                      children: [
+                        Icon(
+                          isSuspended
+                              ? Icons.check_circle_outline
+                              : Icons.block,
+                          color: isSuspended ? Colors.green : Colors.orange,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(isSuspended ? 'Reactivate' : 'Suspend'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete, color: Colors.red, size: 18),
+                        SizedBox(width: 8),
+                        Text('Delete Account',
+                            style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
                   ),
                 ],
               ),
-            ),
-            PopupMenuButton<String>(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              color: Colors.white,
-              elevation: 8,
-              onSelected: (v) {
-                if (v == 'edit') onEdit();
-                if (v == 'suspend') onSuspend();
-                if (v == 'delete') onDelete();
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'edit',
-                  child: Row(
-                    children: [
-                      Icon(Icons.edit, color: Color(0xFF1565C0), size: 18),
-                      SizedBox(width: 8),
-                      Text('Edit User'),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'suspend',
-                  child: Row(
-                    children: [
-                      Icon(
-                        isSuspended ? Icons.check_circle_outline : Icons.block,
-                        color: isSuspended ? Colors.green : Colors.orange,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(isSuspended ? 'Reactivate' : 'Suspend'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete, color: Colors.red, size: 18),
-                      SizedBox(width: 8),
-                      Text('Delete Account',
-                          style: TextStyle(color: Colors.red)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -1721,8 +1758,9 @@ class _AdminUserDialogState extends State<_AdminUserDialog> {
               TextFormField(
                 controller: _nameController,
                 decoration: const InputDecoration(labelText: 'Name'),
-                validator: (value) =>
-                    (value == null || value.trim().isEmpty) ? 'Name required' : null,
+                validator: (value) => (value == null || value.trim().isEmpty)
+                    ? 'Name required'
+                    : null,
               ),
               const SizedBox(height: 10),
               TextFormField(
@@ -1746,7 +1784,9 @@ class _AdminUserDialogState extends State<_AdminUserDialog> {
                     onPressed: () =>
                         setState(() => _obscurePassword = !_obscurePassword),
                     icon: Icon(
-                      _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                      _obscurePassword
+                          ? Icons.visibility
+                          : Icons.visibility_off,
                     ),
                   ),
                 ),
@@ -1778,7 +1818,8 @@ class _AdminUserDialogState extends State<_AdminUserDialog> {
               TextFormField(
                 controller: _phoneController,
                 keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Phone (optional)'),
+                decoration:
+                    const InputDecoration(labelText: 'Phone (optional)'),
               ),
             ],
           ),
@@ -2191,7 +2232,11 @@ class _ReportsTabState extends State<_ReportsTab> {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFFFFFFFF), Color(0xFFFFF7F2), Color(0xFFFFF1F7)],
+                colors: [
+                  Color(0xFFFFFFFF),
+                  Color(0xFFFFF7F2),
+                  Color(0xFFFFF1F7)
+                ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -2202,18 +2247,30 @@ class _ReportsTabState extends State<_ReportsTab> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                _filterChip('Pending', 'pending', _statusFilter,
-                  const [Color(0xFFFF8F00), Color(0xFFD81B60)],
-                    (v) => setState(() => _statusFilter = v ?? 'pending')),
-                _filterChip('Resolved', 'resolved', _statusFilter,
-                  const [Color(0xFFFF8F00), Color(0xFFD81B60)],
-                    (v) => setState(() => _statusFilter = v ?? 'resolved')),
-                _filterChip('Dismissed', 'dismissed', _statusFilter,
-                  const [Color(0xFFFF8F00), Color(0xFFD81B60)],
-                    (v) => setState(() => _statusFilter = v ?? 'dismissed')),
-                _filterChip('All', 'all', _statusFilter,
-                  const [Color(0xFFFF8F00), Color(0xFFD81B60)],
-                    (v) => setState(() => _statusFilter = v ?? 'all')),
+                  _filterChip(
+                      'Pending',
+                      'pending',
+                      _statusFilter,
+                      const [Color(0xFFFF8F00), Color(0xFFD81B60)],
+                      (v) => setState(() => _statusFilter = v ?? 'pending')),
+                  _filterChip(
+                      'Resolved',
+                      'resolved',
+                      _statusFilter,
+                      const [Color(0xFFFF8F00), Color(0xFFD81B60)],
+                      (v) => setState(() => _statusFilter = v ?? 'resolved')),
+                  _filterChip(
+                      'Dismissed',
+                      'dismissed',
+                      _statusFilter,
+                      const [Color(0xFFFF8F00), Color(0xFFD81B60)],
+                      (v) => setState(() => _statusFilter = v ?? 'dismissed')),
+                  _filterChip(
+                      'All',
+                      'all',
+                      _statusFilter,
+                      const [Color(0xFFFF8F00), Color(0xFFD81B60)],
+                      (v) => setState(() => _statusFilter = v ?? 'all')),
                 ],
               ),
             ),

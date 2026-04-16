@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -10,16 +12,21 @@ class AuthProvider with ChangeNotifier {
   final AuthService _authService = AuthService();
 
   UserModel? _currentUser;
-  bool _isLoading = false;      // used by signup / resetPassword
+  StreamSubscription<User?>? _authSub;
+  int _authRevision = 0;
+  bool _isLoading = false; // used by signup / resetPassword
   bool _isEmailLoading = false; // used by email sign-in only
   bool _isGoogleLoading = false; // used by Google sign-in only
   String? _error;
 
   UserModel? get currentUser => _currentUser;
+
   /// True when ANY auth operation is in progress (backward-compat).
   bool get isLoading => _isLoading || _isEmailLoading || _isGoogleLoading;
+
   /// True only while the email/password login button is loading.
   bool get isEmailLoading => _isEmailLoading;
+
   /// True only while the Google sign-in button is loading.
   bool get isGoogleLoading => _isGoogleLoading;
   String? get error => _error;
@@ -55,9 +62,10 @@ class AuthProvider with ChangeNotifier {
   Future<void> _initialize() async {
     try {
       // Listen to auth state changes
-      _authService.authStateChanges.listen((User? user) {
+      _authSub = _authService.authStateChanges.listen((User? user) {
+        final revision = ++_authRevision;
         if (user != null) {
-          _loadUserData(user.uid);
+          _loadUserData(user.uid, revision);
         } else {
           _currentUser = null;
           notifyListeners();
@@ -70,9 +78,16 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  Future<void> _loadUserData(String uid) async {
+  bool _isCurrentAuthLoad(String uid, int revision) {
+    return revision == _authRevision && _authService.currentUser?.uid == uid;
+  }
+
+  Future<void> _loadUserData(String uid, int revision) async {
     try {
-      _currentUser = await _authService.getUserData(uid);
+      final loadedUser = await _authService.getUserData(uid);
+      if (!_isCurrentAuthLoad(uid, revision)) return;
+
+      _currentUser = loadedUser;
       if (_currentUser == null) {
         // getUserData returned null — could be "doc doesn't exist" OR
         // a transient network/cache failure.  Do NOT overwrite role if
@@ -103,11 +118,13 @@ class AuthProvider with ChangeNotifier {
           }
         }
       }
+      if (!_isCurrentAuthLoad(uid, revision)) return;
       _error = null;
       // Start online-presence tracking
       PresenceService.instance.startTracking(uid);
       notifyListeners();
     } catch (e) {
+      if (!_isCurrentAuthLoad(uid, revision)) return;
       debugPrint('Error loading user data: $e');
       _error = e.toString();
       // Don't set _currentUser to null - keep session alive
@@ -172,10 +189,12 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    ++_authRevision;
+    _currentUser = null;
+    _error = null;
+    notifyListeners();
     PresenceService.instance.stopTracking();
     await _authService.signOut();
-    _currentUser = null;
-    notifyListeners();
   }
 
   Future<bool> signInWithGoogle({String defaultRole = 'customer'}) async {
@@ -184,7 +203,8 @@ class AuthProvider with ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      _currentUser = await _authService.signInWithGoogle(defaultRole: defaultRole);
+      _currentUser =
+          await _authService.signInWithGoogle(defaultRole: defaultRole);
 
       _isGoogleLoading = false;
       notifyListeners();
@@ -230,7 +250,7 @@ class AuthProvider with ChangeNotifier {
   // Refresh user data from Firestore
   Future<void> refreshUserData() async {
     if (_currentUser != null) {
-      await _loadUserData(_currentUser!.uid);
+      await _loadUserData(_currentUser!.uid, ++_authRevision);
     }
   }
 
@@ -238,5 +258,11 @@ class AuthProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
   }
-}
 
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    PresenceService.instance.stopTracking();
+    super.dispose();
+  }
+}

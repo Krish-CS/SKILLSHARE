@@ -12,7 +12,7 @@ import '../../widgets/universal_avatar.dart';
 import 'chat_detail_screen.dart';
 import 'company_chat_hub_screen.dart';
 
-// ─── Helper: groups multiple chat types for the same person ─────────────────
+// â”€â”€â”€ Helper: groups multiple chat types for the same person â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class _PersonChatGroup {
   final String otherUserId;
   final String otherUserName;
@@ -105,7 +105,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
   Stream<List<ChatModel>>? _chatsStream;
   List<ChatModel> _lastKnownChats = const <ChatModel>[];
 
-  /// Map of chatId → number of pending work requests for that chat.
+  /// Map of chatId â†’ number of pending work requests for that chat.
   /// Updated via a real subscription so amber badges are always in sync.
   Map<String, int> _pendingWorkCounts = {};
   StreamSubscription<QuerySnapshot>? _workReqSub;
@@ -541,7 +541,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
 
     final sectionWidgets = <Widget>[];
 
-    // ── Merge job chats with matching same-person chats for company hub ──────
+    // â”€â”€ Merge job chats with matching same-person chats for company hub â”€â”€â”€â”€â”€â”€
     // Any person who has BOTH a job chat AND a regular/hiring chat will be
     // grouped into a single hub entry.  We collect all "company-related" chats
     // (job + company bucket) together and group them by person.
@@ -595,7 +595,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
     );
   }
 
-  // ── Group a mixed list of company-related chats by person ─────────────────
+  // â”€â”€ Group a mixed list of company-related chats by person â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   List<_PersonChatGroup> _groupCompanyChats(List<ChatModel> chats) {
     final map = <String, _PersonChatGroup>{};
     for (final chat in chats) {
@@ -675,6 +675,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: const TabBar(
+              dividerColor: Colors.transparent,
               isScrollable: true,
               tabAlignment: TabAlignment.center,
               labelPadding: EdgeInsets.symmetric(horizontal: 14),
@@ -873,7 +874,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
     }
   }
 
-  // ── Grouped company-hub list tile ─────────────────────────────────────────
+  // â”€â”€ Grouped company-hub list tile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildPersonGroupItem(_PersonChatGroup group) {
     final name = group.otherUserName;
     final photo = group.otherUserPhoto;

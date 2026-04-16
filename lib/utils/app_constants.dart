@@ -49,8 +49,18 @@ class AppConstants {
   static const String supportTicketsCollection = 'support_tickets';
   static const String deliveryAssignmentsCollection = 'delivery_assignments';
   static const String companyEndorsementsCollection = 'company_endorsements';
+  static const String managedMembersCollection = 'managed_members';
   static const String skilledVerificationPrivateCollection =
       'skilled_verification_private';
+
+  // Managed member types
+  static const String memberTypeCompany = 'company_member';
+  static const String memberTypeSkilled = 'skilled_member';
+
+  // Approval status
+  static const String approvalPending = 'pending';
+  static const String approvalApproved = 'approved';
+  static const String approvalRejected = 'rejected';
 
   // Storage Paths
   static const String profilePhotosPath = 'profile_photos';

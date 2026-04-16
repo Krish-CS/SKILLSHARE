@@ -905,7 +905,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     });
 
-    // Persist to Firestore — the active stream subscription will also
+    // Persist to Firestore â€” the active stream subscription will also
     // confirm the update on all other screens viewing this profile.
     await FirestoreService().saveBannerData(
       userId: widget.userId,
@@ -1096,7 +1096,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
 
       // If it's own profile, redirect to role-specific setup
-      // Use _userRole (loaded from Firestore 'users' doc) — NOT
+      // Use _userRole (loaded from Firestore 'users' doc) â€” NOT
       // authProvider.currentUser.role which may be a stale fallback.
       if (isOwnProfile) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1133,9 +1133,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return _buildSkilledPersonProfile();
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // LinkedIn / Instagram style skilled-person profile
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildSkilledPersonProfile() {
     const coverHeight = 210.0;
     const avatarRadius = 52.0;
@@ -1152,7 +1152,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           controller: _profileScrollController,
           clipBehavior: Clip.none,
           slivers: [
-            // ── Pinned app-bar ──
+            // â”€â”€ Pinned app-bar â”€â”€
             SliverAppBar(
               clipBehavior: Clip.none,
               pinned: true,
@@ -1168,7 +1168,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Share.share(
                       'Check out ${_userData?.name ?? 'this profile'} on SkillShare!\n'
                       'Category: ${_profile!.category}\n'
-                      'Rating: ${_profile!.rating.toStringAsFixed(1)} ⭐',
+                      'Rating: ${_profile!.rating.toStringAsFixed(1)} â­',
                       subject: 'SkillShare Profile',
                     );
                   }),
@@ -1275,11 +1275,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               child: CircleAvatar(
                                 radius: avatarRadius,
                                 backgroundColor: Colors.white,
-                                child: WebImageLoader.loadAvatar(
-                                  imageUrl: _profile!.profilePicture,
+                                child: UniversalAvatar(
+                                  avatarConfig: _profile?.avatarConfig ?? _userData?.avatarConfig,
+                                  photoUrl: _profile!.profilePicture,
+                                  fallbackName: _userData?.name ?? _profile!.name,
                                   radius: avatarRadius - 1,
-                                  fallbackText: _userData?.name,
-                                  backgroundColor: Colors.grey[100],
                                 ),
                               ),
                             ),
@@ -1291,7 +1291,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            // ── Name + stats card ──
+            // â”€â”€ Name + stats card â”€â”€
             SliverToBoxAdapter(
               child: _buildProfileIdentitySection(avatarRadius, coverColors),
             ),
@@ -1300,7 +1300,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: _buildContactVisibilitySection(coverColors),
             ),
 
-            // ── Action buttons ──
+            // â”€â”€ Action buttons â”€â”€
             if (!isOwnProfile)
               SliverToBoxAdapter(
                 child: _buildActionButtons(coverColors),
@@ -1313,23 +1313,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: _buildCompanyHiringInsightsSection(),
               ),
 
-            // ── Own-profile controls ──
+            // â”€â”€ Own-profile controls â”€â”€
             if (isOwnProfile)
               SliverToBoxAdapter(
                 child: _buildOwnProfileControls(),
               ),
 
-            // ── Bio ──
+            // â”€â”€ Bio â”€â”€
             SliverToBoxAdapter(child: _buildBioSection()),
 
-            // ── Skills ──
+            // â”€â”€ Skills â”€â”€
             if (_profile!.skills.isNotEmpty)
               SliverToBoxAdapter(child: _buildSkillsSection()),
 
-            // ── Portfolio ──
+            // â”€â”€ Portfolio â”€â”€
             SliverToBoxAdapter(child: _buildPortfolioSection()),
 
-            // ── Reviews ──
+            // â”€â”€ Reviews â”€â”€
             SliverToBoxAdapter(child: _buildReviewsSection()),
 
             SliverPadding(
@@ -1402,7 +1402,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return const BoxDecoration(color: Colors.white);
   }
 
-  // ─── Minimal profile view for delivery partner / admin ────────────────────
+  // â”€â”€â”€ Minimal profile view for delivery partner / admin â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildBasicProfileView() {
     const coverHeight = 200.0;
     const avatarRadius = 48.0;
@@ -1563,7 +1563,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 radius: avatarRadius,
                                 backgroundColor: Colors.white,
                                 child: UniversalAvatar(
-                                  avatarConfig: _userData?.avatarConfig,
+                                  avatarConfig: _profile?.avatarConfig ?? _customerProfile?.avatarConfig ?? _companyProfile?.avatarConfig ?? _userData?.avatarConfig,
                                   photoUrl: imageUrl,
                                   fallbackName: _userData?.name,
                                   radius: avatarRadius - 1,
@@ -1578,7 +1578,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            // ── Identity: name + role badge ──
+            // â”€â”€ Identity: name + role badge â”€â”€
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(
@@ -1631,7 +1631,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: _buildContactVisibilitySection(coverColors),
             ),
 
-            // ── Own-profile edit button ──
+            // â”€â”€ Own-profile edit button â”€â”€
             if (isOwnProfile)
               SliverToBoxAdapter(
                 child: Padding(
@@ -1670,13 +1670,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final rawDisplayName = (_userData?.name ?? '').trim();
     final displayName = rawDisplayName.isEmpty ? 'User' : rawDisplayName;
 
-    // Content below — top padding leaves room for the overflowing avatar
+    // Content below â€” top padding leaves room for the overflowing avatar
     return Padding(
       padding: EdgeInsets.fromLTRB(20, avatarRadius + avatarBorder + 12, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Name centered under avatar circle ──
+          // â”€â”€ Name centered under avatar circle â”€â”€
           Padding(
             padding: const EdgeInsets.only(left: 4),
             child: SizedBox(
@@ -1697,7 +1697,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          // ── Category badge ──
+          // â”€â”€ Category badge â”€â”€
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1731,7 +1731,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const SizedBox(height: 12),
 
-          // ── Location ──
+          // â”€â”€ Location â”€â”€
           if (_profile!.city != null || _profile!.address != null)
             Row(
               children: [
@@ -1750,7 +1750,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const SizedBox(height: 10),
 
-          // ── Star rating bar ──
+          // â”€â”€ Star rating bar â”€â”€
           Row(
             children: [
               RatingBarIndicator(
@@ -1762,7 +1762,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(width: 8),
               Text(
-                '${_profile!.rating.toStringAsFixed(1)}  •  ${_profile!.reviewCount} reviews',
+                '${_profile!.rating.toStringAsFixed(1)}  â€¢  ${_profile!.reviewCount} reviews',
                 style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey[600],
@@ -1773,7 +1773,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const SizedBox(height: 16),
 
-          // ── Stats row — compact, left-aligned ──
+          // â”€â”€ Stats row â€” compact, left-aligned â”€â”€
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1790,7 +1790,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const SizedBox(height: 4),
 
-          // ── Company endorsement banner ──
+          // â”€â”€ Company endorsement banner â”€â”€
           if (_companyEndorsementCount > 0)
             Padding(
               padding: const EdgeInsets.only(top: 10),
@@ -1824,7 +1824,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-          // ── Company endorsement button (visible to company viewers only) ──
+          // â”€â”€ Company endorsement button (visible to company viewers only) â”€â”€
           if (_profile!.hasConfidentialCredentials)
             Padding(
               padding: const EdgeInsets.only(top: 10),
@@ -2551,7 +2551,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        // ── Project History ──────────────────────────────
+                        // â”€â”€ Project History â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         Row(
                           children: [
                             const Icon(Icons.work_history_rounded,
@@ -2561,7 +2561,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               child: Text(
                                 allProjects.isEmpty
                                     ? 'Project History (${_profile?.projectCount ?? 0} total)'
-                                    : 'Project History (${allProjects.length} with you · ${_profile?.projectCount ?? 0} total)',
+                                    : 'Project History (${allProjects.length} with you Â· ${_profile?.projectCount ?? 0} total)',
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
@@ -2605,7 +2605,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ? const Color(0xFF1A237E)
                                 : const Color(0xFF00695C);
                             final badgeLabel =
-                                isCompany ? '🏢 Company' : '👤 Customer';
+                                isCompany ? 'ðŸ¢ Company' : 'ðŸ‘¤ Customer';
                             final isActive = r.status.toLowerCase().trim() ==
                                 AppConstants.requestStatusAccepted;
                             final dateStr =
@@ -2668,7 +2668,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           ),
                                           child: Text(
                                             isActive
-                                                ? '⏳ In Progress'
+                                                ? 'â³ In Progress'
                                                 : r.hireType!
                                                     .replaceAll('_', ' '),
                                             style: const TextStyle(
@@ -3410,7 +3410,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     const avatarRadius = 52.0;
     const avatarBorder = 3.0;
 
-    // Build location string cleanly – filter out blanks / single chars
+    // Build location string cleanly â€“ filter out blanks / single chars
     String locationText = '';
     if (profile.city != null && profile.city!.trim().length > 1) {
       locationText = profile.city!.trim();
@@ -3574,7 +3574,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 radius: avatarRadius,
                                 backgroundColor: Colors.white,
                                 child: UniversalAvatar(
-                                  avatarConfig: _userData?.avatarConfig,
+                                  avatarConfig: _profile?.avatarConfig ?? _customerProfile?.avatarConfig ?? _companyProfile?.avatarConfig ?? _userData?.avatarConfig,
                                   photoUrl: imageUrl,
                                   fallbackName: _userData?.name,
                                   radius: avatarRadius - 1,
@@ -3589,7 +3589,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            // ── Identity: name + location + action ──
+            // â”€â”€ Identity: name + location + action â”€â”€
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(
@@ -4089,7 +4089,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 radius: avatarRadius,
                                 backgroundColor: Colors.white,
                                 child: UniversalAvatar(
-                                  avatarConfig: _userData?.avatarConfig,
+                                  avatarConfig: _profile?.avatarConfig ?? _customerProfile?.avatarConfig ?? _companyProfile?.avatarConfig ?? _userData?.avatarConfig,
                                   photoUrl: imageUrl,
                                   fallbackName: profile.companyName,
                                   radius: avatarRadius - 1,
@@ -4104,7 +4104,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            // ── Identity: company name + details ──
+            // â”€â”€ Identity: company name + details â”€â”€
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(
@@ -4760,3 +4760,4 @@ class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {
     );
   }
 }
+

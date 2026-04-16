@@ -274,17 +274,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           message: 'You cannot buy your own product', type: PopupType.info);
       return;
     }
+
+    final checkoutDetails = await _collectCheckoutDetails(currentUser.uid);
+    if (!mounted || checkoutDetails == null) return;
+
     final transactionId = await GPaySimulationDialog.show(
       context,
       amount: widget.product.price * _qty,
       recipientName: _seller?.name ?? 'Seller',
       description: '${widget.product.name}${_qty > 1 ? ' x$_qty' : ''}',
     );
+
     if (transactionId != null && mounted) {
       try {
-        final checkoutDetails = await _collectCheckoutDetails(currentUser.uid);
-        if (!mounted || checkoutDetails == null) return;
-
         final order = await _firestoreService.purchaseProductDirect(
           userId: currentUser.uid,
           product: widget.product,

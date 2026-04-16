@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -252,16 +254,28 @@ class AuthService {
     return _googleSignIn;
   }
 
+  Future<void> _signOutGoogleBestEffort() async {
+    try {
+      final googleSignIn = await _getGoogleSignInClient().timeout(
+        const Duration(seconds: 3),
+      );
+      await googleSignIn.signOut().timeout(const Duration(seconds: 3));
+    } catch (e) {
+      debugPrint('Google Sign-In cleanup skipped: $e');
+    }
+  }
+
   // Sign out
   Future<void> signOut() async {
-    // Try to sign out of Google if it was used, but don't let it block logout
-    try {
-      final googleSignIn = await _getGoogleSignInClient();
-      await googleSignIn.signOut();
-    } catch (_) {
-      // Google Sign-In not configured or not used — ignore
-    }
-    await _auth.signOut();
+    // Firebase logout is local and should complete immediately. Google cleanup
+    // can initialize platform channels and must not block returning to login.
+    unawaited(_signOutGoogleBestEffort());
+    await _auth.signOut().timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        debugPrint('FirebaseAuth signOut timed out; continuing logout flow.');
+      },
+    );
   }
 
   // Sign in / sign up with Google

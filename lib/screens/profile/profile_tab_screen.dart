@@ -9,6 +9,7 @@ import '../../models/skilled_user_profile.dart';
 import '../../models/customer_profile.dart';
 import '../../models/company_profile.dart';
 import '../../providers/auth_provider.dart' as app_auth;
+import '../../providers/user_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/universal_avatar.dart';
 import '../../screens/avatar/avatar_builder_screen.dart';
@@ -73,11 +74,19 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
   @override
   void dispose() {
     _gradientCtrl.dispose();
+    _cancelProfileStreams();
+    super.dispose();
+  }
+
+  void _cancelProfileStreams() {
     _userSub?.cancel();
     _skilledSub?.cancel();
     _customerSub?.cancel();
     _companySub?.cancel();
-    super.dispose();
+    _userSub = null;
+    _skilledSub = null;
+    _customerSub = null;
+    _companySub = null;
   }
 
   /// Returns smoothly interpolated gradient colors based on animation value.
@@ -196,9 +205,11 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
     try {
       final authProvider =
           Provider.of<app_auth.AuthProvider>(context, listen: false);
+      _cancelProfileStreams();
+      Provider.of<UserProvider>(context, listen: false).clearAllData();
       await authProvider.signOut();
       if (mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
+        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const LoginScreen()),
           (route) => false,
         );
@@ -293,301 +304,13 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 520),
                         child: Padding(
-                          padding: EdgeInsets.fromLTRB(
-                              16,
-                              MediaQuery.of(context).padding.top + 20,
-                              16,
-                              32),
+                          padding: EdgeInsets.fromLTRB(16,
+                              MediaQuery.of(context).padding.top + 20, 16, 32),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                          // Avatar with gradient ring
-                          GestureDetector(
-                            onTap: () {
-                              if (_currentUser != null) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => ProfileScreen(
-                                        userId: _currentUser!.uid),
-                                  ),
-                                );
-                              }
-                            },
-                            child: Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: const LinearGradient(
-                                  colors: [Colors.white, Color(0xFFFFD700)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.25),
-                                    blurRadius: 24,
-                                    spreadRadius: 2,
-                                    offset: const Offset(0, 8),
-                                  ),
-                                ],
-                              ),
-                              padding: const EdgeInsets.all(3.5),
-                              child: UniversalAvatar(
-                                avatarConfig: _currentUser?.avatarConfig,
-                                photoUrl: _profilePhotoUrl,
-                                fallbackName: _currentUser?.name,
-                                radius: 52,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          // Name
-                          Text(
-                            AppHelpers.capitalize(_currentUser?.name ?? 'User'),
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              letterSpacing: -0.3,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          // Email
-                          Text(
-                            _currentUser?.email ?? '',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.white.withValues(alpha: 0.8),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          // Role Badge — company only
-                          if (_currentUser?.role == UserRoles.company)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 18, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.4),
-                                    width: 1.2),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.business_rounded,
-                                    color: Colors.white,
-                                    size: 14,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    UserRoles.getDisplayName(
-                                        _currentUser?.role ??
-                                            UserRoles.company),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          // Business verification badge for companies
-                          if (_currentUser?.role == UserRoles.company) ...[
-                            const SizedBox(height: 8),
-                            if (_companyProfile?.isVerified == true)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.withValues(alpha: 0.25),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                      color: Colors.greenAccent
-                                          .withValues(alpha: 0.7),
-                                      width: 1.2),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.verified,
-                                        color: Colors.greenAccent, size: 14),
-                                    SizedBox(width: 5),
-                                    Text(
-                                      'Business Verified',
-                                      style: TextStyle(
-                                        color: Colors.greenAccent,
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            else if (_companyProfile?.verificationStatus ==
-                                'submitted')
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.withValues(alpha: 0.25),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                      color: Colors.blueAccent
-                                          .withValues(alpha: 0.7),
-                                      width: 1.2),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.hourglass_top,
-                                        color: Colors.blueAccent, size: 14),
-                                    SizedBox(width: 5),
-                                    Text(
-                                      'Verification Pending',
-                                      style: TextStyle(
-                                        color: Colors.blueAccent,
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            else
+                              // Avatar with gradient ring
                               GestureDetector(
-                                onTap: () async {
-                                  if (_currentUser == null) return;
-                                  await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => CompanySetupScreen(
-                                          userId: _currentUser!.uid),
-                                    ),
-                                  );
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 14, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        Colors.orange.withValues(alpha: 0.25),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                        color: Colors.orange
-                                            .withValues(alpha: 0.7),
-                                        width: 1.2),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.business_center,
-                                          color: Colors.orange, size: 14),
-                                      SizedBox(width: 5),
-                                      Text(
-                                        'Tap to Verify Business',
-                                        style: TextStyle(
-                                          color: Colors.orange,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                          ],
-                          const SizedBox(height: 20),
-                          // Verified badge for skilled users
-                          if (_currentUser?.role ==
-                              UserRoles.skilledPerson) ...[
-                            const SizedBox(height: 8),
-                            if (_skilledProfile?.isVerified == true)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.withValues(alpha: 0.25),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                      color: Colors.greenAccent
-                                          .withValues(alpha: 0.7),
-                                      width: 1.2),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.verified_user,
-                                        color: Colors.greenAccent, size: 14),
-                                    SizedBox(width: 5),
-                                    Text(
-                                      'Aadhaar Verified',
-                                      style: TextStyle(
-                                        color: Colors.greenAccent,
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            else
-                              GestureDetector(
-                                onTap: () async {
-                                  if (_currentUser == null) return;
-                                  await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => SkilledUserSetupScreen(
-                                          userId: _currentUser!.uid),
-                                    ),
-                                  );
-                                  // Stream auto-updates
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 14, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        Colors.orange.withValues(alpha: 0.25),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                        color: Colors.orange
-                                            .withValues(alpha: 0.7),
-                                        width: 1.2),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.fingerprint,
-                                          color: Colors.orange, size: 14),
-                                      SizedBox(width: 5),
-                                      Text(
-                                        'Tap to Verify Identity',
-                                        style: TextStyle(
-                                          color: Colors.orange,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                          ],
-                              const SizedBox(height: 20),
-                              // Quick action buttons
-                              Wrap(
-                                alignment: WrapAlignment.center,
-                                spacing: 16,
-                                runSpacing: 10,
-                                children: [
-                              _headerAction(
-                                icon: Icons.visibility_rounded,
-                                label: 'View Profile',
                                 onTap: () {
                                   if (_currentUser != null) {
                                     Navigator.push(
@@ -599,62 +322,357 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                                     );
                                   }
                                 },
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: const LinearGradient(
+                                      colors: [Colors.white, Color(0xFFFFD700)],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.25),
+                                        blurRadius: 24,
+                                        spreadRadius: 2,
+                                        offset: const Offset(0, 8),
+                                      ),
+                                    ],
+                                  ),
+                                  padding: const EdgeInsets.all(3.5),
+                                  child: UniversalAvatar(
+                                    avatarConfig: _currentUser?.avatarConfig,
+                                    photoUrl: _profilePhotoUrl,
+                                    fallbackName: _currentUser?.name,
+                                    radius: 52,
+                                  ),
+                                ),
                               ),
-                              _headerAction(
-                                icon: Icons.edit_rounded,
-                                label: 'Edit Profile',
-                                onTap: () async {
-                                  if (_currentUser == null) return;
-                                  Widget editScreen;
-                                  if (_currentUser!.role ==
-                                      UserRoles.skilledPerson) {
-                                    editScreen = SkilledUserSetupScreen(
-                                        userId: _currentUser!.uid,
-                                        isEditing: true);
-                                  } else if (_currentUser!.role ==
-                                      UserRoles.customer) {
-                                    editScreen = CustomerSetupScreen(
-                                        userId: _currentUser!.uid,
-                                        isEditing: true);
-                                  } else if (_currentUser!.role ==
-                                      UserRoles.company) {
-                                    editScreen = CompanySetupScreen(
-                                        userId: _currentUser!.uid,
-                                        isEditing: true);
-                                  } else {
-                                    editScreen = SkilledUserSetupScreen(
-                                        userId: _currentUser!.uid,
-                                        isEditing: true);
-                                  }
-                                  await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (_) => editScreen),
-                                  );
-                                  // Stream auto-updates
-                                },
+                              const SizedBox(height: 14),
+                              // Name
+                              Text(
+                                AppHelpers.capitalize(
+                                    _currentUser?.name ?? 'User'),
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: -0.3,
+                                ),
                               ),
-                              _headerAction(
-                                icon: Icons.face_retouching_natural,
-                                label: 'Avatar',
-                                onTap: () async {
-                                  if (_currentUser == null) return;
-                                  final config = await Navigator.push<dynamic>(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => AvatarBuilderScreen(
-                                        initialConfig:
-                                            _currentUser!.avatarConfig,
+                              const SizedBox(height: 4),
+                              // Email
+                              Text(
+                                _currentUser?.email ?? '',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.white.withValues(alpha: 0.8),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              // Role Badge — company only
+                              if (_currentUser?.role == UserRoles.company)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 18, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                        color:
+                                            Colors.white.withValues(alpha: 0.4),
+                                        width: 1.2),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.business_rounded,
+                                        color: Colors.white,
+                                        size: 14,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        UserRoles.getDisplayName(
+                                            _currentUser?.role ??
+                                                UserRoles.company),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              // Business verification badge for companies
+                              if (_currentUser?.role == UserRoles.company) ...[
+                                const SizedBox(height: 8),
+                                if (_companyProfile?.isVerified == true)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Colors.green.withValues(alpha: 0.25),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                          color: Colors.greenAccent
+                                              .withValues(alpha: 0.7),
+                                          width: 1.2),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.verified,
+                                            color: Colors.greenAccent,
+                                            size: 14),
+                                        SizedBox(width: 5),
+                                        Text(
+                                          'Business Verified',
+                                          style: TextStyle(
+                                            color: Colors.greenAccent,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                else if (_companyProfile?.verificationStatus ==
+                                    'submitted')
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Colors.blue.withValues(alpha: 0.25),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                          color: Colors.blueAccent
+                                              .withValues(alpha: 0.7),
+                                          width: 1.2),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.hourglass_top,
+                                            color: Colors.blueAccent, size: 14),
+                                        SizedBox(width: 5),
+                                        Text(
+                                          'Verification Pending',
+                                          style: TextStyle(
+                                            color: Colors.blueAccent,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                else
+                                  GestureDetector(
+                                    onTap: () async {
+                                      if (_currentUser == null) return;
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => CompanySetupScreen(
+                                              userId: _currentUser!.uid),
+                                        ),
+                                      );
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 14, vertical: 5),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange
+                                            .withValues(alpha: 0.25),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                            color: Colors.orange
+                                                .withValues(alpha: 0.7),
+                                            width: 1.2),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.business_center,
+                                              color: Colors.orange, size: 14),
+                                          SizedBox(width: 5),
+                                          Text(
+                                            'Tap to Verify Business',
+                                            style: TextStyle(
+                                              color: Colors.orange,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                  );
-                                  if (config != null) {
-                                    await FirestoreService().saveAvatarConfig(
-                                        _currentUser!.uid,
-                                        config as Map<String, dynamic>);
-                                  }
-                                },
-                              ),
+                                  ),
+                              ],
+                              const SizedBox(height: 20),
+                              // Verified badge for skilled users
+                              if (_currentUser?.role ==
+                                  UserRoles.skilledPerson) ...[
+                                const SizedBox(height: 8),
+                                if (_skilledProfile?.isVerified == true)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Colors.green.withValues(alpha: 0.25),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                          color: Colors.greenAccent
+                                              .withValues(alpha: 0.7),
+                                          width: 1.2),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.verified_user,
+                                            color: Colors.greenAccent,
+                                            size: 14),
+                                        SizedBox(width: 5),
+                                        Text(
+                                          'Aadhaar Verified',
+                                          style: TextStyle(
+                                            color: Colors.greenAccent,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                else
+                                  GestureDetector(
+                                    onTap: () async {
+                                      if (_currentUser == null) return;
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              SkilledUserSetupScreen(
+                                                  userId: _currentUser!.uid),
+                                        ),
+                                      );
+                                      // Stream auto-updates
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 14, vertical: 5),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange
+                                            .withValues(alpha: 0.25),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                            color: Colors.orange
+                                                .withValues(alpha: 0.7),
+                                            width: 1.2),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.fingerprint,
+                                              color: Colors.orange, size: 14),
+                                          SizedBox(width: 5),
+                                          Text(
+                                            'Tap to Verify Identity',
+                                            style: TextStyle(
+                                              color: Colors.orange,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                              const SizedBox(height: 20),
+                              // Quick action buttons
+                              Wrap(
+                                alignment: WrapAlignment.center,
+                                spacing: 16,
+                                runSpacing: 10,
+                                children: [
+                                  _headerAction(
+                                    icon: Icons.visibility_rounded,
+                                    label: 'View Profile',
+                                    onTap: () {
+                                      if (_currentUser != null) {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => ProfileScreen(
+                                                userId: _currentUser!.uid),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  ),
+                                  _headerAction(
+                                    icon: Icons.edit_rounded,
+                                    label: 'Edit Profile',
+                                    onTap: () async {
+                                      if (_currentUser == null) return;
+                                      Widget editScreen;
+                                      if (_currentUser!.role ==
+                                          UserRoles.skilledPerson) {
+                                        editScreen = SkilledUserSetupScreen(
+                                            userId: _currentUser!.uid,
+                                            isEditing: true);
+                                      } else if (_currentUser!.role ==
+                                          UserRoles.customer) {
+                                        editScreen = CustomerSetupScreen(
+                                            userId: _currentUser!.uid,
+                                            isEditing: true);
+                                      } else if (_currentUser!.role ==
+                                          UserRoles.company) {
+                                        editScreen = CompanySetupScreen(
+                                            userId: _currentUser!.uid,
+                                            isEditing: true);
+                                      } else {
+                                        editScreen = SkilledUserSetupScreen(
+                                            userId: _currentUser!.uid,
+                                            isEditing: true);
+                                      }
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) => editScreen),
+                                      );
+                                      // Stream auto-updates
+                                    },
+                                  ),
+                                  _headerAction(
+                                    icon: Icons.face_retouching_natural,
+                                    label: 'Avatar',
+                                    onTap: () async {
+                                      if (_currentUser == null) return;
+                                      final config =
+                                          await Navigator.push<dynamic>(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => AvatarBuilderScreen(
+                                            initialConfig:
+                                                _currentUser!.avatarConfig,
+                                          ),
+                                        ),
+                                      );
+                                      if (config != null) {
+                                        await FirestoreService()
+                                            .saveAvatarConfig(_currentUser!.uid,
+                                                config as Map<String, dynamic>);
+                                      }
+                                    },
+                                  ),
                                 ],
                               ),
                             ],

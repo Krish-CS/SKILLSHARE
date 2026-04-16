@@ -2942,7 +2942,7 @@ class FirestoreService {
     final jobRef =
         _firestore.collection(AppConstants.jobsCollection).doc(jobId);
 
-    // ── 1. Transactional acceptance ─────────────────────────────────────────
+    // â”€â”€ 1. Transactional acceptance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     await _firestore.runTransaction((transaction) async {
       final jobSnap = await transaction.get(jobRef);
       if (!jobSnap.exists) throw Exception('Job not found.');
@@ -2967,7 +2967,7 @@ class FirestoreService {
       });
     });
 
-    // ── 2. Re-read job for title ────────────────────────────────────────────
+    // â”€â”€ 2. Re-read job for title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     final jobDoc = await jobRef.get();
     final jobTitle = (jobDoc.data()?['title'] as String?)?.trim() ?? 'a job';
     // skipStatusCheck: the transaction already verified acceptance;
@@ -2982,7 +2982,7 @@ class FirestoreService {
     final chatRef =
         _firestore.collection(AppConstants.chatsCollection).doc(chatId);
 
-    // ── 3. Notify the skilled person ────────────────────────────────────────
+    // â”€â”€ 3. Notify the skilled person â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     await _firestore.collection('notifications').add({
       'toUserId': applicantId,
       'fromUserId': companyId,
@@ -3006,7 +3006,7 @@ class FirestoreService {
         (companyDoc.data()?['companyName'] as String?)?.trim() ??
         'The company';
 
-    // ── 5. Send offer-letter message ────────────────────────────────────────
+    // â”€â”€ 5. Send offer-letter message â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     final confirmationText = 'Application Selected\n\n'
         'Congratulations! You have been selected for the "$jobTitle" role at '
         '$companyName.\n\n'
@@ -3539,7 +3539,7 @@ class FirestoreService {
     }
     final skilledUser = await getUserById(skilledUserId);
 
-    // No duplicate check — customers can submit multiple work requests per chat.
+    // No duplicate check â€” customers can submit multiple work requests per chat.
     final docRef = _firestore.collection(AppConstants.requestsCollection).doc();
     await docRef.set({
       'type': _chatWorkRequestType,
@@ -3590,7 +3590,7 @@ class FirestoreService {
     return _firestore
         .collection(AppConstants.requestsCollection)
         .where('participants',
-            arrayContains: userId) // single-field — no composite index
+            arrayContains: userId) // single-field â€” no composite index
         .snapshots()
         .map((snapshot) {
       final requests = snapshot.docs
@@ -3625,7 +3625,7 @@ class FirestoreService {
     final snapshot = await _firestore
         .collection(AppConstants.requestsCollection)
         .where('participants',
-            arrayContains: userId) // single-field — no composite index
+            arrayContains: userId) // single-field â€” no composite index
         .get();
 
     final requests = snapshot.docs
@@ -4017,7 +4017,7 @@ class FirestoreService {
     });
   }
 
-  // ===== Reports (extra admin methods – submitProfileReport is defined earlier) ======
+  // ===== Reports (extra admin methods â€“ submitProfileReport is defined earlier) ======
 
   Future<void> submitChatReport({
     required String reporterId,
@@ -4286,6 +4286,191 @@ class FirestoreService {
     });
   }
 
+  // ===== Managed Members (Admin) =====
+
+  Map<String, dynamic> _sanitizeManagedMemberPayload(
+    Map<String, dynamic> payload, {
+    required bool isCreate,
+  }) {
+    String normalizeString(dynamic value) => value?.toString().trim() ?? '';
+
+    List<String> normalizeStringList(dynamic value) {
+      if (value is List) {
+        return value
+            .map((item) => item?.toString().trim() ?? '')
+            .where((item) => item.isNotEmpty)
+            .toSet()
+            .toList();
+      }
+      if (value is String) {
+        return value
+            .split(',')
+            .map((item) => item.trim())
+            .where((item) => item.isNotEmpty)
+            .toSet()
+            .toList();
+      }
+      return const <String>[];
+    }
+
+    num normalizeExperience(dynamic value) {
+      if (value is num) return value;
+      return num.tryParse(value?.toString() ?? '') ?? 0;
+    }
+
+    final memberTypeRaw = normalizeString(payload['memberType']);
+    final memberType =
+        memberTypeRaw == AppConstants.memberTypeSkilled
+            ? AppConstants.memberTypeSkilled
+            : AppConstants.memberTypeCompany;
+
+    final statusRaw = normalizeString(payload['status']).toLowerCase();
+    final status = statusRaw == 'inactive' ? 'inactive' : 'active';
+
+    final approvalRaw = normalizeString(payload['approvalStatus']).toLowerCase();
+    final approvalStatus = approvalRaw == AppConstants.approvalApproved
+        ? AppConstants.approvalApproved
+        : approvalRaw == AppConstants.approvalRejected
+            ? AppConstants.approvalRejected
+            : AppConstants.approvalPending;
+
+    final normalized = <String, dynamic>{
+      'name': normalizeString(payload['name']),
+      'email': normalizeString(payload['email']).toLowerCase(),
+      'phone': normalizeString(payload['phone']),
+      'memberType': memberType,
+      'parentUserId': normalizeString(payload['parentUserId']),
+      'parentName': normalizeString(payload['parentName']),
+      'designation': normalizeString(payload['designation']),
+      'skillCategory': normalizeString(payload['skillCategory']),
+      'experienceYears': normalizeExperience(payload['experienceYears']),
+      'address': normalizeString(payload['address']),
+      'idProofUrls': normalizeStringList(payload['idProofUrls']),
+      'permissions': normalizeStringList(payload['permissions']),
+      'status': status,
+      'approvalStatus': approvalStatus,
+      'verificationNotes': normalizeString(payload['verificationNotes']),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    if (isCreate) {
+      normalized['createdAt'] = FieldValue.serverTimestamp();
+    }
+
+    return normalized;
+  }
+
+  Future<String> createManagedMember(
+    Map<String, dynamic> payload, {
+    required String adminId,
+  }) async {
+    final normalized = _sanitizeManagedMemberPayload(payload, isCreate: true);
+    if ((normalized['name'] as String).isEmpty) {
+      throw Exception('Member name is required.');
+    }
+
+    normalized['createdByAdminId'] = adminId;
+    final docRef = await _firestore
+        .collection(AppConstants.managedMembersCollection)
+        .add(normalized);
+    return docRef.id;
+  }
+
+  Future<void> updateManagedMember(
+    String memberId,
+    Map<String, dynamic> payload,
+  ) async {
+    final normalized = _sanitizeManagedMemberPayload(payload, isCreate: false);
+    await _firestore
+        .collection(AppConstants.managedMembersCollection)
+        .doc(memberId)
+        .set(normalized, SetOptions(merge: true));
+  }
+
+  Future<void> deleteManagedMember(String memberId) async {
+    await _firestore
+        .collection(AppConstants.managedMembersCollection)
+        .doc(memberId)
+        .delete();
+  }
+
+  Future<List<Map<String, dynamic>>> getManagedMembers({
+    String? memberType,
+    String? approvalStatus,
+    int limit = 500,
+  }) async {
+    Query<Map<String, dynamic>> query =
+        _firestore.collection(AppConstants.managedMembersCollection);
+
+    if (memberType != null && memberType.trim().isNotEmpty) {
+      query = query.where('memberType', isEqualTo: memberType.trim());
+    }
+    if (approvalStatus != null && approvalStatus.trim().isNotEmpty) {
+      query =
+          query.where('approvalStatus', isEqualTo: approvalStatus.trim());
+    }
+
+    final snapshot = await query.limit(limit).get();
+    final items = snapshot.docs
+        .map((doc) => {
+              ...doc.data(),
+              'id': doc.id,
+            })
+        .toList();
+
+    items.sort((a, b) {
+      DateTime asDate(dynamic value) {
+        if (value is Timestamp) return value.toDate();
+        if (value is DateTime) return value;
+        return DateTime.fromMillisecondsSinceEpoch(0);
+      }
+
+      return asDate(b['updatedAt']).compareTo(asDate(a['updatedAt']));
+    });
+
+    return items;
+  }
+
+  Stream<List<Map<String, dynamic>>> streamManagedMembers({
+    String? memberType,
+    String? approvalStatus,
+    int limit = 500,
+  }) {
+    Query<Map<String, dynamic>> query =
+        _firestore.collection(AppConstants.managedMembersCollection);
+
+    if (memberType != null && memberType.trim().isNotEmpty) {
+      query = query.where('memberType', isEqualTo: memberType.trim());
+    }
+    if (approvalStatus != null && approvalStatus.trim().isNotEmpty) {
+      query =
+          query.where('approvalStatus', isEqualTo: approvalStatus.trim());
+    }
+
+    return query.limit(limit).snapshots().map(
+      (snapshot) {
+        final items = snapshot.docs
+            .map((doc) => {
+                  ...doc.data(),
+                  'id': doc.id,
+                })
+            .toList();
+
+        items.sort((a, b) {
+          DateTime asDate(dynamic value) {
+            if (value is Timestamp) return value.toDate();
+            if (value is DateTime) return value;
+            return DateTime.fromMillisecondsSinceEpoch(0);
+          }
+
+          return asDate(b['updatedAt']).compareTo(asDate(a['updatedAt']));
+        });
+
+        return items;
+      },
+    );
+  }
+
   // ===== Animated Avatar Config =====
 
   /// Save custom animated avatar configuration for any user role.
@@ -4316,3 +4501,4 @@ class FirestoreService {
     );
   }
 }
+
