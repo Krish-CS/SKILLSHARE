@@ -156,8 +156,8 @@ class _CartScreenState extends State<CartScreen>
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: const Text('Confirm Delivery Address'),
-        content: SizedBox(
-          width: 360,
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -244,6 +244,7 @@ class _CartScreenState extends State<CartScreen>
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           indicatorColor: Colors.white,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,

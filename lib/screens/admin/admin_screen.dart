@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/user_model.dart';
@@ -12,6 +13,7 @@ import '../../services/delivery_partner_admin_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/presence_service.dart';
 import '../auth/login_screen.dart';
+import '../../utils/app_constants.dart';
 import '../../utils/app_dialog.dart';
 import '../../utils/user_roles.dart';
 import '../../widgets/universal_avatar.dart';
@@ -122,37 +124,48 @@ class _AdminScreenState extends State<AdminScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.sizeOf(context).width < 420;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FB),
       appBar: AppBar(
-        toolbarHeight: 72,
+        toolbarHeight: isNarrow ? 76 : 72,
         titleSpacing: 12,
-        title: const Row(
+        title: Row(
           children: [
-            CircleAvatar(
+            const CircleAvatar(
               radius: 18,
               backgroundColor: Color(0x26FFFFFF),
               child: Icon(Icons.admin_panel_settings,
                   color: Colors.white, size: 20),
             ),
-            SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Admin Control Center',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 18,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Admin Control Center',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: isNarrow ? 16 : 18,
+                    ),
                   ),
-                ),
-                Text(
-                  'Manage users, products and reports',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-              ],
+                  Text(
+                    'Manage users, products and reports',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: isNarrow ? 11 : 12,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -182,20 +195,26 @@ class _AdminScreenState extends State<AdminScreen>
                 child: InkWell(
                   borderRadius: BorderRadius.circular(999),
                   onTap: _logout,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isNarrow ? 10 : 14,
+                      vertical: 8,
+                    ),
                     child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          'Logout',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
+                        if (!isNarrow) ...[
+                          const Text(
+                            'Logout',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
                           ),
-                        ),
-                        SizedBox(width: 6),
-                        Icon(Icons.logout_rounded,
+                          const SizedBox(width: 6),
+                        ],
+                        const Icon(Icons.logout_rounded,
                             color: Colors.white, size: 18),
                       ],
                     ),
@@ -207,6 +226,7 @@ class _AdminScreenState extends State<AdminScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           indicatorSize: TabBarIndicatorSize.label,
           indicator: UnderlineTabIndicator(
             borderSide: BorderSide(color: _tabAccents[_activeTab], width: 3),
@@ -1236,20 +1256,11 @@ class _UsersTabState extends State<_UsersTab> {
             ),
             child: Column(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Manage user profiles, roles, status and bulk user creation.',
-                        style: TextStyle(
-                          color: Colors.grey[700],
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Wrap(
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isCompact = constraints.maxWidth < 760;
+
+                    final actionButtons = Wrap(
                       spacing: 8,
                       runSpacing: 8,
                       children: [
@@ -1287,8 +1298,44 @@ class _UsersTabState extends State<_UsersTab> {
                           label: const Text('Add Delivery'),
                         ),
                       ],
-                    ),
-                  ],
+                    );
+
+                    if (isCompact) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Manage user profiles, roles, status and bulk user creation.',
+                            style: TextStyle(
+                              color: Colors.grey[700],
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          actionButtons,
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Manage user profiles, roles, status and bulk user creation.',
+                            style: TextStyle(
+                              color: Colors.grey[700],
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        actionButtons,
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -1398,6 +1445,13 @@ class _UsersTabState extends State<_UsersTab> {
             ),
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: _ManagedMembersSection(
+            firestoreService: widget.firestoreService,
+          ),
+        ),
+        const SizedBox(height: 10),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
@@ -1698,6 +1752,1251 @@ class _UserCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ManagedMembersSection extends StatefulWidget {
+  final FirestoreService firestoreService;
+
+  const _ManagedMembersSection({required this.firestoreService});
+
+  @override
+  State<_ManagedMembersSection> createState() => _ManagedMembersSectionState();
+}
+
+class _ManagedMembersSectionState extends State<_ManagedMembersSection> {
+  List<Map<String, dynamic>> _allMembers = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> _filteredMembers = <Map<String, dynamic>>[];
+  bool _isLoading = true;
+  bool _isBulkImporting = false;
+  String _searchQuery = '';
+  String _typeFilter = 'all';
+  String _approvalFilter = 'all';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMembers();
+  }
+
+  String _normalizeMemberType(dynamic value) {
+    final type = value?.toString().trim().toLowerCase() ?? '';
+    if (type == AppConstants.memberTypeSkilled) {
+      return AppConstants.memberTypeSkilled;
+    }
+    return AppConstants.memberTypeCompany;
+  }
+
+  String _memberTypeLabel(String memberType) {
+    return memberType == AppConstants.memberTypeSkilled
+        ? 'Skilled Member'
+        : 'Company Member';
+  }
+
+  Color _memberTypeColor(String memberType) {
+    return memberType == AppConstants.memberTypeSkilled
+        ? const Color(0xFF00897B)
+        : const Color(0xFF5E35B1);
+  }
+
+  String _normalizeApproval(dynamic value) {
+    final status = value?.toString().trim().toLowerCase() ?? '';
+    if (status == AppConstants.approvalApproved) {
+      return AppConstants.approvalApproved;
+    }
+    if (status == AppConstants.approvalRejected) {
+      return AppConstants.approvalRejected;
+    }
+    return AppConstants.approvalPending;
+  }
+
+  List<String> _asStringList(dynamic value) {
+    if (value is List) {
+      return value
+          .map((e) => e?.toString().trim() ?? '')
+          .where((e) => e.isNotEmpty)
+          .toList();
+    }
+    if (value is String) {
+      return value
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    }
+    return const <String>[];
+  }
+
+  Future<void> _loadMembers() async {
+    setState(() => _isLoading = true);
+    final data = await widget.firestoreService.getManagedMembers(limit: 800);
+    _allMembers = data;
+    _applyFilters();
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _applyFilters() {
+    final q = _searchQuery.trim().toLowerCase();
+
+    _filteredMembers = _allMembers.where((member) {
+      final memberType = _normalizeMemberType(member['memberType']);
+      final approval = _normalizeApproval(member['approvalStatus']);
+
+      final textParts = <String>[
+        (member['name'] ?? '').toString(),
+        (member['email'] ?? '').toString(),
+        (member['phone'] ?? '').toString(),
+        (member['parentUserId'] ?? '').toString(),
+        (member['parentName'] ?? '').toString(),
+        (member['designation'] ?? '').toString(),
+        (member['skillCategory'] ?? '').toString(),
+        (member['address'] ?? '').toString(),
+      ].join(' ').toLowerCase();
+
+      final matchesType = _typeFilter == 'all' || memberType == _typeFilter;
+      final matchesApproval =
+          _approvalFilter == 'all' || approval == _approvalFilter;
+      final matchesSearch = q.isEmpty || textParts.contains(q);
+
+      return matchesType && matchesApproval && matchesSearch;
+    }).toList();
+
+    setState(() {});
+  }
+
+  Future<void> _createMember() async {
+    final formData = await showDialog<_ManagedMemberFormData>(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => const _ManagedMemberDialog(),
+    );
+
+    if (formData == null) return;
+
+    final adminId = FirebaseAuth.instance.currentUser?.uid;
+    if (adminId == null) {
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'Admin session missing. Please login again.',
+        type: PopupType.error,
+      );
+      return;
+    }
+
+    try {
+      await widget.firestoreService.createManagedMember(
+        formData.toPayload(),
+        adminId: adminId,
+      );
+      await _loadMembers();
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'Member added successfully',
+        type: PopupType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'Failed to add member: $e',
+        type: PopupType.error,
+      );
+    }
+  }
+
+  Future<void> _editMember(Map<String, dynamic> member) async {
+    final formData = await showDialog<_ManagedMemberFormData>(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => _ManagedMemberDialog(
+        initialData: _ManagedMemberFormData.fromExisting(member),
+      ),
+    );
+
+    if (formData == null) return;
+
+    final memberId = (member['id'] ?? '').toString();
+    if (memberId.isEmpty) return;
+
+    try {
+      await widget.firestoreService.updateManagedMember(
+        memberId,
+        formData.toPayload(),
+      );
+      await _loadMembers();
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'Member updated successfully',
+        type: PopupType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'Failed to update member: $e',
+        type: PopupType.error,
+      );
+    }
+  }
+
+  Future<void> _deleteMember(Map<String, dynamic> member) async {
+    final memberId = (member['id'] ?? '').toString();
+    if (memberId.isEmpty) return;
+
+    final confirmed = await AppDialog.confirm(
+      context,
+      title: 'Delete Member',
+      message:
+          'Delete ${(member['name'] ?? 'this member').toString()} permanently?',
+      confirmText: 'Delete',
+      gradientColors: const [Color(0xFFD32F2F), Color(0xFFFF7043)],
+      icon: Icons.delete_forever,
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await widget.firestoreService.deleteManagedMember(memberId);
+      await _loadMembers();
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'Member deleted',
+        type: PopupType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'Delete failed: $e',
+        type: PopupType.error,
+      );
+    }
+  }
+
+  Future<void> _updateApproval(
+      Map<String, dynamic> member, String approvalStatus) async {
+    final memberId = (member['id'] ?? '').toString();
+    if (memberId.isEmpty) return;
+
+    try {
+      await widget.firestoreService.updateManagedMember(
+        memberId,
+        {
+          'approvalStatus': approvalStatus,
+          'verificationNotes': approvalStatus == AppConstants.approvalRejected
+              ? 'Rejected by admin'
+              : '',
+        },
+      );
+      await _loadMembers();
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'Approval status updated',
+        type: PopupType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'Update failed: $e',
+        type: PopupType.error,
+      );
+    }
+  }
+
+  Future<void> _bulkImportMembersFromCsv() async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['csv'],
+      withData: true,
+    );
+
+    if (picked == null || picked.files.isEmpty) return;
+    final bytes = picked.files.single.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'Unable to read CSV bytes.',
+        type: PopupType.error,
+      );
+      return;
+    }
+
+    final adminId = FirebaseAuth.instance.currentUser?.uid;
+    if (adminId == null) {
+      if (!mounted) return;
+      AppPopup.show(
+        context,
+        message: 'Admin session missing. Please login again.',
+        type: PopupType.error,
+      );
+      return;
+    }
+
+    setState(() => _isBulkImporting = true);
+    int success = 0;
+    final failures = <String>[];
+
+    try {
+      final csvRaw = utf8.decode(bytes, allowMalformed: true);
+      final rows = const CsvDecoder(dynamicTyping: false).convert(csvRaw);
+      if (rows.length < 2) {
+        throw Exception('CSV requires header + data rows.');
+      }
+
+      final headers =
+          rows.first.map((e) => e.toString().trim().toLowerCase()).toList();
+      int idx(String key) => headers.indexOf(key);
+
+      final nameIdx = idx('name');
+      final typeIdx = idx('member_type');
+      if (nameIdx == -1) {
+        throw Exception('CSV requires at least name column.');
+      }
+
+      String cell(List<dynamic> row, int index) {
+        if (index < 0 || index >= row.length) return '';
+        return row[index].toString().trim();
+      }
+
+      for (var i = 1; i < rows.length; i++) {
+        final row = rows[i];
+        final rowNumber = i + 1;
+
+        final payload = <String, dynamic>{
+          'name': cell(row, nameIdx),
+          'email': cell(row, idx('email')),
+          'phone': cell(row, idx('phone')),
+          'memberType': typeIdx == -1
+              ? AppConstants.memberTypeCompany
+              : cell(row, typeIdx),
+          'parentUserId': cell(row, idx('parent_user_id')),
+          'parentName': cell(row, idx('parent_name')),
+          'designation': cell(row, idx('designation')),
+          'skillCategory': cell(row, idx('skill_category')),
+          'experienceYears': cell(row, idx('experience_years')),
+          'address': cell(row, idx('address')),
+          'idProofUrls': cell(row, idx('id_proof_urls')),
+          'permissions': cell(row, idx('permissions')),
+          'status': cell(row, idx('status')),
+          'approvalStatus': cell(row, idx('approval_status')),
+        };
+
+        if ((payload['name'] as String).trim().isEmpty) {
+          continue;
+        }
+
+        try {
+          await widget.firestoreService.createManagedMember(
+            payload,
+            adminId: adminId,
+          );
+          success++;
+        } catch (e) {
+          failures.add(
+              'Row $rowNumber: ${e.toString().replaceFirst('Exception: ', '')}');
+        }
+      }
+
+      await _loadMembers();
+      if (!mounted) return;
+
+      final summary = StringBuffer()
+        ..writeln('Bulk member import completed.')
+        ..writeln()
+        ..writeln('Success: $success')
+        ..writeln('Failed: ${failures.length}');
+
+      if (failures.isNotEmpty) {
+        summary.writeln();
+        summary.writeln('Errors (first 8):');
+        for (final failure in failures.take(8)) {
+          summary.writeln('- $failure');
+        }
+      }
+
+      await AppDialog.info(
+        context,
+        summary.toString(),
+        title: 'Bulk Members Result',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      await AppDialog.error(
+        context,
+        'Bulk member import failed.',
+        detail: e.toString().replaceFirst('Exception: ', ''),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isBulkImporting = false);
+      }
+    }
+  }
+
+  Future<void> _exportMembersCsv() async {
+    final rows = <List<dynamic>>[
+      <dynamic>[
+        'id',
+        'name',
+        'email',
+        'phone',
+        'member_type',
+        'parent_user_id',
+        'parent_name',
+        'designation',
+        'skill_category',
+        'experience_years',
+        'address',
+        'id_proof_urls',
+        'permissions',
+        'status',
+        'approval_status',
+      ]
+    ];
+
+    for (final member in _filteredMembers) {
+      rows.add(<dynamic>[
+        (member['id'] ?? '').toString(),
+        (member['name'] ?? '').toString(),
+        (member['email'] ?? '').toString(),
+        (member['phone'] ?? '').toString(),
+        _normalizeMemberType(member['memberType']),
+        (member['parentUserId'] ?? '').toString(),
+        (member['parentName'] ?? '').toString(),
+        (member['designation'] ?? '').toString(),
+        (member['skillCategory'] ?? '').toString(),
+        (member['experienceYears'] ?? '').toString(),
+        (member['address'] ?? '').toString(),
+        _asStringList(member['idProofUrls']).join('|'),
+        _asStringList(member['permissions']).join('|'),
+        (member['status'] ?? 'active').toString(),
+        _normalizeApproval(member['approvalStatus']),
+      ]);
+    }
+
+    String csvEscape(dynamic value) {
+      final raw = value?.toString() ?? '';
+      if (raw.contains(',') || raw.contains('"') || raw.contains('\n')) {
+        return '"${raw.replaceAll('"', '""')}"';
+      }
+      return raw;
+    }
+
+    final csv = rows
+        .map((row) => row.map(csvEscape).join(','))
+        .join('\n');
+    await Clipboard.setData(ClipboardData(text: csv));
+    if (!mounted) return;
+    await AppDialog.info(
+      context,
+      'Member CSV exported to clipboard (${_filteredMembers.length} rows).\n\n'
+      'Paste this into Excel/Sheets or save as .csv.',
+      title: 'Export Complete',
+    );
+  }
+
+  Widget _buildApprovalChip(String approvalStatus) {
+    Color bg;
+    Color fg;
+    String label;
+    if (approvalStatus == AppConstants.approvalApproved) {
+      bg = const Color(0xFFDFF5E7);
+      fg = const Color(0xFF1B8A3E);
+      label = 'APPROVED';
+    } else if (approvalStatus == AppConstants.approvalRejected) {
+      bg = const Color(0xFFFDE2E2);
+      fg = const Color(0xFFC62828);
+      label = 'REJECTED';
+    } else {
+      bg = const Color(0xFFFFF1D6);
+      fg = const Color(0xFFB26A00);
+      label = 'PENDING';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: fg,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMemberCard(Map<String, dynamic> member) {
+    final name = (member['name'] ?? 'Member').toString();
+    final email = (member['email'] ?? '').toString();
+    final memberType = _normalizeMemberType(member['memberType']);
+    final approval = _normalizeApproval(member['approvalStatus']);
+    final roleOrDesignation = (member['designation'] ?? '').toString();
+    final parentName = (member['parentName'] ?? '').toString();
+    final parentId = (member['parentUserId'] ?? '').toString();
+    final skillCategory = (member['skillCategory'] ?? '').toString();
+    final status = ((member['status'] ?? 'active').toString().toLowerCase() ==
+            'inactive')
+        ? 'inactive'
+        : 'active';
+
+    final subtitleParts = <String>[
+      if (roleOrDesignation.isNotEmpty) roleOrDesignation,
+      if (skillCategory.isNotEmpty) skillCategory,
+      if (parentName.isNotEmpty) 'Owner: $parentName',
+      if (parentName.isEmpty && parentId.isNotEmpty) 'Owner ID: $parentId',
+    ];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _memberTypeColor(memberType).withValues(alpha: 0.22),
+        ),
+      ),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: _memberTypeColor(memberType).withValues(alpha: 0.14),
+          child: Icon(
+            memberType == AppConstants.memberTypeSkilled
+                ? Icons.engineering
+                : Icons.business_center,
+            color: _memberTypeColor(memberType),
+            size: 18,
+          ),
+        ),
+        title: Text(
+          name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (email.isNotEmpty)
+              Text(
+                email,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            if (subtitleParts.isNotEmpty)
+              Text(
+                subtitleParts.join(' • '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12),
+              ),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: _memberTypeColor(memberType).withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    _memberTypeLabel(memberType),
+                    style: TextStyle(
+                      color: _memberTypeColor(memberType),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                _buildApprovalChip(approval),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: status == 'active'
+                        ? const Color(0xFFDFF5E7)
+                        : const Color(0xFFEDEDED),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    status.toUpperCase(),
+                    style: TextStyle(
+                      color: status == 'active'
+                          ? const Color(0xFF1B8A3E)
+                          : const Color(0xFF616161),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        trailing: PopupMenuButton<String>(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          onSelected: (value) {
+            if (value == 'edit') {
+              _editMember(member);
+            } else if (value == 'approve') {
+              _updateApproval(member, AppConstants.approvalApproved);
+            } else if (value == 'reject') {
+              _updateApproval(member, AppConstants.approvalRejected);
+            } else if (value == 'delete') {
+              _deleteMember(member);
+            }
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(
+              value: 'edit',
+              child: Row(
+                children: [
+                  Icon(Icons.edit, size: 18),
+                  SizedBox(width: 8),
+                  Text('Edit'),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: 'approve',
+              child: Row(
+                children: [
+                  Icon(Icons.verified_rounded,
+                      size: 18, color: Color(0xFF1B8A3E)),
+                  SizedBox(width: 8),
+                  Text('Approve'),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: 'reject',
+              child: Row(
+                children: [
+                  Icon(Icons.cancel_rounded,
+                      size: 18, color: Color(0xFFC62828)),
+                  SizedBox(width: 8),
+                  Text('Reject'),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: 'delete',
+              child: Row(
+                children: [
+                  Icon(Icons.delete, size: 18, color: Color(0xFFC62828)),
+                  SizedBox(width: 8),
+                  Text('Delete', style: TextStyle(color: Color(0xFFC62828))),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFFFFFF), Color(0xFFF2F9FF), Color(0xFFF8F3FF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFD7DFF8)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1E88E5).withValues(alpha: 0.09),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.group_work_rounded, color: Color(0xFF1565C0)),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Company and Skilled Members',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+              ),
+              Text(
+                '${_filteredMembers.length}',
+                style: const TextStyle(
+                  color: Color(0xFF1565C0),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Admin-only member directory with details, approval, permissions, search, and CSV import/export.',
+            style: TextStyle(color: Colors.grey[700], fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ElevatedButton.icon(
+                onPressed: _createMember,
+                icon: const Icon(Icons.person_add_alt_1, size: 18),
+                label: const Text('Add Member'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1565C0),
+                  foregroundColor: Colors.white,
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: _isBulkImporting ? null : _bulkImportMembersFromCsv,
+                icon: _isBulkImporting
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.upload_file, size: 18),
+                label: const Text('Bulk CSV'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _filteredMembers.isEmpty ? null : _exportMembersCsv,
+                icon: const Icon(Icons.download_rounded, size: 18),
+                label: const Text('Export CSV'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            onChanged: (value) {
+              _searchQuery = value;
+              _applyFilters();
+            },
+            decoration: InputDecoration(
+              hintText: 'Search members by name, owner, email, role...',
+              prefixIcon: const Icon(Icons.search),
+              filled: true,
+              fillColor: const Color(0xFFF9FBFF),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFD3DCF7)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                ChoiceChip(
+                  label: const Text('All Types'),
+                  selected: _typeFilter == 'all',
+                  onSelected: (_) {
+                    _typeFilter = 'all';
+                    _applyFilters();
+                  },
+                ),
+                const SizedBox(width: 6),
+                ChoiceChip(
+                  label: const Text('Company'),
+                  selected: _typeFilter == AppConstants.memberTypeCompany,
+                  onSelected: (_) {
+                    _typeFilter = AppConstants.memberTypeCompany;
+                    _applyFilters();
+                  },
+                ),
+                const SizedBox(width: 6),
+                ChoiceChip(
+                  label: const Text('Skilled'),
+                  selected: _typeFilter == AppConstants.memberTypeSkilled,
+                  onSelected: (_) {
+                    _typeFilter = AppConstants.memberTypeSkilled;
+                    _applyFilters();
+                  },
+                ),
+                const SizedBox(width: 12),
+                ChoiceChip(
+                  label: const Text('All Approval'),
+                  selected: _approvalFilter == 'all',
+                  onSelected: (_) {
+                    _approvalFilter = 'all';
+                    _applyFilters();
+                  },
+                ),
+                const SizedBox(width: 6),
+                ChoiceChip(
+                  label: const Text('Pending'),
+                  selected: _approvalFilter == AppConstants.approvalPending,
+                  onSelected: (_) {
+                    _approvalFilter = AppConstants.approvalPending;
+                    _applyFilters();
+                  },
+                ),
+                const SizedBox(width: 6),
+                ChoiceChip(
+                  label: const Text('Approved'),
+                  selected: _approvalFilter == AppConstants.approvalApproved,
+                  onSelected: (_) {
+                    _approvalFilter = AppConstants.approvalApproved;
+                    _applyFilters();
+                  },
+                ),
+                const SizedBox(width: 6),
+                ChoiceChip(
+                  label: const Text('Rejected'),
+                  selected: _approvalFilter == AppConstants.approvalRejected,
+                  onSelected: (_) {
+                    _approvalFilter = AppConstants.approvalRejected;
+                    _applyFilters();
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_filteredMembers.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              alignment: Alignment.center,
+              child: Text(
+                'No members found for selected filters.',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            )
+          else
+            SizedBox(
+              height: (MediaQuery.sizeOf(context).height * 0.32)
+                  .clamp(180.0, 290.0)
+                  .toDouble(),
+              child: RefreshIndicator(
+                onRefresh: _loadMembers,
+                child: ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  itemCount: _filteredMembers.length,
+                  itemBuilder: (context, index) =>
+                      _buildMemberCard(_filteredMembers[index]),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ManagedMemberFormData {
+  final String name;
+  final String email;
+  final String phone;
+  final String memberType;
+  final String parentUserId;
+  final String parentName;
+  final String designation;
+  final String skillCategory;
+  final String experienceYears;
+  final String address;
+  final String status;
+  final String approvalStatus;
+  final List<String> permissions;
+  final List<String> idProofUrls;
+  final String verificationNotes;
+
+  const _ManagedMemberFormData({
+    required this.name,
+    required this.email,
+    required this.phone,
+    required this.memberType,
+    required this.parentUserId,
+    required this.parentName,
+    required this.designation,
+    required this.skillCategory,
+    required this.experienceYears,
+    required this.address,
+    required this.status,
+    required this.approvalStatus,
+    required this.permissions,
+    required this.idProofUrls,
+    required this.verificationNotes,
+  });
+
+  factory _ManagedMemberFormData.fromExisting(Map<String, dynamic> data) {
+    List<String> listFrom(dynamic value) {
+      if (value is List) {
+        return value
+            .map((e) => e?.toString().trim() ?? '')
+            .where((e) => e.isNotEmpty)
+            .toList();
+      }
+      if (value is String) {
+        return value
+            .split(',')
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+      }
+      return const <String>[];
+    }
+
+    return _ManagedMemberFormData(
+      name: (data['name'] ?? '').toString(),
+      email: (data['email'] ?? '').toString(),
+      phone: (data['phone'] ?? '').toString(),
+      memberType: (data['memberType'] ?? AppConstants.memberTypeCompany)
+          .toString(),
+      parentUserId: (data['parentUserId'] ?? '').toString(),
+      parentName: (data['parentName'] ?? '').toString(),
+      designation: (data['designation'] ?? '').toString(),
+      skillCategory: (data['skillCategory'] ?? '').toString(),
+      experienceYears: (data['experienceYears'] ?? '').toString(),
+      address: (data['address'] ?? '').toString(),
+      status: (data['status'] ?? 'active').toString(),
+      approvalStatus:
+          (data['approvalStatus'] ?? AppConstants.approvalPending).toString(),
+      permissions: listFrom(data['permissions']),
+      idProofUrls: listFrom(data['idProofUrls']),
+      verificationNotes: (data['verificationNotes'] ?? '').toString(),
+    );
+  }
+
+  Map<String, dynamic> toPayload() {
+    return {
+      'name': name,
+      'email': email,
+      'phone': phone,
+      'memberType': memberType,
+      'parentUserId': parentUserId,
+      'parentName': parentName,
+      'designation': designation,
+      'skillCategory': skillCategory,
+      'experienceYears': experienceYears,
+      'address': address,
+      'status': status,
+      'approvalStatus': approvalStatus,
+      'permissions': permissions,
+      'idProofUrls': idProofUrls,
+      'verificationNotes': verificationNotes,
+    };
+  }
+}
+
+class _ManagedMemberDialog extends StatefulWidget {
+  final _ManagedMemberFormData? initialData;
+
+  const _ManagedMemberDialog({this.initialData});
+
+  @override
+  State<_ManagedMemberDialog> createState() => _ManagedMemberDialogState();
+}
+
+class _ManagedMemberDialogState extends State<_ManagedMemberDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameController;
+  late final TextEditingController _emailController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _parentUserIdController;
+  late final TextEditingController _parentNameController;
+  late final TextEditingController _designationController;
+  late final TextEditingController _skillCategoryController;
+  late final TextEditingController _experienceController;
+  late final TextEditingController _addressController;
+  late final TextEditingController _permissionsController;
+  late final TextEditingController _idProofUrlsController;
+  late final TextEditingController _notesController;
+
+  late String _memberType;
+  late String _status;
+  late String _approvalStatus;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialData;
+
+    _nameController = TextEditingController(text: initial?.name ?? '');
+    _emailController = TextEditingController(text: initial?.email ?? '');
+    _phoneController = TextEditingController(text: initial?.phone ?? '');
+    _parentUserIdController =
+        TextEditingController(text: initial?.parentUserId ?? '');
+    _parentNameController =
+        TextEditingController(text: initial?.parentName ?? '');
+    _designationController =
+        TextEditingController(text: initial?.designation ?? '');
+    _skillCategoryController =
+        TextEditingController(text: initial?.skillCategory ?? '');
+    _experienceController =
+        TextEditingController(text: initial?.experienceYears ?? '');
+    _addressController = TextEditingController(text: initial?.address ?? '');
+    _permissionsController =
+        TextEditingController(text: (initial?.permissions ?? []).join(', '));
+    _idProofUrlsController =
+        TextEditingController(text: (initial?.idProofUrls ?? []).join(', '));
+    _notesController =
+        TextEditingController(text: initial?.verificationNotes ?? '');
+
+    _memberType = initial?.memberType == AppConstants.memberTypeSkilled
+        ? AppConstants.memberTypeSkilled
+        : AppConstants.memberTypeCompany;
+    _status = (initial?.status.toLowerCase() ?? 'active') == 'inactive'
+        ? 'inactive'
+        : 'active';
+    _approvalStatus = initial?.approvalStatus == AppConstants.approvalApproved
+        ? AppConstants.approvalApproved
+        : initial?.approvalStatus == AppConstants.approvalRejected
+            ? AppConstants.approvalRejected
+            : AppConstants.approvalPending;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _parentUserIdController.dispose();
+    _parentNameController.dispose();
+    _designationController.dispose();
+    _skillCategoryController.dispose();
+    _experienceController.dispose();
+    _addressController.dispose();
+    _permissionsController.dispose();
+    _idProofUrlsController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  List<String> _splitCommaValues(String value) {
+    return value
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toSet()
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.initialData == null ? 'Add Member' : 'Edit Member'),
+      content: Form(
+        key: _formKey,
+        child: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(labelText: 'Name *'),
+                  validator: (value) => (value == null || value.trim().isEmpty)
+                      ? 'Name is required'
+                      : null,
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _emailController,
+                  decoration: const InputDecoration(labelText: 'Email'),
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _phoneController,
+                  decoration: const InputDecoration(labelText: 'Phone'),
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: _memberType,
+                  decoration: const InputDecoration(labelText: 'Member Type'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: AppConstants.memberTypeCompany,
+                      child: Text('Company Member'),
+                    ),
+                    DropdownMenuItem(
+                      value: AppConstants.memberTypeSkilled,
+                      child: Text('Skilled Member'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _memberType = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _parentUserIdController,
+                  decoration: const InputDecoration(
+                    labelText: 'Owner User ID (company/skilled)',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _parentNameController,
+                  decoration: const InputDecoration(labelText: 'Owner Name'),
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _designationController,
+                  decoration:
+                      const InputDecoration(labelText: 'Designation / Role'),
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _skillCategoryController,
+                  decoration:
+                      const InputDecoration(labelText: 'Skill Category'),
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _experienceController,
+                  decoration:
+                      const InputDecoration(labelText: 'Experience Years'),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _addressController,
+                  decoration: const InputDecoration(labelText: 'Address'),
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _idProofUrlsController,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'ID Proof URLs (comma separated)',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _permissionsController,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Permissions (comma separated)',
+                    helperText:
+                        'Examples: view_jobs, manage_orders, manage_portfolio',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: _status,
+                  decoration: const InputDecoration(labelText: 'Status'),
+                  items: const [
+                    DropdownMenuItem(value: 'active', child: Text('Active')),
+                    DropdownMenuItem(
+                        value: 'inactive', child: Text('Inactive')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _status = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: _approvalStatus,
+                  decoration:
+                      const InputDecoration(labelText: 'Approval Status'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: AppConstants.approvalPending,
+                      child: Text('Pending'),
+                    ),
+                    DropdownMenuItem(
+                      value: AppConstants.approvalApproved,
+                      child: Text('Approved'),
+                    ),
+                    DropdownMenuItem(
+                      value: AppConstants.approvalRejected,
+                      child: Text('Rejected'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _approvalStatus = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _notesController,
+                  maxLines: 2,
+                  decoration:
+                      const InputDecoration(labelText: 'Verification Notes'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            if (!_formKey.currentState!.validate()) return;
+
+            Navigator.of(context).pop(
+              _ManagedMemberFormData(
+                name: _nameController.text.trim(),
+                email: _emailController.text.trim(),
+                phone: _phoneController.text.trim(),
+                memberType: _memberType,
+                parentUserId: _parentUserIdController.text.trim(),
+                parentName: _parentNameController.text.trim(),
+                designation: _designationController.text.trim(),
+                skillCategory: _skillCategoryController.text.trim(),
+                experienceYears: _experienceController.text.trim(),
+                address: _addressController.text.trim(),
+                status: _status,
+                approvalStatus: _approvalStatus,
+                permissions:
+                    _splitCommaValues(_permissionsController.text.trim()),
+                idProofUrls:
+                    _splitCommaValues(_idProofUrlsController.text.trim()),
+                verificationNotes: _notesController.text.trim(),
+              ),
+            );
+          },
+          child: Text(widget.initialData == null ? 'Create' : 'Save'),
+        ),
+      ],
     );
   }
 }
@@ -2414,42 +3713,57 @@ class _ReportCard extends StatelessWidget {
             ],
             if (isPending) ...[
               const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => onResolve('dismiss'),
-                      icon: const Icon(Icons.close, size: 16),
-                      label: const Text('Dismiss'),
-                      style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.grey[700]),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => onResolve('suspend_user'),
-                      icon: const Icon(Icons.block,
-                          size: 16, color: Colors.white),
-                      label: const Text('Suspend User',
-                          style: TextStyle(color: Colors.white)),
-                      style:
-                          ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => onResolve('resolve'),
-                      icon: const Icon(Icons.check,
-                          size: 16, color: Colors.white),
-                      label: const Text('Resolve',
-                          style: TextStyle(color: Colors.white)),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green),
-                    ),
-                  ),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 420;
+
+                  final dismissButton = OutlinedButton.icon(
+                    onPressed: () => onResolve('dismiss'),
+                    icon: const Icon(Icons.close, size: 16),
+                    label: const Text('Dismiss'),
+                    style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.grey[700]),
+                  );
+
+                  final suspendButton = ElevatedButton.icon(
+                    onPressed: () => onResolve('suspend_user'),
+                    icon: const Icon(Icons.block, size: 16, color: Colors.white),
+                    label: const Text('Suspend User',
+                        style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  );
+
+                  final resolveButton = ElevatedButton.icon(
+                    onPressed: () => onResolve('resolve'),
+                    icon: const Icon(Icons.check, size: 16, color: Colors.white),
+                    label: const Text('Resolve',
+                        style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                  );
+
+                  if (isCompact) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        dismissButton,
+                        const SizedBox(height: 8),
+                        suspendButton,
+                        const SizedBox(height: 8),
+                        resolveButton,
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(child: dismissButton),
+                      const SizedBox(width: 8),
+                      Expanded(child: suspendButton),
+                      const SizedBox(width: 8),
+                      Expanded(child: resolveButton),
+                    ],
+                  );
+                },
               ),
             ],
           ],

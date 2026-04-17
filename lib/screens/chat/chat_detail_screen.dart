@@ -1855,7 +1855,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           title: const Row(children: [
             Icon(Icons.flag, color: Colors.orange),
             SizedBox(width: 8),
-            Text('Report Chat'),
+            Expanded(
+              child: Text(
+                'Report Chat',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ]),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1927,7 +1933,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         title: const Row(children: [
           Icon(Icons.block, color: Colors.red),
           SizedBox(width: 8),
-          Text('Block User'),
+          Expanded(
+            child: Text(
+              'Block User',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ]),
         content: Text(
             'Block ${widget.otherUserName}? You will no longer receive messages.'),
@@ -2133,18 +2145,20 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                               fontWeight: FontWeight.w700,
                               height: 1.1,
                             ),
-                            maxLines: 2,
-                              overflow: TextOverflow.visible,
-                            ),
-                            Text(
-                              subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            subtitle,
                             style: AppFonts.lora(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                               color: isOnline
                                   ? Colors.cyanAccent[100]
                                   : Colors.white70,
-                            ),
+                              ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),

@@ -57,7 +57,13 @@ class _EditSkilledProfileScreenState extends State<EditSkilledProfileScreen> {
           children: [
             Icon(Icons.security, color: Colors.orange),
             SizedBox(width: 8),
-            Text('Verification Required'),
+            Expanded(
+              child: Text(
+                'Verification Required',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: const Text(

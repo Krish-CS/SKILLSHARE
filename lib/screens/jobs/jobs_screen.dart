@@ -268,11 +268,18 @@ class _JobsScreenState extends State<JobsScreen> {
       final goVerify = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
           title: const Row(
             children: [
               Icon(Icons.verified_user_outlined, color: Color(0xFF4527A0)),
               SizedBox(width: 8),
-              Text('Verify Your Business'),
+              Expanded(
+                child: Text(
+                  'Verify Your Business',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           content: const Text(
@@ -348,6 +355,7 @@ class _JobsScreenState extends State<JobsScreen> {
             ),
           ],
           bottom: const TabBar(
+            isScrollable: true,
             indicatorColor: Colors.white,
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white60,
@@ -434,6 +442,7 @@ class _JobsScreenState extends State<JobsScreen> {
                 ),
               ),
               child: TabBar(
+                isScrollable: true,
                 indicatorColor: Colors.white,
                 indicatorWeight: 3,
                 labelColor: Colors.white,
@@ -787,12 +796,13 @@ class _JobsScreenState extends State<JobsScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 12),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isNarrow = constraints.maxWidth < 360;
+
+                  Widget jobTypeDropdown() {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
@@ -809,13 +819,12 @@ class _JobsScreenState extends State<JobsScreen> {
                           onChanged: _onJobTypeSelected,
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 12),
+                    );
+                  }
+
+                  Widget sortDropdown() {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
@@ -829,18 +838,34 @@ class _JobsScreenState extends State<JobsScreen> {
                             DropdownMenuItem(
                                 value: 'newest', child: Text('Newest')),
                             DropdownMenuItem(
-                                value: 'deadline',
-                                child: Text('Deadline')),
+                                value: 'deadline', child: Text('Deadline')),
                             DropdownMenuItem(
-                                value: 'budget',
-                                child: Text('Highest Budget')),
+                                value: 'budget', child: Text('Highest Budget')),
                           ],
                           onChanged: _onSortChanged,
                         ),
                       ),
-                    ),
-                  ),
-                ],
+                    );
+                  }
+
+                  if (isNarrow) {
+                    return Column(
+                      children: [
+                        jobTypeDropdown(),
+                        const SizedBox(height: 8),
+                        sortDropdown(),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(child: jobTypeDropdown()),
+                      const SizedBox(width: 8),
+                      Expanded(child: sortDropdown()),
+                    ],
+                  );
+                },
               ),
             ],
           ),

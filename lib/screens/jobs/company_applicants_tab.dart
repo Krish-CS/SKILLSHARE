@@ -385,7 +385,13 @@ class _JobApplicantsScreenState extends State<JobApplicantsScreen> {
           children: [
             Icon(Icons.warning_amber_rounded, color: Colors.orange),
             SizedBox(width: 8),
-            Text('Revoke Acceptance'),
+            Expanded(
+              child: Text(
+                'Revoke Acceptance',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: Text(

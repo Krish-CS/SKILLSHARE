@@ -406,11 +406,11 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
                             fontWeight: FontWeight.w700,
                             height: 1.1,
                           ),
-                          maxLines: 2,
-                            overflow: TextOverflow.visible,
-                          ),
-                          Text(
-                            subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          subtitle,
                           style: AppFonts.lora(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -418,6 +418,8 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
                                 ? Colors.cyanAccent[100]
                                 : Colors.white70,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),

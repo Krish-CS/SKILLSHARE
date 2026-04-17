@@ -145,7 +145,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Icon(Icons.flag, color: Colors.red),
               SizedBox(width: 8),
-              Text('Report User'),
+              Expanded(
+                child: Text(
+                  'Report User',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           content: SingleChildScrollView(
@@ -229,7 +235,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Icon(Icons.block, color: Colors.red),
             SizedBox(width: 8),
-            Text('Block User'),
+            Expanded(
+              child: Text(
+                'Block User',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: const Text(

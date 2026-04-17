@@ -62,6 +62,7 @@ class _DeliveryScreenState extends State<DeliveryScreen>
         ),
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           indicatorColor: Colors.white,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,

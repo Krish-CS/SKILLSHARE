@@ -138,6 +138,7 @@ class _PortfolioScreenState extends State<PortfolioScreen>
         iconTheme: const IconThemeData(color: Colors.white),
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
@@ -519,7 +520,13 @@ class _PortfolioScreenState extends State<PortfolioScreen>
             children: [
               Icon(Icons.security, color: Colors.orange),
               SizedBox(width: 8),
-              Text('Verification Required'),
+              Expanded(
+                child: Text(
+                  'Verification Required',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           content: const Text(

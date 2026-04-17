@@ -2115,27 +2115,10 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
               gradient: const [Color(0xFF3A5BFF), Color(0xFF00ACC1)],
             ),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: const Color(0xFFEEEAF9),
-                  backgroundImage:
-                    (_adminLogoUrl != null && _adminLogoUrl!.isNotEmpty)
-                      ? WebImageLoader.getImageProvider(_adminLogoUrl)
-                      : null,
-                  child: (_adminLogoUrl == null || _adminLogoUrl!.isEmpty)
-                      ? const Icon(Icons.shield, color: Color(0xFF512DA8))
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Upload the SkillShare logo as the admin profile image.',
-                    style: TextStyle(fontSize: 13),
-                  ),
-                ),
-                ElevatedButton.icon(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isCompact = constraints.maxWidth < 420;
+                final uploadButton = ElevatedButton.icon(
                   onPressed: _isUploadingLogo ? null : _uploadAdminLogo,
                   icon: _isUploadingLogo
                       ? const SizedBox(
@@ -2145,8 +2128,68 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                         )
                       : const Icon(Icons.upload),
                   label: const Text('Upload'),
-                ),
-              ],
+                );
+
+                if (isCompact) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 24,
+                            backgroundColor: const Color(0xFFEEEAF9),
+                            backgroundImage:
+                                (_adminLogoUrl != null &&
+                                        _adminLogoUrl!.isNotEmpty)
+                                    ? WebImageLoader.getImageProvider(
+                                        _adminLogoUrl)
+                                    : null,
+                            child:
+                                (_adminLogoUrl == null || _adminLogoUrl!.isEmpty)
+                                    ? const Icon(Icons.shield,
+                                        color: Color(0xFF512DA8))
+                                    : null,
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'Upload the SkillShare logo as the admin profile image.',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      uploadButton,
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor: const Color(0xFFEEEAF9),
+                      backgroundImage:
+                          (_adminLogoUrl != null && _adminLogoUrl!.isNotEmpty)
+                              ? WebImageLoader.getImageProvider(_adminLogoUrl)
+                              : null,
+                      child: (_adminLogoUrl == null || _adminLogoUrl!.isEmpty)
+                          ? const Icon(Icons.shield, color: Color(0xFF512DA8))
+                          : null,
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Upload the SkillShare logo as the admin profile image.',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                    ),
+                    uploadButton,
+                  ],
+                );
+              },
             ),
           ],
         ),
@@ -2246,27 +2289,44 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
               ),
             ),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                OutlinedButton.icon(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isCompact = constraints.maxWidth < 420;
+                final photoButton = OutlinedButton.icon(
                   onPressed: _pickOfficialProductImage,
                   icon: const Icon(Icons.photo),
                   label: Text(
                     _officialImageUrl == null ? 'Upload photo' : 'Photo added',
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    _officialImageUrl == null
-                        ? 'No image selected'
-                        : 'Image uploaded',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: Colors.black54),
-                  ),
-                ),
-              ],
+                );
+                final statusText = Text(
+                  _officialImageUrl == null
+                      ? 'No image selected'
+                      : 'Image uploaded',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                );
+
+                if (isCompact) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      photoButton,
+                      const SizedBox(height: 8),
+                      statusText,
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    photoButton,
+                    const SizedBox(width: 10),
+                    Expanded(child: statusText),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -2490,15 +2550,11 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Product ${index + 1}',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  Tooltip(
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 420;
+
+                  final statusChip = Tooltip(
                     message: isValid
                         ? 'Row is valid'
                         : 'Issues: ${issues.join(' • ')}',
@@ -2527,26 +2583,68 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                         ),
                       ),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: 'Duplicate this row',
-                    onPressed: () => _duplicateRow(index),
-                    icon: const Icon(Icons.copy, color: Color(0xFF1565C0)),
-                  ),
-                  IconButton(
-                    tooltip: 'Remove this row',
-                    onPressed: _bulkDrafts.length > 1
-                        ? () {
-                            setState(() {
-                              final removed = _bulkDrafts.removeAt(index);
-                              removed.dispose();
-                            });
-                          }
-                        : null,
-                    icon:
-                        const Icon(Icons.delete_outline, color: Colors.redAccent),
-                  ),
-                ],
+                  );
+
+                  final actionButtons = Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'Duplicate this row',
+                        onPressed: () => _duplicateRow(index),
+                        icon: const Icon(Icons.copy, color: Color(0xFF1565C0)),
+                      ),
+                      IconButton(
+                        tooltip: 'Remove this row',
+                        onPressed: _bulkDrafts.length > 1
+                            ? () {
+                                setState(() {
+                                  final removed = _bulkDrafts.removeAt(index);
+                                  removed.dispose();
+                                });
+                              }
+                            : null,
+                        icon: const Icon(Icons.delete_outline,
+                            color: Colors.redAccent),
+                      ),
+                    ],
+                  );
+
+                  if (isCompact) {
+                    return Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Product ${index + 1}',
+                                style:
+                                    const TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            statusChip,
+                          ],
+                        ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: actionButtons,
+                        ),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Product ${index + 1}',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      statusChip,
+                      actionButtons,
+                    ],
+                  );
+                },
               ),
               if (!isValid) ...[
                 const SizedBox(height: 6),
@@ -2675,66 +2773,105 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                 },
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () => _pickBulkImage(index),
-                    icon: const Icon(Icons.photo),
-                    label: Text(
-                      draft.isImageUploading
-                          ? 'Uploading...'
-                          : (draft.imageUrl == null ? 'Upload photo' : 'Photo added'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: draft.isImageUploading
-                        ? null
-                        : () => _pasteBulkImageFromClipboard(index),
-                    icon: const Icon(Icons.content_paste),
-                    label: const Text('Paste image'),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    tooltip: 'Clear image',
-                    onPressed: (draft.imageUrl != null && draft.imageUrl!.isNotEmpty) ||
-                            draft.localImagePreviewBytes != null ||
-                            draft.isImageUploading
-                        ? () => _clearRowImage(index)
-                        : null,
-                    icon: const Icon(Icons.image_not_supported_outlined,
-                        color: Colors.redAccent),
-                  ),
-                  const SizedBox(width: 8),
-                  if (draft.localImagePreviewBytes != null)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: Image.memory(
-                          draft.localImagePreviewBytes!,
-                          width: 34,
-                          height: 34,
-                          fit: BoxFit.cover,
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 540;
+
+                  final statusText = Text(
+                    draft.isImageUploading
+                        ? 'Image pasted. Uploading in background...'
+                        : (draft.imageUploadError != null
+                            ? 'Upload failed. Paste again or upload photo.'
+                            : (draft.imageLinkValidationMessage ??
+                                (draft.imageUrl == null
+                                    ? 'No image selected'
+                                    : 'Image added. Click link icon to validate preview.'))),
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                    maxLines: isCompact ? 2 : 1,
+                    overflow: TextOverflow.ellipsis,
+                  );
+
+                  final controls = Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => _pickBulkImage(index),
+                        icon: const Icon(Icons.photo),
+                        label: Text(
+                          draft.isImageUploading
+                              ? 'Uploading...'
+                              : (draft.imageUrl == null
+                                  ? 'Upload photo'
+                                  : 'Photo added'),
                         ),
                       ),
-                    ),
-                  Expanded(
-                    child: Text(
-                      draft.isImageUploading
-                          ? 'Image pasted. Uploading in background...'
-                          : (draft.imageUploadError != null
-                              ? 'Upload failed. Paste again or upload photo.'
-                              : (draft.imageLinkValidationMessage ??
-                                  (draft.imageUrl == null
-                                      ? 'No image selected'
-                                      : 'Image added. Click link icon to validate preview.'))),
-                      style: const TextStyle(fontSize: 12, color: Colors.black54),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
+                      OutlinedButton.icon(
+                        onPressed: draft.isImageUploading
+                            ? null
+                            : () => _pasteBulkImageFromClipboard(index),
+                        icon: const Icon(Icons.content_paste),
+                        label: const Text('Paste image'),
+                      ),
+                      IconButton(
+                        tooltip: 'Clear image',
+                        onPressed: (draft.imageUrl != null &&
+                                    draft.imageUrl!.isNotEmpty) ||
+                                draft.localImagePreviewBytes != null ||
+                                draft.isImageUploading
+                            ? () => _clearRowImage(index)
+                            : null,
+                        icon: const Icon(Icons.image_not_supported_outlined,
+                            color: Colors.redAccent),
+                      ),
+                    ],
+                  );
+
+                  if (isCompact) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        controls,
+                        if (draft.localImagePreviewBytes != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2, bottom: 8),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: Image.memory(
+                                draft.localImagePreviewBytes!,
+                                width: 34,
+                                height: 34,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                        statusText,
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      controls,
+                      const SizedBox(width: 8),
+                      if (draft.localImagePreviewBytes != null)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Image.memory(
+                              draft.localImagePreviewBytes!,
+                              width: 34,
+                              height: 34,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                      Expanded(child: statusText),
+                    ],
+                  );
+                },
               ),
               if (draft.localImagePreviewBytes != null ||
                   (draft.imageUrl != null && draft.imageUrl!.trim().isNotEmpty)) ...[

@@ -93,6 +93,7 @@ class _MyShopScreenState extends State<MyShopScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
@@ -678,7 +679,13 @@ class _MyShopScreenState extends State<MyShopScreen>
               children: [
                 Icon(Icons.store, color: Color(0xFFE91E63)),
                 SizedBox(width: 8),
-                Text('Shop Settings'),
+                Expanded(
+                  child: Text(
+                    'Shop Settings',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
             content: isLoading

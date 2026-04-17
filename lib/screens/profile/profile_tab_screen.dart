@@ -856,7 +856,13 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
             children: [
               Icon(Icons.help_outline, color: Color(0xFF9C27B0)),
               SizedBox(width: 8),
-              Text('Help & Support'),
+              Expanded(
+                child: Text(
+                  'Help & Support',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           content: SingleChildScrollView(

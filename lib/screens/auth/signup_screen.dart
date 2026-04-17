@@ -519,9 +519,11 @@ class _SignUpScreenState extends State<SignUpScreen>
                                     // Role
                                     DropdownButtonFormField<String>(
                                       value: _selectedRole,
-                                      style: const TextStyle(
-                                          fontSize: 15,
-                                          color: Color(0xFF1A1A2E)),
+                                      style: AppFonts.lora(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                      color: const Color(0xFF1A1A2E),
+                                      ),
                                       decoration: _inputDecoration(
                                         label: 'I am a',
                                         icon: null,
@@ -535,9 +537,15 @@ class _SignUpScreenState extends State<SignUpScreen>
                                                     size: 20,
                                                     color: Color(0xFF6A11CB)),
                                                 SizedBox(width: 10),
-                                                Text('Customer',
-                                                    style: TextStyle(
-                                                        fontSize: 15)),
+                                          Flexible(
+                                            child: Text('Customer',
+                                              overflow:
+                                                TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontFamily:
+                                                  'SourceSerif4')),
+                                          ),
                                               ],
                                             )),
                                         DropdownMenuItem(
@@ -548,9 +556,16 @@ class _SignUpScreenState extends State<SignUpScreen>
                                                     size: 20,
                                                     color: Color(0xFF6A11CB)),
                                                 SizedBox(width: 10),
-                                                Text('Skilled Professional',
-                                                    style: TextStyle(
-                                                        fontSize: 15)),
+                                          Flexible(
+                                            child: Text(
+                                              'Skilled Professional',
+                                              overflow:
+                                                TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontFamily:
+                                                  'SourceSerif4')),
+                                          ),
                                               ],
                                             )),
                                         DropdownMenuItem(
@@ -561,9 +576,15 @@ class _SignUpScreenState extends State<SignUpScreen>
                                                     size: 20,
                                                     color: Color(0xFF6A11CB)),
                                                 SizedBox(width: 10),
-                                                Text('Company',
-                                                    style: TextStyle(
-                                                        fontSize: 15)),
+                                          Flexible(
+                                            child: Text('Company',
+                                              overflow:
+                                                TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontFamily:
+                                                  'SourceSerif4')),
+                                          ),
                                               ],
                                             )),
                                         DropdownMenuItem(
@@ -577,9 +598,16 @@ class _SignUpScreenState extends State<SignUpScreen>
                                                     size: 20,
                                                     color: Color(0xFF6A11CB)),
                                                 SizedBox(width: 10),
-                                                Text('Delivery Partner',
-                                                    style: TextStyle(
-                                                        fontSize: 15)),
+                                          Flexible(
+                                            child: Text(
+                                              'Delivery Partner',
+                                              overflow:
+                                                TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontFamily:
+                                                  'SourceSerif4')),
+                                          ),
                                               ],
                                             )),
                                       ],
@@ -857,7 +885,11 @@ class _SignUpScreenState extends State<SignUpScreen>
       {required String label, required IconData? icon}) {
     return InputDecoration(
       labelText: label,
-      labelStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
+      labelStyle: AppFonts.lora(
+        color: Colors.grey[600],
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+      ),
       prefixIcon: icon != null
           ? Icon(icon, color: const Color(0xFF6A11CB), size: 20)
           : null,

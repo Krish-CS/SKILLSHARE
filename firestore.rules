@@ -263,6 +263,11 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // Admin-managed company/skilled member directory
+    match /managed_members/{memberId} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
     // Blocked users
     match /blocked_users/{blockId} {
       allow create: if isAuthenticated() &&

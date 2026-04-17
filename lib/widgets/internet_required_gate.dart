@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../services/internet_required_service.dart';
@@ -80,8 +81,8 @@ class _InternetRequiredGateState extends State<InternetRequiredGate>
     final hasTransport =
         results.any((result) => result != ConnectivityResult.none);
     final hasInternet = hasTransport
-        ? await _internetRequiredService.hasInternetAccess()
-        : false;
+      ? (kIsWeb ? true : await _internetRequiredService.hasInternetAccess())
+      : false;
 
     if (!mounted) return;
     setState(() {

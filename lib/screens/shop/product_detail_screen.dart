@@ -335,8 +335,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: const Text('Confirm Delivery Address'),
-        content: SizedBox(
-          width: 360,
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
