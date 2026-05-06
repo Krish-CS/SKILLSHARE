@@ -89,6 +89,9 @@ class _CartScreenState extends State<CartScreen>
     final checkoutDetails = await _collectCheckoutDetails();
     if (checkoutDetails == null || !mounted) return;
 
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+    if (!mounted) return;
+
     final txnId = await GPaySimulationDialog.show(
       context,
       amount: total,
@@ -105,7 +108,6 @@ class _CartScreenState extends State<CartScreen>
         paymentMethod: 'gpay_simulation',
         paymentReference: txnId,
         deliveryAddress: checkoutDetails.address,
-        deliveryLocation: checkoutDetails.location,
       );
       if (mounted) {
         final codeLines = orders
@@ -117,8 +119,7 @@ class _CartScreenState extends State<CartScreen>
           '${orders.length} order(s) placed.\n'
           'Total: ₹${total.toStringAsFixed(2)}\n\n'
           'Delivery address:\n'
-          '${checkoutDetails.address}\n'
-          '${checkoutDetails.location}\n\n'
+          '${checkoutDetails.address}\n\n'
           'Share this delivery code with the delivery person only when asked:\n'
           '$codeLines',
           title: 'Order Placed',
@@ -143,17 +144,12 @@ class _CartScreenState extends State<CartScreen>
     final addressController = TextEditingController(
       text: (profile?.location ?? '').trim(),
     );
-    final locationController = TextEditingController(
-      text: [
-        (profile?.city ?? '').trim(),
-        (profile?.state ?? '').trim(),
-      ].where((part) => part.isNotEmpty).join(', '),
-    );
 
     final result = await showDialog<_CheckoutDetails>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: const Text('Confirm Delivery Address'),
         content: ConstrainedBox(
@@ -178,18 +174,6 @@ class _CartScreenState extends State<CartScreen>
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: locationController,
-                decoration: InputDecoration(
-                  labelText: 'Location',
-                  hintText: 'City, State',
-                  prefixIcon: const Icon(Icons.location_on_outlined),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
             ],
           ),
         ),
@@ -200,18 +184,18 @@ class _CartScreenState extends State<CartScreen>
           ),
           ElevatedButton(
             onPressed: () {
+              FocusManager.instance.primaryFocus?.unfocus();
               final address = addressController.text.trim();
-              final location = locationController.text.trim();
-              if (address.isEmpty || location.isEmpty) {
+              if (address.isEmpty) {
                 AppPopup.show(
                   ctx,
-                  message: 'Address and location are required',
+                  message: 'Address is required',
                   type: PopupType.warning,
                 );
                 return;
               }
               Navigator.of(ctx).pop(
-                _CheckoutDetails(address: address, location: location),
+                _CheckoutDetails(address: address),
               );
             },
             child: const Text('Continue'),
@@ -221,7 +205,6 @@ class _CartScreenState extends State<CartScreen>
     );
 
     addressController.dispose();
-    locationController.dispose();
     return result;
   }
 
@@ -244,7 +227,7 @@ class _CartScreenState extends State<CartScreen>
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
-          isScrollable: true,
+          isScrollable: false,
           indicatorColor: Colors.white,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
@@ -812,9 +795,7 @@ class _OrderHistoryCard extends StatelessWidget {
 class _CheckoutDetails {
   const _CheckoutDetails({
     required this.address,
-    required this.location,
   });
 
   final String address;
-  final String location;
 }

@@ -255,6 +255,12 @@ class AuthService {
   }
 
   Future<void> _signOutGoogleBestEffort() async {
+    if (kIsWeb) {
+      // Web auth uses Firebase popup flow; google_sign_in package cleanup is
+      // unnecessary and can assert when no web client ID meta tag is set.
+      return;
+    }
+
     try {
       final googleSignIn = await _getGoogleSignInClient().timeout(
         const Duration(seconds: 3),

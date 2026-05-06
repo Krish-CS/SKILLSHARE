@@ -108,16 +108,36 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   // AppBar cycling gradient animation
   late final AnimationController _gradientCtrl;
   static const _gradientPhases = [
-    [Color(0xFF4A148C), Color(0xFF7B1FA2), Color(0xFF00B0FF)], // purpleÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢blue
-    [Color(0xFF1A237E), Color(0xFF3949AB), Color(0xFFE91E63)], // indigoÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢pink
-    [Color(0xFF004D40), Color(0xFF00897B), Color(0xFF1565C0)], // tealÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢blue
-    [Color(0xFF880E4F), Color(0xFFAD1457), Color(0xFFFF6F00)], // magentaÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢amber
+    [
+      Color(0xFF4A148C),
+      Color(0xFF7B1FA2),
+      Color(0xFF00B0FF)
+    ], // purpleÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢blue
+    [
+      Color(0xFF1A237E),
+      Color(0xFF3949AB),
+      Color(0xFFE91E63)
+    ], // indigoÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢pink
+    [
+      Color(0xFF004D40),
+      Color(0xFF00897B),
+      Color(0xFF1565C0)
+    ], // tealÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢blue
+    [
+      Color(0xFF880E4F),
+      Color(0xFFAD1457),
+      Color(0xFFFF6F00)
+    ], // magentaÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢amber
     [
       Color(0xFF311B92),
       Color(0xFF6200EA),
       Color(0xFF00BFA5)
     ], // deep purpleÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢teal
-    [Color(0xFF0D47A1), Color(0xFF1976D2), Color(0xFFE040FB)], // blueÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢pink
+    [
+      Color(0xFF0D47A1),
+      Color(0xFF1976D2),
+      Color(0xFFE040FB)
+    ], // blueÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢pink
   ];
   int _gradientPhase = 0;
 
@@ -180,9 +200,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     // Subscribe to work requests
     _workReqSubscription = _firestoreService
         .streamChatWorkRequests(
-          widget.chatId,
-          currentUserId: _currentUserId ?? '',
-        )
+      widget.chatId,
+      currentUserId: _currentUserId ?? '',
+    )
         .listen((requests) {
       if (!mounted) return;
       final pending = requests.where((r) => r.status == 'pending').toList();
@@ -2156,7 +2176,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                               color: isOnline
                                   ? Colors.cyanAccent[100]
                                   : Colors.white70,
-                              ),
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -3458,7 +3478,10 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
                                     strokeWidth: 2, color: Colors.white))
                             : const Icon(Icons.chat_bubble_outline_rounded,
                                 size: 16),
-                        label: Text(_openingWorkChat ? 'OpeningÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦' : 'Work Chat',
+                        label: Text(
+                            _openingWorkChat
+                                ? 'OpeningÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦'
+                                : 'Work Chat',
                             style: const TextStyle(fontSize: 13)),
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF1565C0),
@@ -3482,7 +3505,10 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
                                   child: CircularProgressIndicator(
                                       strokeWidth: 2, color: Colors.white))
                               : const Icon(Icons.currency_rupee, size: 16),
-                          label: Text(_paying ? 'ProcessingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦' : 'Pay',
+                          label: Text(
+                              _paying
+                                  ? 'ProcessingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦'
+                                  : 'Pay',
                               style: const TextStyle(fontSize: 13)),
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFF2E7D32),
@@ -3505,7 +3531,10 @@ class _WorkProjectCardState extends State<_WorkProjectCard> {
                                       strokeWidth: 2, color: Colors.white))
                               : const Icon(Icons.check_circle_outline,
                                   size: 16),
-                          label: Text(_completing ? 'SavingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦' : 'Complete',
+                          label: Text(
+                              _completing
+                                  ? 'SavingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦'
+                                  : 'Complete',
                               style: const TextStyle(fontSize: 13)),
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFF5E35B1),
@@ -3709,7 +3738,8 @@ class _PendingRequestsSheetState extends State<_PendingRequestsSheet> {
                     const Text('Pending Work Requests',
                         style: TextStyle(
                             fontSize: 16, fontWeight: FontWeight.bold)),
-                    Text('Sent to ${widget.otherUserName} ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· awaiting response',
+                    Text(
+                        'Sent to ${widget.otherUserName} ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· awaiting response',
                         style:
                             const TextStyle(fontSize: 12, color: Colors.grey)),
                   ],
@@ -4238,112 +4268,126 @@ class _AskWorkSheetState extends State<_AskWorkSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    final mediaQuery = MediaQuery.of(context);
+    final bottomSafeInset =
+        math.max(mediaQuery.padding.bottom, mediaQuery.viewPadding.bottom);
+    final keyboardInset = mediaQuery.viewInsets.bottom;
+    final sheetBottomPadding =
+        keyboardInset > 0 ? keyboardInset + 20 : bottomSafeInset + 20;
+
+    return SafeArea(
+      top: false,
+      bottom: false,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: sheetBottomPadding,
+        ),
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                            colors: [Color(0xFF9C27B0), Color(0xFFE91E63)]),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.assignment_outlined,
+                          color: Colors.white, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Ask for Work / Project',
+                              style: TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.bold)),
+                          Text('Send a work request to this skilled person',
+                              style:
+                                  TextStyle(fontSize: 12, color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                TextFormField(
+                  controller: _titleController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: InputDecoration(
+                    labelText: 'Project / Work Title *',
+                    hintText: 'e.g. Build a mobile app, Design a logo...',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(Icons.title),
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Please enter a title'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _descController,
+                  maxLines: 3,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    labelText: 'Description *',
+                    hintText: 'Describe what needs to be done...',
+                    alignLabelWithHint: true,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Padding(
+                      padding: EdgeInsets.only(bottom: 40),
+                      child: Icon(Icons.description_outlined),
+                    ),
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Please enter a description'
+                      : null,
+                ),
+                const SizedBox(height: 16),
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  width: double.infinity,
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                         colors: [Color(0xFF9C27B0), Color(0xFFE91E63)]),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.assignment_outlined,
-                      color: Colors.white, size: 20),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Ask for Work / Project',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold)),
-                      Text('Send a work request to this skilled person',
-                          style: TextStyle(fontSize: 12, color: Colors.grey)),
-                    ],
+                  child: ElevatedButton.icon(
+                    onPressed: _submitting ? null : _submit,
+                    icon: _submitting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.send, color: Colors.white),
+                    label: Text(
+                      _submitting ? 'Sending...' : 'Send Request',
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-            TextFormField(
-              controller: _titleController,
-              textCapitalization: TextCapitalization.words,
-              decoration: InputDecoration(
-                labelText: 'Project / Work Title *',
-                hintText: 'e.g. Build a mobile app, Design a logo...',
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                prefixIcon: const Icon(Icons.title),
-              ),
-              validator: (v) => (v == null || v.trim().isEmpty)
-                  ? 'Please enter a title'
-                  : null,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _descController,
-              maxLines: 3,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: InputDecoration(
-                labelText: 'Description *',
-                hintText: 'Describe what needs to be done...',
-                alignLabelWithHint: true,
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                prefixIcon: const Padding(
-                  padding: EdgeInsets.only(bottom: 40),
-                  child: Icon(Icons.description_outlined),
-                ),
-              ),
-              validator: (v) => (v == null || v.trim().isEmpty)
-                  ? 'Please enter a description'
-                  : null,
-            ),
-            const SizedBox(height: 16),
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                    colors: [Color(0xFF9C27B0), Color(0xFFE91E63)]),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ElevatedButton.icon(
-                onPressed: _submitting ? null : _submit,
-                icon: _submitting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.send, color: Colors.white),
-                label: Text(
-                  _submitting ? 'Sending...' : 'Send Request',
-                  style: const TextStyle(color: Colors.white, fontSize: 16),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -4379,8 +4423,3 @@ class _ImagePreviewScreen extends StatelessWidget {
     );
   }
 }
-
-
-
-
-

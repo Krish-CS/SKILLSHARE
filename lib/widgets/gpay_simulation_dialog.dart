@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:math' as math;
 
 /// Google Pay Simulation Dialog
 /// Simulates a Google Pay payment flow with UPI ID entry and success animation.
@@ -45,6 +46,9 @@ class GPaySimulationDialog extends StatefulWidget {
 class _GPaySimulationDialogState extends State<GPaySimulationDialog>
     with SingleTickerProviderStateMixin {
   final _upiController = TextEditingController();
+  final _upiFocusNode = FocusNode();
+  final _scrollController = ScrollController();
+  final _upiFieldKey = GlobalKey();
   _PayStep _step = _PayStep.enter;
   String? _upiError;
   late AnimationController _animController;
@@ -61,19 +65,46 @@ class _GPaySimulationDialogState extends State<GPaySimulationDialog>
       parent: _animController,
       curve: Curves.elasticOut,
     );
+    _upiFocusNode.addListener(_handleUpiFocusChange);
   }
 
   @override
   void dispose() {
+    _upiFocusNode.removeListener(_handleUpiFocusChange);
     _upiController.dispose();
+    _upiFocusNode.dispose();
+    _scrollController.dispose();
     _animController.dispose();
     super.dispose();
+  }
+
+  void _handleUpiFocusChange() {
+    if (!_upiFocusNode.hasFocus) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final upiFieldContext = _upiFieldKey.currentContext;
+      if (upiFieldContext != null) {
+        Scrollable.ensureVisible(
+          upiFieldContext,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+          alignment: 0.2,
+        );
+        return;
+      }
+      if (!_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   void _onPay() {
     // Unfocus the UPI TextField before setState changes to prevent
     // Flutter Web 'targetElement == domElement' assertion error.
-    FocusManager.instance.primaryFocus?.unfocus();
+    _upiFocusNode.unfocus();
     final upi = _upiController.text.trim();
     if (upi.isEmpty || !upi.contains('@')) {
       setState(() => _upiError = 'Enter a valid UPI ID (e.g. name@okaxis)');
@@ -93,8 +124,7 @@ class _GPaySimulationDialogState extends State<GPaySimulationDialog>
       // Auto close after showing success
       Future.delayed(const Duration(seconds: 2), () {
         if (!mounted) return;
-        final txnId =
-            'TXN${DateTime.now().millisecondsSinceEpoch}GPAY';
+        final txnId = 'TXN${DateTime.now().millisecondsSinceEpoch}GPAY';
         widget.onSuccess(txnId);
       });
     });
@@ -102,18 +132,28 @@ class _GPaySimulationDialogState extends State<GPaySimulationDialog>
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final maxHeight = math.max(220.0, mediaQuery.size.height * 0.86);
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      insetPadding: const EdgeInsets.all(24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: _step == _PayStep.success
-              ? _buildSuccess()
-              : _step == _PayStep.processing
-                  ? _buildProcessing()
-                  : _buildEnterUpi(),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 420,
+            maxHeight: maxHeight,
+          ),
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.all(24),
+            child: _step == _PayStep.success
+                ? _buildSuccess()
+                : _step == _PayStep.processing
+                    ? _buildProcessing()
+                    : _buildEnterUpi(),
+          ),
         ),
       ),
     );
@@ -182,7 +222,9 @@ class _GPaySimulationDialogState extends State<GPaySimulationDialog>
         const SizedBox(height: 20),
         // UPI field
         TextField(
+          key: _upiFieldKey,
           controller: _upiController,
+          focusNode: _upiFocusNode,
           decoration: InputDecoration(
             labelText: 'UPI ID',
             hintText: 'yourname@okaxis',
@@ -193,6 +235,9 @@ class _GPaySimulationDialogState extends State<GPaySimulationDialog>
             ),
           ),
           keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.done,
+          scrollPadding: const EdgeInsets.only(bottom: 180),
+          onSubmitted: (_) => _onPay(),
         ),
         const SizedBox(height: 20),
         Row(

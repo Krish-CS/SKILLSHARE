@@ -64,7 +64,21 @@ class OfferLetterService {
     String? joiningDate,
     String? additionalTerms,
   }) async {
-    final doc = pw.Document();
+    pw.Font? regularFont;
+    pw.Font? boldFont;
+    try {
+      final regData = await rootBundle.load('Source_Serif_4/static/SourceSerif4-Regular.ttf');
+      regularFont = pw.Font.ttf(regData);
+      final boldData = await rootBundle.load('Source_Serif_4/static/SourceSerif4-Bold.ttf');
+      boldFont = pw.Font.ttf(boldData);
+    } catch (_) {}
+
+    final doc = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: regularFont,
+        bold: boldFont,
+      ),
+    );
     final displayName = _companyDisplayName(companyUser, companyProfile);
     final officeAddress = _companyAddress(companyProfile);
     final logoBytes = await _loadLogoBytes(companyProfile?.logoUrl);

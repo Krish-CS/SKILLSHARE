@@ -256,7 +256,8 @@ class ChatService {
 
       for (final doc in existingChat.docs) {
         final data = doc.data();
-        final participants = List<String>.from(data['participants'] ?? const []);
+        final participants =
+            List<String>.from(data['participants'] ?? const []);
         if (_isTwoUserChat(participants, currentUserId, otherUserId) &&
             data['isWorkChat'] != true &&
             data['isJobChat'] != true) {
@@ -339,7 +340,6 @@ class ChatService {
       final deterministicChatDoc = await deterministicChatRef.get();
       if (deterministicChatDoc.exists) {
         await deterministicChatRef.set({
-          'participants': sortedParticipants,
           'participantDetails': {
             user1Id: normalizedUser1,
             user2Id: normalizedUser2,
@@ -410,8 +410,8 @@ class ChatService {
         .snapshots();
 
     return query.transform(
-      StreamTransformer<QuerySnapshot<Map<String, dynamic>>, List<ChatModel>>
-          .fromHandlers(
+      StreamTransformer<QuerySnapshot<Map<String, dynamic>>,
+          List<ChatModel>>.fromHandlers(
         handleData: (snapshot, sink) {
           final chats = <ChatModel>[];
           for (final doc in snapshot.docs) {
@@ -429,8 +429,7 @@ class ChatService {
           sink.add(chats);
         },
         handleError: (error, stackTrace, sink) {
-          if (error is FirebaseException &&
-              _isRecoverableStreamError(error)) {
+          if (error is FirebaseException && _isRecoverableStreamError(error)) {
             debugPrint('getUserChats recoverable error: ${error.message}');
             if (lastGoodChats.isNotEmpty) {
               sink.add(lastGoodChats);
@@ -455,7 +454,8 @@ class ChatService {
           !chat.id.startsWith('work_') &&
           !chat.id.startsWith('jobchat_');
       if (!isDirectChat) continue;
-      if (!chat.participants.contains(userId) || chat.participants.length != 2) {
+      if (!chat.participants.contains(userId) ||
+          chat.participants.length != 2) {
         continue;
       }
       if (chat.lastMessage.trim().isNotEmpty) continue;
@@ -477,7 +477,8 @@ class ChatService {
             .delete();
       } on FirebaseException catch (e) {
         // Ignore permission/network issues so UI flow is not interrupted.
-        debugPrint('pruneEmptyDirectChatsForUser skipped ${chat.id}: ${e.code}');
+        debugPrint(
+            'pruneEmptyDirectChatsForUser skipped ${chat.id}: ${e.code}');
       } catch (e) {
         debugPrint('pruneEmptyDirectChatsForUser skipped ${chat.id}: $e');
       }
@@ -577,36 +578,37 @@ class ChatService {
     }
 
     return query.snapshots().transform(
-      StreamTransformer<QuerySnapshot<Map<String, dynamic>>, List<MessageModel>>
-          .fromHandlers(
-        handleData: (snapshot, sink) {
-          final messages = <MessageModel>[];
-          for (final doc in snapshot.docs) {
-            try {
-              messages.add(MessageModel.fromMap(doc.data(), doc.id));
-            } catch (e) {
-              // Skip malformed message docs to keep the thread visible.
-              debugPrint('Skipped malformed message ${doc.id}: $e');
-            }
-          }
-          lastGoodMessages = List<MessageModel>.unmodifiable(messages);
-          sink.add(messages);
-        },
-        handleError: (error, stackTrace, sink) {
-          if (error is FirebaseException &&
-              _isRecoverableStreamError(error)) {
-            debugPrint('getMessages recoverable error for $chatId: ${error.message}');
-            if (lastGoodMessages.isNotEmpty) {
-              sink.add(lastGoodMessages);
-              return;
-            }
-            sink.add(const <MessageModel>[]);
-            return;
-          }
-          sink.addError(error, stackTrace);
-        },
-      ),
-    );
+          StreamTransformer<QuerySnapshot<Map<String, dynamic>>,
+              List<MessageModel>>.fromHandlers(
+            handleData: (snapshot, sink) {
+              final messages = <MessageModel>[];
+              for (final doc in snapshot.docs) {
+                try {
+                  messages.add(MessageModel.fromMap(doc.data(), doc.id));
+                } catch (e) {
+                  // Skip malformed message docs to keep the thread visible.
+                  debugPrint('Skipped malformed message ${doc.id}: $e');
+                }
+              }
+              lastGoodMessages = List<MessageModel>.unmodifiable(messages);
+              sink.add(messages);
+            },
+            handleError: (error, stackTrace, sink) {
+              if (error is FirebaseException &&
+                  _isRecoverableStreamError(error)) {
+                debugPrint(
+                    'getMessages recoverable error for $chatId: ${error.message}');
+                if (lastGoodMessages.isNotEmpty) {
+                  sink.add(lastGoodMessages);
+                  return;
+                }
+                sink.add(const <MessageModel>[]);
+                return;
+              }
+              sink.addError(error, stackTrace);
+            },
+          ),
+        );
   }
 
   // Mark messages as read

@@ -7,6 +7,8 @@ import '../services/chat_service.dart';
 import '../services/firestore_service.dart';
 import '../screens/chat/chat_detail_screen.dart';
 import '../screens/jobs/job_detail_screen.dart';
+import '../screens/delivery/delivery_screen.dart';
+import '../screens/portfolio/my_shop_screen.dart';
 import '../screens/shop/order_tracking_screen.dart';
 import 'app_constants.dart';
 import 'app_helpers.dart';
@@ -265,12 +267,18 @@ Future<List<NotificationItem>> loadNotificationsForUser(
 
       final (icon, color) = switch (type) {
         'shopOrderPlaced' => (Icons.shopping_bag, const Color(0xFF6A11CB)),
-        'shopOrderStatusUpdated' =>
-          (Icons.local_shipping, const Color(0xFF1E88E5)),
-        'shopDeliveryAssigned' =>
-          (Icons.delivery_dining, const Color(0xFFFF9800)),
-        'shopDeliveryStatusUpdated' =>
-          (Icons.done_all, const Color(0xFF2E7D32)),
+        'shopOrderStatusUpdated' => (
+            Icons.local_shipping,
+            const Color(0xFF1E88E5)
+          ),
+        'shopDeliveryAssigned' => (
+            Icons.delivery_dining,
+            const Color(0xFFFF9800)
+          ),
+        'shopDeliveryStatusUpdated' => (
+            Icons.done_all,
+            const Color(0xFF2E7D32)
+          ),
         _ => (Icons.notifications, const Color(0xFF546E7A)),
       };
 
@@ -305,15 +313,14 @@ Future<List<NotificationItem>> loadNotificationsForUser(
       final fromUserId = (data['fromUserId'] as String?)?.trim() ?? '';
       final jobTitle = (data['jobTitle'] as String?)?.trim() ?? '';
       final body = (data['body'] as String?)?.trim();
-      final notifTitle =
-          (data['title'] as String?)?.trim() ??
-              (type == 'jobAccepted'
-                  ? 'Application accepted'
-                  : type == 'jobRejected'
-                      ? 'Application update'
-                      : type == 'jobRevoked'
-                          ? 'Offer revoked'
-                          : 'New job application');
+      final notifTitle = (data['title'] as String?)?.trim() ??
+          (type == 'jobAccepted'
+              ? 'Application accepted'
+              : type == 'jobRejected'
+                  ? 'Application update'
+                  : type == 'jobRevoked'
+                      ? 'Offer revoked'
+                      : 'New job application');
       final notifJobId = (data['jobId'] as String?)?.trim();
       final notifChatId = (data['chatId'] as String?)?.trim();
       final createdAtTs = data['createdAt'] as Timestamp?;
@@ -345,8 +352,7 @@ Future<List<NotificationItem>> loadNotificationsForUser(
           chatId: _isMeaningful(notifChatId) ? notifChatId : null,
           otherUserId: fromUserId.isNotEmpty ? fromUserId : null,
           otherUserName: _isMeaningful(fromUserName) ? fromUserName : null,
-          otherUserPhoto:
-              _isMeaningful(fromUserPhoto) ? fromUserPhoto : null,
+          otherUserPhoto: _isMeaningful(fromUserPhoto) ? fromUserPhoto : null,
           jobId: notifJobId,
           rawType: type,
         ),
@@ -434,9 +440,11 @@ Future<List<NotificationItem>> loadNotificationsForUser(
 
   for (final doc in chatsSnap.docs) {
     final data = doc.data();
-    final unreadMap = data['unreadCount'] as Map<String, dynamic>?;
-    final unread = unreadMap?[userId];
-    final unreadCount = unread is int ? unread : 0;
+    final unreadValue = data['unreadCount'];
+    final unread = unreadValue is Map ? unreadValue[userId] : unreadValue;
+    final unreadCount = unread is num
+        ? unread.toInt()
+        : int.tryParse(unread?.toString() ?? '') ?? 0;
     if (unreadCount <= 0) continue;
 
     final participants = List<String>.from(data['participants'] ?? []);
@@ -609,7 +617,39 @@ Future<void> openNotificationItem(
         );
         return;
       }
+      final isBuyer = order.buyerId == currentUserId;
+      final isSeller = order.sellerId == currentUserId;
+      final isDeliveryPartner = _isMeaningful(order.deliveryPartnerId) &&
+          order.deliveryPartnerId!.trim() == currentUserId;
+
       if (!context.mounted) return;
+
+      if (isDeliveryPartner) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const DeliveryScreen()),
+        );
+        return;
+      }
+
+      if (isSeller) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const MyShopScreen(),
+          ),
+        );
+        return;
+      }
+
+      if (isBuyer) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => OrderTrackingScreen(order: order)),
+        );
+        return;
+      }
+
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => OrderTrackingScreen(order: order)),

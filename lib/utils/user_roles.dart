@@ -42,7 +42,11 @@ class UserRoles {
     if (normalized == customer) return customer;
     if (normalized == company) return company;
     if (normalized == admin) return admin;
-    if (normalized == deliveryPartner || normalized == 'delivery_partner') {
+    if (normalized == deliveryPartner ||
+        normalized == 'delivery_partner' ||
+        normalized == 'deliverypartner' ||
+        normalized == 'delivery partner' ||
+        normalized == 'delivery-partner') {
       return deliveryPartner;
     }
     if (normalized == skilledPerson || _skilledAliases.contains(normalized)) {

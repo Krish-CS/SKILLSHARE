@@ -278,6 +278,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final checkoutDetails = await _collectCheckoutDetails(currentUser.uid);
     if (!mounted || checkoutDetails == null) return;
 
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+    if (!mounted) return;
+
     final transactionId = await GPaySimulationDialog.show(
       context,
       amount: widget.product.price * _qty,
@@ -294,7 +297,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           paymentMethod: 'gpay_simulation',
           paymentReference: transactionId,
           deliveryAddress: checkoutDetails.address,
-          deliveryLocation: checkoutDetails.location,
         );
 
         if (!mounted) return;
@@ -322,12 +324,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final addressController = TextEditingController(
       text: (profile?.location ?? '').trim(),
     );
-    final locationController = TextEditingController(
-      text: [
-        (profile?.city ?? '').trim(),
-        (profile?.state ?? '').trim(),
-      ].where((part) => part.isNotEmpty).join(', '),
-    );
 
     final result = await showDialog<_CheckoutDetails>(
       context: context,
@@ -337,39 +333,29 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         title: const Text('Confirm Delivery Address'),
         content: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 360),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Please confirm this address before payment. You can change it for this order.',
-                style: TextStyle(fontSize: 13, height: 1.4),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: addressController,
-                maxLines: 2,
-                decoration: InputDecoration(
-                  labelText: 'Address',
-                  hintText: 'House / street / area',
-                  prefixIcon: const Icon(Icons.home_outlined),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Please confirm this address before payment. You can change it for this order.',
+                  style: TextStyle(fontSize: 13, height: 1.4),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: addressController,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    labelText: 'Address',
+                    hintText: 'House / street / area',
+                    prefixIcon: const Icon(Icons.home_outlined),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: locationController,
-                decoration: InputDecoration(
-                  labelText: 'Location',
-                  hintText: 'City, State',
-                  prefixIcon: const Icon(Icons.location_on_outlined),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         actions: [
@@ -379,18 +365,18 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           ),
           ElevatedButton(
             onPressed: () {
+              FocusManager.instance.primaryFocus?.unfocus();
               final address = addressController.text.trim();
-              final location = locationController.text.trim();
-              if (address.isEmpty || location.isEmpty) {
+              if (address.isEmpty) {
                 AppPopup.show(
                   ctx,
-                  message: 'Address and location are required',
+                  message: 'Address is required',
                   type: PopupType.warning,
                 );
                 return;
               }
               Navigator.of(ctx).pop(
-                _CheckoutDetails(address: address, location: location),
+                _CheckoutDetails(address: address),
               );
             },
             child: const Text('Continue'),
@@ -400,7 +386,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
 
     addressController.dispose();
-    locationController.dispose();
     return result;
   }
 
@@ -1314,9 +1299,8 @@ class _FullScreenImageViewer extends StatefulWidget {
 
 class _CheckoutDetails {
   final String address;
-  final String location;
 
-  const _CheckoutDetails({required this.address, required this.location});
+  const _CheckoutDetails({required this.address});
 }
 
 class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {

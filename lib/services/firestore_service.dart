@@ -72,6 +72,8 @@ class FirestoreService {
   final Random _random = Random.secure();
   static const String _aadhaarRegistryCollection =
       AppConstants.aadhaarRegistryCollection;
+  static const String _companyVerificationReportType =
+      'company_verification';
 
   String _generateDeliveryVerificationCode() =>
       (_random.nextInt(900000) + 100000).toString();
@@ -209,6 +211,217 @@ class FirestoreService {
       default:
         return false;
     }
+  }
+
+  String _normalizeVerificationStatus(dynamic status) {
+    final normalized = (status?.toString() ?? '').trim().toLowerCase();
+    if (normalized == 'submitted') return AppConstants.verificationPending;
+    if (normalized == AppConstants.verificationApproved ||
+        normalized == AppConstants.verificationRejected ||
+        normalized == AppConstants.verificationPending) {
+      return normalized;
+    }
+    return AppConstants.verificationPending;
+  }
+
+  bool _hasCompanyVerificationSubmission(Map<String, dynamic> data) {
+    final rawVerificationData = data['verificationData'];
+    final verificationData = rawVerificationData is Map
+        ? Map<String, dynamic>.from(rawVerificationData)
+        : <String, dynamic>{};
+
+    final businessReg =
+        ((verificationData['businessRegNumber'] as String?) ?? '').trim();
+    final gst = ((verificationData['gstNumber'] as String?) ?? '').trim();
+    final submittedAt = verificationData['submittedAt'];
+    final hasSubmittedAt = submittedAt is Timestamp ||
+        (submittedAt is String && submittedAt.trim().isNotEmpty);
+
+    return businessReg.isNotEmpty || gst.isNotEmpty || hasSubmittedAt;
+  }
+
+  Timestamp _companyVerificationRequestedAt(Map<String, dynamic> data) {
+    final rawVerificationData = data['verificationData'];
+    final verificationData = rawVerificationData is Map
+        ? Map<String, dynamic>.from(rawVerificationData)
+        : <String, dynamic>{};
+
+    final submittedAt = verificationData['submittedAt'];
+    if (submittedAt is Timestamp) {
+      return submittedAt;
+    }
+    if (submittedAt is String && submittedAt.trim().isNotEmpty) {
+      final parsed = DateTime.tryParse(submittedAt.trim());
+      if (parsed != null) {
+        return Timestamp.fromDate(parsed);
+      }
+    }
+
+    final updatedAt = data['updatedAt'];
+    if (updatedAt is Timestamp) {
+      return updatedAt;
+    }
+
+    final createdAt = data['createdAt'];
+    if (createdAt is Timestamp) {
+      return createdAt;
+    }
+
+    return Timestamp.now();
+  }
+
+  List<Map<String, dynamic>> _sortReportsByCreatedAtDesc(
+    List<Map<String, dynamic>> reports,
+  ) {
+    reports.sort((a, b) {
+      final aTime = a['createdAt'];
+      final bTime = b['createdAt'];
+      if (aTime is Timestamp && bTime is Timestamp) {
+        return bTime.compareTo(aTime);
+      }
+      return 0;
+    });
+    return reports;
+  }
+
+  Map<String, dynamic> _buildCompanyVerificationReport(
+    String companyUserId,
+    Map<String, dynamic> data,
+  ) {
+    final verificationData = data['verificationData'] is Map
+        ? Map<String, dynamic>.from(data['verificationData'] as Map)
+        : <String, dynamic>{};
+
+    final companyName = ((data['companyName'] as String?) ?? '').trim();
+    final businessReg =
+        ((verificationData['businessRegNumber'] as String?) ?? '').trim();
+    final gst = ((verificationData['gstNumber'] as String?) ?? '').trim();
+    final website = ((data['website'] as String?) ?? '').trim();
+    final headOffice = ((data['headOfficeLocation'] as String?) ?? '').trim();
+
+    final requestedApprovals = <String>[
+      'Business registration verification',
+      if (gst.isNotEmpty) 'GST verification',
+    ];
+    final missingInfo = <String>[
+      if (businessReg.isEmpty) 'Business registration number',
+    ];
+
+    final detailLines = <String>[
+      'Approvals requested: ${requestedApprovals.join(', ')}',
+      if (businessReg.isNotEmpty) 'Business Registration Number: $businessReg',
+      if (gst.isNotEmpty) 'GST Number: $gst',
+      if (headOffice.isNotEmpty) 'Head Office: $headOffice',
+      if (website.isNotEmpty) 'Website: $website',
+      if (missingInfo.isNotEmpty)
+        'Missing information: ${missingInfo.join(', ')}',
+    ];
+
+    return {
+      'id': 'company_verification_$companyUserId',
+      'type': _companyVerificationReportType,
+      'companyUserId': companyUserId,
+      'reporterId': companyUserId,
+      'reportedUserId': companyUserId,
+      'companyName': companyName,
+      'reason': 'Business verification approval request',
+      'details': detailLines.join('\n'),
+      'status': 'pending',
+      'source': 'company_profile',
+      'createdAt': _companyVerificationRequestedAt(data),
+      'updatedAt': _companyVerificationRequestedAt(data),
+    };
+  }
+
+  List<Map<String, dynamic>> _mergeReportLists({
+    required List<Map<String, dynamic>> reports,
+    required List<Map<String, dynamic>> companyVerificationReports,
+    required int limit,
+  }) {
+    final merged = <Map<String, dynamic>>[
+      ...reports,
+      ...companyVerificationReports,
+    ];
+    _sortReportsByCreatedAtDesc(merged);
+    if (merged.length > limit) {
+      return merged.sublist(0, limit);
+    }
+    return merged;
+  }
+
+  Future<List<Map<String, dynamic>>> _getCompanyVerificationReports({
+    int limit = 100,
+  }) async {
+    try {
+      final snapshot = await _firestore
+          .collection(AppConstants.companyProfilesCollection)
+          .limit(limit * 3)
+          .get();
+
+      final reports = snapshot.docs
+          .map((doc) => {'userId': doc.id, ...doc.data()})
+          .where((data) => _hasCompanyVerificationSubmission(data))
+          .where((data) =>
+              _normalizeVerificationStatus(data['verificationStatus']) ==
+              AppConstants.verificationPending)
+          .map((data) => _buildCompanyVerificationReport(
+                data['userId'] as String,
+                data,
+              ))
+          .toList();
+
+      return _sortReportsByCreatedAtDesc(reports);
+    } catch (e) {
+      debugPrint('getCompanyVerificationReports error: $e');
+      return [];
+    }
+  }
+
+  List<Map<String, dynamic>> _buildCompanyVerificationReportsFromSnapshot(
+    QuerySnapshot<Map<String, dynamic>> snapshot,
+  ) {
+    final reports = snapshot.docs
+        .map((doc) => {'userId': doc.id, ...doc.data()})
+        .where((data) => _hasCompanyVerificationSubmission(data))
+        .where((data) =>
+            _normalizeVerificationStatus(data['verificationStatus']) ==
+            AppConstants.verificationPending)
+        .map((data) => _buildCompanyVerificationReport(
+              data['userId'] as String,
+              data,
+            ))
+        .toList();
+
+    return _sortReportsByCreatedAtDesc(reports);
+  }
+
+  Future<void> reviewCompanyVerificationRequest({
+    required String companyUserId,
+    required bool approve,
+    String? adminId,
+    String? adminNotes,
+  }) async {
+    final status = approve
+        ? AppConstants.verificationApproved
+        : AppConstants.verificationRejected;
+
+    final update = <String, dynamic>{
+      'verificationStatus': status,
+      'isVerified': approve,
+      'updatedAt': FieldValue.serverTimestamp(),
+      'verificationReviewedAt': FieldValue.serverTimestamp(),
+      if (approve) 'verifiedAt': FieldValue.serverTimestamp(),
+      if (!approve) 'verifiedAt': null,
+      if (adminId != null && adminId.trim().isNotEmpty)
+        'verificationReviewedBy': adminId.trim(),
+      if (adminNotes != null && adminNotes.trim().isNotEmpty)
+        'verificationNotes': adminNotes.trim(),
+    };
+
+    await _firestore
+        .collection(AppConstants.companyProfilesCollection)
+        .doc(companyUserId)
+        .set(update, SetOptions(merge: true));
   }
 
   Future<bool> canCompanyHireSkilledPersons(String companyUserId) async {
@@ -476,6 +689,61 @@ class FirestoreService {
     return companies;
   }
 
+  Future<List<UserModel>> getDeliveryPartners({
+    String? excludeUserId,
+    int limit = 20,
+  }) async {
+    final snapshot = await _firestore
+        .collection(AppConstants.usersCollection)
+        .limit(1000)
+        .get();
+
+    bool hasExplicitVerificationSignal(Map<String, dynamic> data) {
+      return data.containsKey('isVerified') ||
+          data.containsKey('verificationStatus') ||
+          data.containsKey('approvalStatus') ||
+          data.containsKey('verifiedAt');
+    }
+
+    bool isApprovedUser(Map<String, dynamic> data) {
+      final verificationStatus = _normalizeVerificationStatus(
+        data['verificationStatus'] ?? data['approvalStatus'],
+      );
+      return data['isVerified'] == true ||
+          verificationStatus == AppConstants.verificationApproved ||
+          verificationStatus == AppConstants.approvalApproved ||
+          verificationStatus == 'verified' ||
+          verificationStatus == 'approved' ||
+          data['verifiedAt'] != null;
+    }
+
+    final docsById = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{
+      for (final doc in snapshot.docs) doc.id: doc,
+    };
+
+    final partners = snapshot.docs
+        .map((doc) => UserModel.fromMap(doc.data(), doc.id))
+        .where((user) => user.role == UserRoles.deliveryPartner)
+        .where((user) => user.isActive)
+        .where((user) => excludeUserId == null || user.uid != excludeUserId)
+        .where((user) {
+          final data = docsById[user.uid]?.data();
+          if (data == null) return false;
+
+          if (!hasExplicitVerificationSignal(data)) return true;
+          return isApprovedUser(data);
+        })
+        .where((user) =>
+            user.name.trim().isNotEmpty || user.email.trim().isNotEmpty)
+        .toList();
+
+    partners.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    if (partners.length > limit) {
+      return partners.sublist(0, limit);
+    }
+    return partners;
+  }
+
   // Update user profile photo in users collection
   Future<void> updateUserProfilePhoto(String userId, String photoUrl) async {
     try {
@@ -611,9 +879,50 @@ class FirestoreService {
   /// Stamps the user document with the current server timestamp so the badge
   /// count resets once all current notifications are considered "seen".
   Future<void> markNotificationsSeen(String userId) async {
-    await _firestore.collection(AppConstants.usersCollection).doc(userId).set(
-        {'lastNotificationSeenAt': FieldValue.serverTimestamp()},
-        SetOptions(merge: true));
+    final normalizedUserId = userId.trim();
+    if (normalizedUserId.isEmpty) return;
+
+    await _firestore.collection(AppConstants.usersCollection).doc(normalizedUserId).set(
+      {'lastNotificationSeenAt': FieldValue.serverTimestamp()},
+      SetOptions(merge: true),
+    );
+
+    final snapshot = await _firestore
+        .collection('notifications')
+        .where('toUserId', isEqualTo: normalizedUserId)
+        .get();
+
+    if (snapshot.docs.isEmpty) return;
+
+    var batch = _firestore.batch();
+    var operationCount = 0;
+
+    Future<void> commitBatch() async {
+      if (operationCount == 0) return;
+      await batch.commit();
+      batch = _firestore.batch();
+      operationCount = 0;
+    }
+
+    for (final doc in snapshot.docs) {
+      batch.set(
+        doc.reference,
+        {
+          'read': true,
+          'seen': true,
+          'readAt': FieldValue.serverTimestamp(),
+          'seenAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      operationCount++;
+      if (operationCount >= 400) {
+        await commitBatch();
+      }
+    }
+
+    await commitBatch();
   }
 
   /// Returns a stream that emits the `lastNotificationSeenAt` timestamp for
@@ -2137,6 +2446,7 @@ class FirestoreService {
     final now = DateTime.now();
     late final OrderModel createdOrder;
 
+    int remainingStockToUpdate = 0;
     await _firestore.runTransaction((transaction) async {
       final productSnap = await transaction.get(productRef);
       if (!productSnap.exists || productSnap.data() == null) {
@@ -2154,6 +2464,7 @@ class FirestoreService {
       }
 
       final remainingStock = latestProduct.stock - quantity;
+      remainingStockToUpdate = remainingStock;
 
       createdOrder = OrderModel(
         id: orderRef.id,
@@ -2195,12 +2506,15 @@ class FirestoreService {
       );
 
       transaction.set(orderRef, createdOrder.toMap());
+      transaction.delete(cartItemRef);
+
+      // Successfully update product stock explicitly within the transaction so that
+      // failed stock decrements (e.g. concurrent race condition or rules enforcement) will abort the order.
       transaction.update(productRef, {
-        'stock': remainingStock,
-        'isAvailable': remainingStock > 0,
+        'stock': remainingStockToUpdate,
+        'isAvailable': remainingStockToUpdate > 0,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      transaction.delete(cartItemRef);
     });
 
     await _createNotificationRecord(
@@ -2363,6 +2677,8 @@ class FirestoreService {
       createdOrders.add(order);
       batch.set(orderRef, order.toMap());
       final remainingStock = latestProduct.stock - item.quantity;
+      
+      // Update the product within the batch to ensure consistency.
       batch.update(productRef, {
         'stock': remainingStock,
         'isAvailable': remainingStock > 0,
@@ -2573,39 +2889,50 @@ class FirestoreService {
   }) async {
     final ref =
         _firestore.collection(AppConstants.ordersCollection).doc(orderId);
-    final snap = await ref.get();
-    if (!snap.exists) {
-      throw Exception('Order not found.');
-    }
-    final data = snap.data() ?? <String, dynamic>{};
-    final status = (data['status'] as String?)?.trim() ?? '';
-    final deliveryByPartner = data['deliveryByPartner'] == true;
-    final assignedPartnerId =
-        (data['deliveryPartnerId'] as String?)?.trim() ?? '';
 
-    if (!deliveryByPartner) {
-      throw Exception(
-          'This order is not configured for delivery partner flow.');
-    }
-    if (status != 'confirmed') {
-      throw Exception('Only confirmed orders can be accepted for delivery.');
-    }
-    if (assignedPartnerId.isNotEmpty) {
-      throw Exception('This order is already assigned to a delivery partner.');
-    }
+    // Use a transaction to prevent concurrent assignments
+    final data = await _firestore.runTransaction((transaction) async {
+      final snap = await transaction.get(ref);
+      if (!snap.exists) {
+        throw Exception('Order not found.');
+      }
+      final data = snap.data() ?? <String, dynamic>{};
+      final status = (data['status'] as String?)?.trim() ?? '';
+      final deliveryByPartner = data['deliveryByPartner'] == true;
+      final assignedPartnerId =
+          (data['deliveryPartnerId'] as String?)?.trim() ?? '';
 
-    final updateData = <String, dynamic>{
-      'deliveryPartnerId': deliveryPartnerId,
-      'deliveryPartnerName': deliveryPartnerName,
-      'status': 'out_for_delivery',
-      'statusTimeline.shipped': FieldValue.serverTimestamp(),
-      'statusTimeline.out_for_delivery': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
-    if (estimatedDelivery != null) {
-      updateData['estimatedDelivery'] = Timestamp.fromDate(estimatedDelivery);
-    }
-    await ref.update(updateData);
+      if (!deliveryByPartner) {
+        throw Exception(
+            'This order is not configured for delivery partner flow.');
+      }
+      if (status != 'confirmed' && status != 'failed_delivery') {
+        throw Exception('Only confirmed or failed orders can be accepted for delivery.');
+      }
+      if (status == 'confirmed' && assignedPartnerId.isNotEmpty) {
+        throw Exception('This order is already assigned to a delivery partner.');
+      }
+
+      final updateData = <String, dynamic>{
+        'deliveryPartnerId': deliveryPartnerId,
+        'deliveryPartnerName': deliveryPartnerName,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      
+      if (status == 'failed_delivery') {
+        updateData['status'] = 'confirmed';
+        // Clear previous delivery milestones so the tracking timeline resets for the buyer
+        updateData['statusTimeline.out_for_delivery'] = FieldValue.delete();
+        updateData['statusTimeline.failed_delivery'] = FieldValue.delete();
+      }
+
+      if (estimatedDelivery != null) {
+        updateData['estimatedDelivery'] = Timestamp.fromDate(estimatedDelivery);
+      }
+      transaction.update(ref, updateData);
+
+      return data;
+    });
 
     final buyerId = (data['buyerId'] as String?)?.trim() ?? '';
     final sellerId = (data['sellerId'] as String?)?.trim() ?? '';
@@ -2640,6 +2967,62 @@ class FirestoreService {
     }
   }
 
+  /// Partner cancels their assignment before picking it up.
+  Future<void> cancelDeliveryAssignment({
+    required String orderId,
+    required String deliveryPartnerId,
+    required String deliveryPartnerName,
+  }) async {
+    final ref =
+        _firestore.collection(AppConstants.ordersCollection).doc(orderId);
+
+    final data = await _firestore.runTransaction((transaction) async {
+      final snap = await transaction.get(ref);
+      if (!snap.exists) throw Exception('Order not found.');
+      final data = snap.data()!;
+      
+      final assignedId = data['deliveryPartnerId'] as String?;
+      if (assignedId != deliveryPartnerId) {
+        throw Exception('You are not the assigned delivery partner for this order.');
+      }
+      
+      final currentStatus = data['status'] as String?;
+      if (currentStatus == 'delivered' || currentStatus == 'out_for_delivery') {
+        throw Exception('Cannot cancel a delivery that is already active or delivered.');
+      }
+      
+      transaction.update(ref, {
+        'deliveryPartnerId': FieldValue.delete(),
+        'deliveryPartnerName': FieldValue.delete(),
+        'estimatedDelivery': FieldValue.delete(),
+        // Revert status to confirmed so seller can reassign
+        'status': 'confirmed',
+        'statusTimeline.partner_cancelled': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      return data;
+    });
+
+    final sellerId = (data['sellerId'] as String?)?.trim() ?? '';
+    final productId = (data['productId'] as String?)?.trim() ?? '';
+    final productName =
+        (data['productName'] as String?)?.trim() ?? 'your order';
+
+    if (sellerId.isNotEmpty) {
+      await _createNotificationRecord(
+        toUserId: sellerId,
+        fromUserId: deliveryPartnerId,
+        type: 'shopDeliveryCancelled',
+        title: 'Delivery Partner Cancelled',
+        body: '$deliveryPartnerName cancelled picking up $productName. Please reassign.',
+        orderId: orderId,
+        productId: productId,
+        productName: productName,
+        status: 'cancelled_assignment',
+      );
+    }
+  }
+
   /// Update order delivery status (only assigned delivery partner can do this).
   Future<void> updateDeliveryStatus({
     required String orderId,
@@ -2657,36 +3040,46 @@ class FirestoreService {
     }
     final ref =
         _firestore.collection(AppConstants.ordersCollection).doc(orderId);
-    final snap = await ref.get();
-    if (!snap.exists) throw Exception('Order not found.');
-    final data = snap.data()!;
-    final assignedId = data['deliveryPartnerId'] as String?;
-    final deliveryByPartner = data['deliveryByPartner'] == true;
-    if (!deliveryByPartner) {
-      throw Exception('This order is not using delivery-partner flow.');
-    }
-    if (assignedId != deliveryPartnerId) {
-      throw Exception(
-          'You are not the assigned delivery partner for this order.');
-    }
-    final expectedCode =
-        (data['deliveryVerificationCode'] as String?)?.trim() ?? '';
-    if (status == 'delivered' && expectedCode.isNotEmpty) {
-      final enteredCode = deliveryVerificationCode?.trim() ?? '';
-      if (enteredCode.isEmpty) {
+
+    final data = await _firestore.runTransaction((transaction) async {
+      final snap = await transaction.get(ref);
+      if (!snap.exists) throw Exception('Order not found.');
+      final data = snap.data()!;
+      final assignedId = data['deliveryPartnerId'] as String?;
+      final deliveryByPartner = data['deliveryByPartner'] == true;
+      final currentStatus = data['status'] as String?;
+      if (!deliveryByPartner) {
+        throw Exception('This order is not using delivery-partner flow.');
+      }
+      if (currentStatus == 'cancelled' || currentStatus == 'delivered') {
+        throw Exception('This order is already $currentStatus and cannot be updated.');
+      }
+      if (assignedId != deliveryPartnerId) {
         throw Exception(
-            'Enter the customer delivery code to complete delivery.');
+            'You are not the assigned delivery partner for this order.');
       }
-      if (enteredCode != expectedCode) {
-        throw Exception('Invalid delivery code. Ask the customer again.');
+      final expectedCode =
+          (data['deliveryVerificationCode'] as String?)?.trim() ?? '';
+      if (status == 'delivered' && expectedCode.isNotEmpty) {
+        final enteredCode = deliveryVerificationCode?.trim() ?? '';
+        if (enteredCode.isEmpty) {
+          throw Exception(
+              'Enter the customer delivery code to complete delivery.');
+        }
+        if (enteredCode != expectedCode) {
+          throw Exception('Invalid delivery code. Ask the customer again.');
+        }
       }
-    }
-    await ref.update({
-      'status': status,
-      'statusTimeline.$status': FieldValue.serverTimestamp(),
-      if (status == 'delivered')
-        'deliveryCodeVerifiedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
+      
+      transaction.update(ref, {
+        'status': status,
+        'statusTimeline.$status': FieldValue.serverTimestamp(),
+        if (status == 'delivered')
+          'deliveryCodeVerifiedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      return data;
     });
 
     final buyerId = (data['buyerId'] as String?)?.trim() ?? '';
@@ -4047,15 +4440,14 @@ class FirestoreService {
           .get();
       final reports =
           snapshot.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList();
-      reports.sort((a, b) {
-        final aTime = a['createdAt'];
-        final bTime = b['createdAt'];
-        if (aTime is Timestamp && bTime is Timestamp) {
-          return bTime.compareTo(aTime);
-        }
-        return 0;
-      });
-      return reports;
+      final companyVerificationReports =
+          await _getCompanyVerificationReports(limit: limit);
+
+      return _mergeReportLists(
+        reports: reports,
+        companyVerificationReports: companyVerificationReports,
+        limit: limit,
+      );
     } catch (e) {
       debugPrint('getAllReports error: $e');
       return [];
@@ -4063,23 +4455,66 @@ class FirestoreService {
   }
 
   Stream<List<Map<String, dynamic>>> streamAllReports({int limit = 100}) {
-    return _firestore
-        .collection(AppConstants.reportsCollection)
-        .limit(limit)
-        .snapshots()
-        .map((snapshot) {
-      final reports =
-          snapshot.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList();
-      reports.sort((a, b) {
-        final aTime = a['createdAt'];
-        final bTime = b['createdAt'];
-        if (aTime is Timestamp && bTime is Timestamp) {
-          return bTime.compareTo(aTime);
-        }
-        return 0;
-      });
-      return reports;
-    });
+    final controller = StreamController<List<Map<String, dynamic>>>();
+
+    List<Map<String, dynamic>> reports = const [];
+    List<Map<String, dynamic>> companyVerificationReports = const [];
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? reportsSub;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? companySub;
+
+    void emit() {
+      if (controller.isClosed) return;
+      controller.add(_mergeReportLists(
+        reports: reports,
+        companyVerificationReports: companyVerificationReports,
+        limit: limit,
+      ));
+    }
+
+    controller.onListen = () {
+      emit();
+
+      reportsSub = _firestore
+          .collection(AppConstants.reportsCollection)
+          .limit(limit)
+          .snapshots()
+          .listen(
+        (snapshot) {
+          reports =
+              snapshot.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList();
+          emit();
+        },
+        onError: (Object e, StackTrace st) {
+          debugPrint('streamAllReports reports stream error: $e');
+          reports = const [];
+          emit();
+        },
+      );
+
+      companySub = _firestore
+          .collection(AppConstants.companyProfilesCollection)
+          .limit(limit * 3)
+          .snapshots()
+          .listen(
+        (snapshot) {
+          companyVerificationReports =
+              _buildCompanyVerificationReportsFromSnapshot(snapshot);
+          emit();
+        },
+        onError: (Object e, StackTrace st) {
+          debugPrint('streamAllReports company verification stream error: $e');
+          companyVerificationReports = const [];
+          emit();
+        },
+      );
+    };
+
+    controller.onCancel = () async {
+      await reportsSub?.cancel();
+      await companySub?.cancel();
+    };
+
+    return controller.stream;
   }
 
   Future<void> updateReportStatus(
@@ -4134,19 +4569,40 @@ class FirestoreService {
 
     List<UserModel> users = const [];
     List<Map<String, dynamic>> reports = const [];
+    List<Map<String, dynamic>> companyVerificationReports = const [];
     List<SkilledUserProfile> pendingVerifications = const [];
 
     StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? usersSub;
     StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? reportsSub;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? companySub;
     StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? pendingSub;
 
     void emit() {
       if (controller.isClosed) return;
+
+      final mergedReports = _mergeReportLists(
+        reports: reports,
+        companyVerificationReports: companyVerificationReports,
+        limit: limit,
+      );
+
+      final activeSkilledUserIds = users
+          .where((u) =>
+              UserRoles.normalizeRole(u.role) == UserRoles.skilledPerson &&
+              u.isActive &&
+              u.isSuspended != true)
+          .map((u) => u.uid)
+          .toSet();
+
+      final validPendingVerifs = pendingVerifications
+          .where((p) => activeSkilledUserIds.contains(p.userId))
+          .toList();
+
       controller.add(
         AdminDashboardData(
           users: users,
-          reports: reports,
-          pendingVerifications: pendingVerifications,
+          reports: mergedReports,
+          pendingVerifications: validPendingVerifs,
         ),
       );
     }
@@ -4199,6 +4655,24 @@ class FirestoreService {
         },
       );
 
+      companySub = _firestore
+          .collection(AppConstants.companyProfilesCollection)
+          .limit(limit * 3)
+          .snapshots()
+          .listen(
+        (snapshot) {
+          companyVerificationReports =
+              _buildCompanyVerificationReportsFromSnapshot(snapshot);
+          emit();
+        },
+        onError: (Object e, StackTrace st) {
+          debugPrint(
+              'streamAdminDashboardData company verification stream error: $e');
+          companyVerificationReports = const [];
+          emit();
+        },
+      );
+
       pendingSub = _firestore
           .collection(AppConstants.skilledUsersCollection)
           .limit(limit * 3)
@@ -4227,6 +4701,7 @@ class FirestoreService {
     controller.onCancel = () async {
       await usersSub?.cancel();
       await reportsSub?.cancel();
+      await companySub?.cancel();
       await pendingSub?.cancel();
     };
 
@@ -4247,11 +4722,30 @@ class FirestoreService {
   Future<void> adminDeleteUserAccount(String userId) async {
     final batch = _firestore.batch();
 
+    // Fetch the skilled user profile to check for a registered Aadhaar and free it
+    final skilledDoc = await _firestore
+        .collection(AppConstants.skilledUsersCollection)
+        .doc(userId)
+        .get();
+
+    if (skilledDoc.exists) {
+      final data = skilledDoc.data();
+      if (data != null && data['verificationData'] != null) {
+        final verificationData = data['verificationData'] as Map<String, dynamic>;
+        final aadhaarNumber = verificationData['aadhaarNumber'] as String?;
+        if (aadhaarNumber != null && aadhaarNumber.isNotEmpty) {
+          final cleanAadhaar = _normalizeAadhaar(aadhaarNumber);
+          // Free the Aadhaar from the registry so they can use it again later
+          batch.delete(_firestore.collection(_aadhaarRegistryCollection).doc(cleanAadhaar));
+        }
+      }
+    }
+
     // Delete user doc
     batch.delete(
         _firestore.collection(AppConstants.usersCollection).doc(userId));
 
-    // Delete profile doc (skilled/customer/company)
+    // Delete profile docs (skilled/customer/company/managed)
     batch.delete(
         _firestore.collection(AppConstants.skilledUsersCollection).doc(userId));
     batch.delete(_firestore
@@ -4259,6 +4753,14 @@ class FirestoreService {
         .doc(userId));
     batch.delete(_firestore
         .collection(AppConstants.companyProfilesCollection)
+        .doc(userId));
+    batch.delete(_firestore
+        .collection(AppConstants.managedMembersCollection)
+        .doc(userId));
+
+    // Delete private verification data to prevent leaks (like Aadhar images)
+    batch.delete(_firestore
+        .collection(AppConstants.skilledVerificationPrivateCollection)
         .doc(userId));
 
     await batch.commit();
@@ -4284,6 +4786,35 @@ class FirestoreService {
       'status': 'cancelled',
       'updatedAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  /// Permanently delete a chat work request owned by the customer/requester.
+  ///
+  /// This is intended for stale or noisy requests that no longer need to stay
+  /// in Firestore. Accepted requests are preserved so active work history does
+  /// not disappear unexpectedly.
+  Future<void> deleteChatWorkRequest({
+    required String requestId,
+    required String customerId,
+  }) async {
+    final ref = _firestore.collection(AppConstants.requestsCollection).doc(requestId);
+    final snap = await ref.get();
+    if (!snap.exists) throw Exception('Request not found.');
+
+    final data = snap.data() ?? <String, dynamic>{};
+    final ownerId = ((data['customerId'] ?? data['requesterId']) as String?)
+            ?.trim() ??
+        '';
+    if (ownerId != customerId) {
+      throw Exception('Not authorized to delete this request.');
+    }
+
+    final status = ((data['status'] as String?) ?? '').toLowerCase().trim();
+    if (status == AppConstants.requestStatusAccepted) {
+      throw Exception('Accepted work requests cannot be deleted.');
+    }
+
+    await ref.delete();
   }
 
   // ===== Managed Members (Admin) =====

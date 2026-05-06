@@ -1,0 +1,282 @@
+SkillShare Project Overview
+===========================
+
+What SkillShare is
+------------------
+SkillShare is a Flutter-based, multi-role marketplace app for skilled professionals to showcase their work, publish portfolios, sell products, receive service requests, apply for jobs, chat with customers and companies, and be managed by admins.
+
+The project is backed by Firebase and is designed around four main user roles:
+- Customer
+- Skilled Person
+- Company
+- Admin
+
+Tech Stack
+----------
+Frontend:
+- Flutter
+- Dart 3.6+
+- Material UI with custom themes and gradients
+- Google Fonts and custom font assets
+
+State Management:
+- Provider
+
+Backend and Cloud Services:
+- Firebase Core
+- Firebase Auth
+- Cloud Firestore
+- Google Sign-In
+- Firebase configuration generated in lib/firebase_options.dart
+
+Media and Storage:
+- Cloudinary
+- image_picker
+- cached_network_image
+- file_picker
+
+Maps, Location, and Connectivity:
+- geolocator
+- geocoding
+- connectivity_plus
+- http
+
+Chat, Documents, and Utilities:
+- intl
+- pdf
+- syncfusion_flutter_pdfviewer
+- super_clipboard
+- csv
+- excel
+- archive
+- xml
+- share_plus
+- url_launcher
+- local_auth
+- shared_preferences
+- crypto
+- matrix_gesture_detector
+
+Platform Support:
+- Android
+- iOS
+- Web
+- Windows
+- Linux
+- macOS
+
+Additional backend dependency:
+- package.json includes firebase-admin for Node-side Firebase admin usage
+
+High-Level App Flow
+-------------------
+1. App starts in lib/main.dart.
+2. Firebase is initialized.
+3. Firestore settings are configured differently for web and mobile.
+4. The app loads provider state for auth, user data, and app lock.
+5. InternetRequiredGate and AppLockGate wrap the app shell.
+6. SplashScreen checks FirebaseAuth currentUser.
+7. If a valid session exists, the app routes to MainNavigation.
+8. If not, the app routes to LoginScreen.
+9. After login or signup, the app again routes into MainNavigation.
+10. MainNavigation and MainScreen act as the main shell for feature tabs.
+
+Primary Navigation / User Journey
+----------------------------------
+The core user journey is:
+Splash -> Login/Signup -> MainNavigation -> Feature Tabs
+
+The main feature areas are:
+- Home / Explore
+- Shop
+- Jobs
+- Chat
+- Profile
+
+Role-specific flows branch from the profile/setup and admin areas:
+- Skilled users can build a profile, portfolio, and shop.
+- Customers can browse experts, message them, and buy products.
+- Companies can post jobs, hire professionals, and chat for hiring.
+- Admins can moderate users, products, verification, and platform data.
+
+Project Modules
+---------------
+Entry and Shell
+- lib/main.dart: App bootstrap, Firebase init, provider setup, startup gates.
+- lib/screens/splash_screen.dart: Session check and first navigation decision.
+- lib/screens/main_screen.dart: Thin wrapper that returns MainNavigation.
+- lib/screens/main_navigation.dart: Main app shell and tab-level navigation.
+
+Authentication
+- lib/screens/auth/login_screen.dart
+- lib/screens/auth/signup_screen.dart
+- lib/providers/auth_provider.dart
+- lib/services/auth_service.dart
+
+Home and Discovery
+- lib/screens/home/home_screen.dart
+- lib/screens/home/explore_screen.dart
+- lib/widgets/expert_card.dart
+- lib/widgets/category_card.dart
+- lib/widgets/notification_bell.dart
+- lib/utils/add_dummy_profiles.dart
+
+Profile and Identity
+- lib/screens/profile/profile_screen.dart
+- lib/screens/profile/profile_tab_screen.dart
+- lib/screens/profile/skilled_user_setup_screen.dart
+- lib/screens/profile/customer_setup_screen.dart
+- lib/screens/profile/company_setup_screen.dart
+- lib/screens/profile/edit_skilled_profile_screen.dart
+- lib/screens/profile/settings_screen.dart
+- lib/screens/profile/app_lock_settings_screen.dart
+- lib/screens/profile/banner_editor_screen.dart
+- lib/screens/profile/delivery_profile_screen.dart
+- lib/screens/avatar/avatar_builder_screen.dart
+- lib/widgets/universal_avatar.dart
+- lib/widgets/reactive_avatar.dart
+- lib/widgets/avatar_picker.dart
+- lib/widgets/banner_display.dart
+
+Portfolio
+- lib/screens/portfolio/portfolio_screen.dart
+- lib/screens/portfolio/add_portfolio_item_screen.dart
+- lib/screens/portfolio/my_shop_screen.dart
+- lib/services/portfolio_service.dart
+
+Shop and Orders
+- lib/screens/shop/shop_screen.dart
+- lib/screens/shop/product_detail_screen.dart
+- lib/screens/shop/add_product_screen.dart
+- lib/screens/shop/cart_screen.dart
+- lib/screens/shop/shop_storefront_screen.dart
+- lib/screens/shop/order_tracking_screen.dart
+- lib/widgets/product_card.dart
+- lib/widgets/gpay_simulation_dialog.dart
+- lib/services/cloudinary_service.dart
+
+Jobs
+- lib/screens/jobs/jobs_screen.dart
+- lib/screens/jobs/create_job_screen.dart
+- lib/screens/jobs/job_detail_screen.dart
+- lib/screens/jobs/company_applicants_tab.dart
+- lib/widgets/job_card.dart
+
+Chat
+- lib/screens/chat/chats_screen.dart
+- lib/screens/chat/chat_detail_screen.dart
+- lib/screens/chat/company_chat_hub_screen.dart
+- lib/screens/chat/pdf_viewer_screen.dart
+- lib/widgets/chat/chat_work_request_section.dart
+- lib/services/chat_service.dart
+
+Admin
+- lib/screens/admin/admin_screen.dart
+- lib/screens/admin/admin_products_tab.dart
+- lib/services/admin_bootstrap_service.dart
+- lib/services/delivery_partner_admin_service.dart
+
+Delivery
+- lib/screens/delivery/delivery_screen.dart
+- lib/services/delivery_partner_admin_service.dart
+
+Notifications
+- lib/screens/notifications/notifications_screen.dart
+- lib/utils/notification_helpers.dart
+
+Core Data Models
+----------------
+- lib/models/user_model.dart
+- lib/models/skilled_user_profile.dart
+- lib/models/customer_profile.dart
+- lib/models/company_profile.dart
+- lib/models/product_model.dart
+- lib/models/cart_item_model.dart
+- lib/models/order_model.dart
+- lib/models/job_model.dart
+- lib/models/service_model.dart
+- lib/models/service_request_model.dart
+- lib/models/chat_model.dart
+- lib/models/review_model.dart
+- lib/models/portfolio_model.dart
+- lib/models/appeal_model.dart
+- lib/models/dicebear_config.dart
+
+Services Layer
+--------------
+- lib/services/auth_service.dart: Firebase Auth, signup, login, user document creation.
+- lib/services/firestore_service.dart: Central Firestore CRUD and app data operations.
+- lib/services/chat_service.dart: Chat rooms, messages, unread counts, work chat flows.
+- lib/services/cloudinary_service.dart: Media upload handling.
+- lib/services/portfolio_service.dart: Portfolio CRUD.
+- lib/services/presence_service.dart: Online presence tracking.
+- lib/services/app_lock_service.dart: App lock and security support.
+- lib/services/biometric_service.dart: Biometric authentication support.
+- lib/services/internet_required_service.dart: Connectivity and network gating.
+- lib/services/offer_letter_service.dart: Offer letter related handling.
+- lib/services/admin_bootstrap_service.dart: Admin bootstrap flow.
+- lib/services/delivery_partner_admin_service.dart: Delivery partner/admin workflows.
+
+Providers
+---------
+- lib/providers/auth_provider.dart: Auth state, role helpers, session tracking.
+- lib/providers/user_provider.dart: Role-based profile loading and cached user data.
+- lib/providers/app_lock_provider.dart: App lock state.
+
+Widgets
+-------
+- lib/widgets/app_lock_gate.dart
+- lib/widgets/internet_required_gate.dart
+- lib/widgets/app_popup.dart
+- lib/widgets/filter_bottom_sheet.dart
+- lib/widgets/google_g_logo.dart
+- lib/widgets/expert_card.dart
+- lib/widgets/product_card.dart
+- lib/widgets/job_card.dart
+- lib/widgets/notification_bell.dart
+- lib/widgets/banner_display.dart
+- lib/widgets/universal_avatar.dart
+- lib/widgets/reactive_avatar.dart
+- lib/widgets/avatar_picker.dart
+- lib/widgets/category_card.dart
+- lib/widgets/gpay_simulation_dialog.dart
+- lib/widgets/chat/chat_work_request_section.dart
+
+Utils
+-----
+- lib/utils/app_constants.dart: App-wide constants, collection names, roles, statuses.
+- lib/utils/user_roles.dart: Role normalization and permission helpers.
+- lib/utils/app_theme.dart: Theme and color system.
+- lib/utils/app_fonts.dart: Font helpers.
+- lib/utils/app_helpers.dart: Shared helper functions.
+- lib/utils/app_dialog.dart: Dialog helpers.
+- lib/utils/profile_route_helper.dart: Profile navigation helpers.
+- lib/utils/web_image_loader.dart: Web-safe image loading.
+- lib/utils/cloudinary_config.dart: Cloudinary config.
+- lib/utils/modern_pickers.dart: Picker utilities.
+- lib/utils/notification_helpers.dart: Notification helper functions.
+- lib/utils/download_file.dart: Download abstraction.
+- lib/utils/download_file_web.dart: Web implementation.
+- lib/utils/download_file_stub.dart: Stub implementation.
+- lib/utils/xlsx_embedded_image_parser.dart: Excel/image parsing support.
+- lib/utils/add_dummy_profiles.dart: Seed/test profile helpers.
+
+Project Structure Notes
+-----------------------
+- There are 103 Dart files under lib in this workspace.
+- The app is organized by feature folders rather than a single flat screen folder.
+- Main user flows are role-aware, with different screens and actions depending on whether the user is a customer, skilled person, company, or admin.
+- Firestore is the central source of truth for users, profiles, products, jobs, chats, orders, reviews, appeals, and service requests.
+
+Firestore / Data Flow Summary
+-----------------------------
+- AuthService creates or loads the core user document.
+- UserProvider and AuthProvider keep user state available to the UI.
+- FirestoreService handles the majority of CRUD, stream, and business logic.
+- ChatService manages messaging and chat thread behavior.
+- PortfolioService and CloudinaryService support media-heavy profile and portfolio flows.
+- Admin and delivery services extend the same Firebase-backed data model for moderation and fulfillment.
+
+Short Version
+-------------
+SkillShare is a role-based Flutter marketplace and professional network with Firebase backend, built to connect skilled people, customers, companies, and admins through profiles, portfolios, products, jobs, chat, and delivery workflows.

@@ -42,12 +42,12 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
   final _locationController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   final CloudinaryService _cloudinaryService = CloudinaryService();
-  
+
   List<String> _interests = [];
   List<String> _lookingFor = [];
   bool _isLoading = true;
   bool _isUploading = false;
-  
+
   // Image variables
   File? _profileImage;
   Uint8List? _profileImageBytes; // For web
@@ -88,7 +88,8 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
       _bioController.text = profile.bio;
       _interests = List.from(profile.interests);
       _lookingFor = List.from(profile.lookingFor);
-      _profileImageUrl = (profile.profilePicture != null && profile.profilePicture!.trim().isNotEmpty)
+      _profileImageUrl = (profile.profilePicture != null &&
+              profile.profilePicture!.trim().isNotEmpty)
           ? profile.profilePicture
           : null;
       _locationController.text = profile.location ?? '';
@@ -201,7 +202,8 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
       final String? effectiveProfileUrl;
       if (finalProfileUrl != null && finalProfileUrl.isNotEmpty) {
         effectiveProfileUrl = finalProfileUrl;
-      } else if (currentProfile?.profilePicture != null && currentProfile!.profilePicture!.isNotEmpty) {
+      } else if (currentProfile?.profilePicture != null &&
+          currentProfile!.profilePicture!.isNotEmpty) {
         effectiveProfileUrl = currentProfile.profilePicture;
       } else {
         effectiveProfileUrl = null;
@@ -230,7 +232,8 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
 
       if (effectiveProfileUrl != null) {
         try {
-          await FirestoreService().updateUserProfilePhoto(widget.userId, effectiveProfileUrl);
+          await FirestoreService()
+              .updateUserProfilePhoto(widget.userId, effectiveProfileUrl);
 
           if (authProvider.currentUser != null) {
             final updatedUser = authProvider.currentUser!.copyWith(
@@ -245,22 +248,21 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
 
       if (!mounted) return;
 
-      AppDialog.success(context, 'Profile saved successfully!',
-          onDismiss: () {
-            if (widget.isEditing) {
-              Navigator.pop(context);
-            } else {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const MainNavigation(),
-                ),
-              );
-            }
-          });
+      AppDialog.success(context, 'Profile saved successfully!', onDismiss: () {
+        if (widget.isEditing) {
+          Navigator.pop(context);
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const MainNavigation(),
+            ),
+          );
+        }
+      });
     } catch (e) {
       if (!mounted) return;
-      
+
       AppDialog.error(context, 'Error saving profile', detail: e.toString());
     } finally {
       if (mounted) {
@@ -328,10 +330,12 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                                 Container(
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white, width: 3),
+                                    border: Border.all(
+                                        color: Colors.white, width: 3),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.3),
+                                        color:
+                                            Colors.black.withValues(alpha: 0.3),
                                         blurRadius: 12,
                                         offset: const Offset(0, 4),
                                       ),
@@ -341,7 +345,9 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                                     avatarConfig: _avatarConfig,
                                     avatarKey: _avatarKey,
                                     photoUrl: _profileImageUrl,
-                                    fallbackName: _bioController.text.isNotEmpty ? _bioController.text : 'U',
+                                    fallbackName: _bioController.text.isNotEmpty
+                                        ? _bioController.text
+                                        : 'U',
                                     radius: 52,
                                   ),
                                 ),
@@ -506,8 +512,8 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                           TextFormField(
                             controller: _locationController,
                             decoration: _inputDeco(
-                              label: 'Location',
-                              hint: 'City, State',
+                              label: 'Address',
+                              hint: 'House / street / area',
                               icon: Icons.location_on_outlined,
                             ),
                           ),
@@ -562,12 +568,14 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                                 return Chip(
                                   label: Text(interest,
                                       style: const TextStyle(color: _accent)),
-                                  deleteIcon: const Icon(Icons.close, size: 16, color: _accent),
+                                  deleteIcon: const Icon(Icons.close,
+                                      size: 16, color: _accent),
                                   onDeleted: () => _removeInterest(interest),
                                   backgroundColor: _accentSoft,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(20),
-                                    side: const BorderSide(color: _accentBorder),
+                                    side:
+                                        const BorderSide(color: _accentBorder),
                                   ),
                                 );
                               }).toList(),
@@ -593,7 +601,8 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                             onTap: () => _toggleLookingFor(category),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 8),
                               decoration: BoxDecoration(
                                 color: isSelected ? _accent : Colors.white,
                                 borderRadius: BorderRadius.circular(20),
@@ -615,14 +624,19 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   if (isSelected) ...[
-                                    const Icon(Icons.check, color: Colors.white, size: 14),
+                                    const Icon(Icons.check,
+                                        color: Colors.white, size: 14),
                                     const SizedBox(width: 4),
                                   ],
                                   Text(
                                     category,
                                     style: TextStyle(
-                                      color: isSelected ? Colors.white : const Color(0xFF455A64),
-                                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : const Color(0xFF455A64),
+                                      fontWeight: isSelected
+                                          ? FontWeight.w600
+                                          : FontWeight.w400,
                                       fontSize: 13,
                                     ),
                                   ),
@@ -669,7 +683,8 @@ class _CustomerSetupScreenState extends State<CustomerSetupScreen> {
                               ? const SizedBox(
                                   height: 22,
                                   width: 22,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 2.5),
                                 )
                               : const Text(
                                   'Complete Profile',

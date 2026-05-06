@@ -88,34 +88,15 @@ class AuthProvider with ChangeNotifier {
       if (!_isCurrentAuthLoad(uid, revision)) return;
 
       _currentUser = loadedUser;
+
       if (_currentUser == null) {
-        // getUserData returned null — could be "doc doesn't exist" OR
-        // a transient network/cache failure.  Do NOT overwrite role if
-        // the doc already exists — that would corrupt a skilled_person
-        // or company into a customer.
+        // If the user document was not found (e.g., they were deleted by an admin),
+        // we sign them out to complete the deletion process locally if no auth flows are active.
         final firebaseUser = _authService.currentUser;
-        if (firebaseUser != null) {
-          // Only create a fallback model for in-memory use.
-          // Do NOT write role to Firestore — the doc may already have
-          // the correct role; a merge with role:'customer' would overwrite it.
-          _currentUser = UserModel(
-            uid: uid,
-            email: firebaseUser.email ?? '',
-            name: firebaseUser.displayName ??
-                firebaseUser.email?.split('@').first ??
-                'User',
-            role: 'customer', // in-memory default only
-            profilePhoto: firebaseUser.photoURL,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
-          // Only merge non-role fields so we never corrupt the stored role.
-          // Use a minimal map that excludes 'role'.
-          try {
-            await _authService.mergeUserProfileWithoutRole(_currentUser!);
-          } catch (e) {
-            debugPrint('Fallback profile merge (without role) failed: $e');
-          }
+        if (firebaseUser != null && !_isEmailLoading && !_isGoogleLoading && !_isLoading) {
+          debugPrint('User document absent; signing out cached firebase user.');
+          _authService.signOut();
+          return;
         }
       }
       if (!_isCurrentAuthLoad(uid, revision)) return;

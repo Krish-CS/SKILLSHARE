@@ -46,8 +46,12 @@ class _PersonChatGroup {
   /// Total unread across all chats for a given userId.
   int totalUnread(String currentUserId) {
     int count = 0;
-    if (normalChat != null) count += normalChat!.unreadCount[currentUserId] ?? 0;
-    if (hiringChat != null) count += hiringChat!.unreadCount[currentUserId] ?? 0;
+    if (normalChat != null) {
+      count += normalChat!.unreadCount[currentUserId] ?? 0;
+    }
+    if (hiringChat != null) {
+      count += hiringChat!.unreadCount[currentUserId] ?? 0;
+    }
     for (final j in jobChats) {
       count += j.unreadCount[currentUserId] ?? 0;
     }
@@ -127,13 +131,16 @@ class _ChatsScreenState extends State<ChatsScreen> {
   }
 
   bool _isGhostEmptyDirectChat(ChatModel chat) {
-    if (_isJobChat(chat) || _isHiringChat(chat) || chat.isWorkChat || chat.isJobChat) {
+    if (_isJobChat(chat) ||
+        _isHiringChat(chat) ||
+        chat.isWorkChat ||
+        chat.isJobChat) {
       return false;
     }
     if (chat.participants.length != 2) return false;
     if (chat.lastMessage.trim().isNotEmpty) return false;
     final hasUnread =
-      chat.unreadCount.values.any((unreadValue) => unreadValue > 0);
+        chat.unreadCount.values.any((unreadValue) => unreadValue > 0);
     if (hasUnread) return false;
     return true;
   }
@@ -398,8 +405,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
                 if (snapshot.hasError) {
                   final isPermissionError =
                       snapshot.error is FirebaseException &&
-                      (snapshot.error as FirebaseException).code ==
-                          'permission-denied';
+                          (snapshot.error as FirebaseException).code ==
+                              'permission-denied';
 
                   if (hasCachedChats && !isPermissionError) {
                     return _buildGroupedChatList(chats: _lastKnownChats);
@@ -433,7 +440,9 @@ class _ChatsScreenState extends State<ChatsScreen> {
                 List<ChatModel> chats = snapshot.data!;
 
                 _scheduleGhostChatCleanup(chats);
-                chats = chats.where((chat) => !_isGhostEmptyDirectChat(chat)).toList();
+                chats = chats
+                    .where((chat) => !_isGhostEmptyDirectChat(chat))
+                    .toList();
 
                 // Filter chats based on search
                 if (_searchQuery.isNotEmpty) {
@@ -549,8 +558,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
     final companyGroups = _groupCompanyChats(allCompanyRelated);
 
     // Rebuild per-bucket lists excluding already-grouped persons
-    final groupedPersonIds =
-        companyGroups.map((g) => g.otherUserId).toSet();
+    final groupedPersonIds = companyGroups.map((g) => g.otherUserId).toSet();
     final soloCustomerChats = customerChats
         .where((c) => !groupedPersonIds.contains(_otherUserId(c)))
         .toList();
@@ -566,12 +574,24 @@ class _ChatsScreenState extends State<ChatsScreen> {
     }
 
     final orderedRegularSections = [
-      ('Customer Chats', Icons.person_outline_rounded, const Color(0xFF2E7D32),
-          soloCustomerChats),
-      ('Skilled Chats', Icons.groups_2_outlined, const Color(0xFF7B1FA2),
-        [...skilledChats, ...unknownChats]),
-      ('Delivery Chats', Icons.local_shipping_outlined,
-          const Color(0xFFEF6C00), deliveryChats),
+      (
+        'Customer Chats',
+        Icons.person_outline_rounded,
+        const Color(0xFF2E7D32),
+        soloCustomerChats
+      ),
+      (
+        'Skilled Chats',
+        Icons.groups_2_outlined,
+        const Color(0xFF7B1FA2),
+        [...skilledChats, ...unknownChats]
+      ),
+      (
+        'Delivery Chats',
+        Icons.local_shipping_outlined,
+        const Color(0xFFEF6C00),
+        deliveryChats
+      ),
     ];
 
     for (final section in orderedRegularSections) {
@@ -676,9 +696,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
             ),
             child: const TabBar(
               dividerColor: Colors.transparent,
-              isScrollable: true,
-              tabAlignment: TabAlignment.center,
-              labelPadding: EdgeInsets.symmetric(horizontal: 14),
+              isScrollable: false,
               indicatorSize: TabBarIndicatorSize.tab,
               indicator: BoxDecoration(
                 gradient: LinearGradient(
@@ -687,6 +705,14 @@ class _ChatsScreenState extends State<ChatsScreen> {
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.all(Radius.circular(12)),
+              ),
+              labelStyle: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+              unselectedLabelStyle: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
               ),
               labelColor: Colors.white,
               unselectedLabelColor: Color(0xFF8E24AA),
@@ -834,7 +860,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
   bool _isHiringChat(ChatModel chat) =>
       chat.isWorkChat || chat.id.startsWith('work_');
 
-  bool _isJobChat(ChatModel chat) => chat.isJobChat || chat.id.startsWith('jobchat_');
+  bool _isJobChat(ChatModel chat) =>
+      chat.isJobChat || chat.id.startsWith('jobchat_');
 
   String _otherUserId(ChatModel chat) {
     return chat.participants.firstWhere(
@@ -847,7 +874,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
     for (final chat in chats) {
       final otherUserId = _otherUserId(chat);
       if (otherUserId.isEmpty) continue;
-      if (_roleCache.containsKey(otherUserId) || _roleLoading.contains(otherUserId)) {
+      if (_roleCache.containsKey(otherUserId) ||
+          _roleLoading.contains(otherUserId)) {
         continue;
       }
       _loadRoleForUser(otherUserId);
@@ -960,7 +988,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
                             color: Color(0xFFE91E63),
                             shape: BoxShape.circle,
                           ),
-                          constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                          constraints:
+                              const BoxConstraints(minWidth: 20, minHeight: 20),
                           child: Center(
                             child: Text(
                               unreadCount > 99 ? '99+' : unreadCount.toString(),
@@ -992,7 +1021,9 @@ class _ChatsScreenState extends State<ChatsScreen> {
                           AppHelpers.capitalize(name),
                           style: TextStyle(
                             fontSize: 16,
-                            fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.w600,
+                            fontWeight: unreadCount > 0
+                                ? FontWeight.bold
+                                : FontWeight.w600,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1005,7 +1036,9 @@ class _ChatsScreenState extends State<ChatsScreen> {
                           color: unreadCount > 0
                               ? const Color(0xFFE91E63)
                               : Colors.grey[600],
-                          fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: unreadCount > 0
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                         ),
                       ),
                     ],
@@ -1015,8 +1048,10 @@ class _ChatsScreenState extends State<ChatsScreen> {
                     latestMsg.isEmpty ? 'No messages yet' : latestMsg,
                     style: TextStyle(
                       fontSize: 14,
-                      color: unreadCount > 0 ? Colors.black87 : Colors.grey[600],
-                      fontWeight: unreadCount > 0 ? FontWeight.w500 : FontWeight.normal,
+                      color:
+                          unreadCount > 0 ? Colors.black87 : Colors.grey[600],
+                      fontWeight:
+                          unreadCount > 0 ? FontWeight.w500 : FontWeight.normal,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1073,7 +1108,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
     final otherUserDetails = chat.participantDetails[otherUserId];
     final name = otherUserDetails?['name'] ?? 'Unknown';
     final photo = otherUserDetails?['photo'];
-    final unreadCount = activeUserId == null ? 0 : (chat.unreadCount[activeUserId] ?? 0);
+    final unreadCount =
+        activeUserId == null ? 0 : (chat.unreadCount[activeUserId] ?? 0);
     final pendingWork = _pendingWorkCounts[chat.id] ?? 0;
     final isJobChat = _isJobChat(chat);
     final jobTitle = (chat.jobTitle ?? '').trim();

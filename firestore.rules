@@ -20,8 +20,8 @@ service cloud.firestore {
     // Users collection - basic user info
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isOwner(userId) || isAdmin();
-      allow update: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && request.resource.data.role != 'admin' || isAdmin();
+      allow update: if isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'uid', 'email', 'createdAt', 'isActive', 'isSuspended']) || isAdmin();
       allow delete: if isOwner(userId) || isAdmin();
     }
     
@@ -29,15 +29,15 @@ service cloud.firestore {
     match /skilled_users/{userId} {
       allow read: if isAuthenticated();
       allow create: if isOwner(userId) || isAdmin();
-      // Owner can update anything; other authenticated users can only update
-      // rating/reviewCount (review flow), profileViews (analytics flow), or
-      // projectCount (updated by the company when accepting a job application).
+      // Owner cannot self-verify or artificially boost ratings.
+      // others can update rating/reviewCount (review flow), profileViews (analytics flow), or projectCount.
       allow update: if isAuthenticated() && (
         isAdmin() ||
-        isOwner(userId) ||
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['rating', 'reviewCount', 'updatedAt', 'profileViews',
-                    'projectCount'])
+        (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['isVerified', 'verificationStatus', 'verifiedAt', 'rejectionReason',
+                   'rating', 'reviewCount', 'profileViews', 'projectCount', 'companyEndorsementCount'])) ||
+        (!isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['rating', 'reviewCount', 'updatedAt', 'profileViews', 'projectCount', 'companyEndorsementCount']))
       );
       allow delete: if isOwner(userId) || isAdmin();
 
@@ -55,14 +55,30 @@ service cloud.firestore {
     // Customer profiles collection
     match /customer_profiles/{userId} {
       allow read: if isAuthenticated();
-      allow create, update: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) || isAdmin();
+      // Owners cannot self-verify. Others can append projects safely.
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['isVerified', 'verificationStatus', 'verifiedAt', 'rating', 'reviewCount'])) ||
+        (!isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['assignedProjects', 'updatedAt']))
+      );
       allow delete: if isOwner(userId) || isAdmin();
     }
 
     // Company profiles collection
     match /company_profiles/{userId} {
       allow read: if isAuthenticated();
-      allow create, update: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) || isAdmin();
+      // Owners cannot self-verify or self-rate. Others can rate or append projects safely.
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['isVerified', 'verificationStatus', 'verifiedAt', 'rating', 'reviewCount'])) ||
+        (!isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['assignedProjects', 'updatedAt', 'rating', 'reviewCount']))
+      );
       allow delete: if isOwner(userId) || isAdmin();
     }
 
@@ -117,7 +133,14 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
         request.resource.data.userId == request.auth.uid;
       allow update: if isAuthenticated() &&
-        resource.data.userId == request.auth.uid;
+        (
+          resource.data.userId == request.auth.uid ||
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'isAvailable', 'updatedAt']) &&
+            request.resource.data.stock >= 0 &&
+            request.resource.data.stock <= resource.data.stock
+          )
+        );
       allow delete: if isAuthenticated() &&
         resource.data.userId == request.auth.uid;
     }
@@ -150,13 +173,15 @@ service cloud.firestore {
       allow read: if isAuthenticated() &&
         (resource.data.buyerId == request.auth.uid ||
          resource.data.sellerId == request.auth.uid ||
-         resource.data.deliveryPartnerId == request.auth.uid);
+         resource.data.deliveryPartnerId == request.auth.uid ||
+         (resource.data.deliveryByPartner == true && (!("deliveryPartnerId" in resource.data) || resource.data.deliveryPartnerId == null || resource.data.deliveryPartnerId == '')));
       allow create: if isAuthenticated() &&
         request.resource.data.buyerId == request.auth.uid;
       allow update: if isAuthenticated() &&
         (resource.data.sellerId == request.auth.uid ||
          resource.data.buyerId == request.auth.uid ||
-         resource.data.deliveryPartnerId == request.auth.uid);
+         resource.data.deliveryPartnerId == request.auth.uid ||
+         (resource.data.deliveryByPartner == true && request.resource.data.deliveryPartnerId == request.auth.uid));
       allow delete: if false;
     }
     
@@ -177,15 +202,23 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
         (request.resource.data.companyId == request.auth.uid ||
          request.resource.data.postedBy == request.auth.uid);
-      // Owner can update anything; skilled users can apply (modify applicants,
-      // applicationStatus & updatedAt only); company or applicant can record
-      // the applicationChatIds link created when the chat is opened.
       allow update: if isAuthenticated() && (
         resource.data.companyId == request.auth.uid ||
         resource.data.postedBy == request.auth.uid ||
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['applicants', 'applicationStatus', 'updatedAt',
-                    'applicationChatIds'])
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['applicants', 'applicationStatus', 'updatedAt', 'applicationChatIds']) &&
+          (!('applicationStatus' in request.resource.data.diff(resource.data).affectedKeys()) ||
+             (request.resource.data.get('applicationStatus', {}).diff(resource.data.get('applicationStatus', {})).affectedKeys().hasOnly([request.auth.uid]) &&
+              request.resource.data.get('applicationStatus', {})[request.auth.uid] == 'pending')
+          ) &&
+          (!('applicationChatIds' in request.resource.data.diff(resource.data).affectedKeys()) ||
+             request.resource.data.get('applicationChatIds', {}).diff(resource.data.get('applicationChatIds', {})).affectedKeys().hasOnly([request.auth.uid])
+          ) &&
+          (!('applicants' in request.resource.data.diff(resource.data).affectedKeys()) ||
+             request.auth.uid in request.resource.data.applicants
+          )
+        )
       );
       allow delete: if isAuthenticated() &&
         (resource.data.companyId == request.auth.uid ||
@@ -202,10 +235,17 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
         request.auth.uid in request.resource.data.participants;
       allow update: if isAuthenticated() && 
-        (resource.data.requesterId == request.auth.uid ||
-         resource.data.customerId == request.auth.uid ||
-         resource.data.skilledUserId == request.auth.uid ||
-         request.auth.uid in resource.data.participants);
+        (
+          (resource.data.requesterId == request.auth.uid ||
+           resource.data.customerId == request.auth.uid ||
+           (request.auth.uid in resource.data.participants && resource.data.skilledUserId != request.auth.uid))
+          ||
+          (resource.data.skilledUserId == request.auth.uid &&
+           request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['status', 'responseMessage', 'respondedAt', 'updatedAt', 'workChatId', 'rejectionReason']) &&
+           (resource.data.status != 'completed' || request.resource.data.status == 'completed')
+          )
+        );
       allow delete: if isAuthenticated() &&
         (resource.data.requesterId == request.auth.uid ||
          resource.data.customerId == request.auth.uid);
@@ -218,7 +258,8 @@ service cloud.firestore {
       allow create: if isAuthenticated() && 
         request.auth.uid in request.resource.data.participants;
       allow update: if isAuthenticated() && 
-        request.auth.uid in resource.data.participants;
+        request.auth.uid in resource.data.participants &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['participants']);
       allow delete: if isAuthenticated() &&
         request.auth.uid in resource.data.participants;
       
@@ -234,12 +275,11 @@ service cloud.firestore {
           resource.data.senderId == request.auth.uid ||
           (
             request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants &&
-            request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['isRead', 'readAt'])
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'readAt'])
           )
         );
         allow delete: if isAuthenticated() &&
-          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+          request.auth.uid == resource.data.senderId;
       }
     }
     
