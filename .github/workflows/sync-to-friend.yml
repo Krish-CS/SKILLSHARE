@@ -18,4 +18,4 @@ jobs:
       - name: Push to Friend's Repository
         run: |
           git remote add friend "https://${{ secrets.FRIEND_TOKEN }}@github.com/ARON08-AJ/SKILLSHARE.git"
-          git push friend main --force
+          git push friend HEAD:main --force
