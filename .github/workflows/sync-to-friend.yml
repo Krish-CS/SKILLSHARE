@@ -15,7 +15,16 @@ jobs:
           fetch-depth: 0
           persist-credentials: false # CRITICAL FIX: Prevents using the default GitHub bot token
 
+      - name: Determine Target Repository
+        id: target
+        run: |
+          if [ "${{ github.repository }}" = "Krish-CS/SKILLSHARE" ]; then
+            echo "repo=ARON08-AJ/SKILLSHARE" >> $GITHUB_OUTPUT
+          else
+            echo "repo=Krish-CS/SKILLSHARE" >> $GITHUB_OUTPUT
+          fi
+
       - name: Push to Friend's Repository
         run: |
-          git remote add friend "https://${{ secrets.FRIEND_TOKEN }}@github.com/ARON08-AJ/SKILLSHARE.git"
+          git remote add friend "https://${{ secrets.FRIEND_TOKEN }}@github.com/${{ steps.target.outputs.repo }}.git"
           git push friend HEAD:main --force
