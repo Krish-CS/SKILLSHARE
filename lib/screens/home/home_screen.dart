@@ -1141,6 +1141,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: Center(
                       child: UniversalAvatar(
+                        avatarConfig: profile.avatarConfig,
                         photoUrl: profile.profilePicture,
                         fallbackName: profile.name,
                         radius: 42,

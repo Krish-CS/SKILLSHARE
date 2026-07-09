@@ -93,13 +93,16 @@ class _ReactiveAvatarState extends State<ReactiveAvatar> {
           );
         }
 
+        final livePhoto = user.profilePhoto?.trim();
         return UniversalAvatar(
           radius: widget.radius,
-          fallbackName:
-              user.name.isNotEmpty ? user.name : widget.fallbackName,
-          photoUrl: user.profilePhoto,
-          avatarConfig: user.avatarConfig,
+          fallbackName: user.name.isNotEmpty ? user.name : widget.fallbackName,
+          photoUrl: livePhoto != null && livePhoto.isNotEmpty
+              ? livePhoto
+              : widget.initialPhotoUrl,
+          avatarConfig: user.avatarConfig ?? widget.initialAvatarConfig,
           // avatarKey is usually encapsulated inside avatarConfig or profilePhoto on an updated profile
+          avatarKey: widget.initialAvatarKey,
         );
       },
     );

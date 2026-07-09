@@ -61,13 +61,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _targetShowEmail = false;
   bool _targetShowPhone = false;
 
-  // Company endorsement state
   int _companyEndorsementCount = 0;
   bool _hasCurrentCompanyEndorsed = false;
   StreamSubscription? _endorsementCountSub;
   StreamSubscription? _endorsementStateSub;
 
-  // Check if user is viewing their own profile
   bool get isOwnProfile =>
       FirebaseAuth.instance.currentUser?.uid == widget.userId;
 
@@ -779,8 +777,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // Load user basic info
       try {
         _userData = await _firestoreService.getUserById(widget.userId);
-        _userRole = UserRoles.normalizeRole(_userData?.role ?? '') ??
-            _userData?.role;
+        _userRole =
+            UserRoles.normalizeRole(_userData?.role ?? '') ?? _userData?.role;
       } catch (e) {
         debugPrint('Could not load user data: $e');
       }
@@ -1288,9 +1286,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 radius: avatarRadius,
                                 backgroundColor: Colors.white,
                                 child: UniversalAvatar(
-                                  avatarConfig: _profile?.avatarConfig ?? _userData?.avatarConfig,
+                                  avatarConfig: _profile?.avatarConfig ??
+                                      _userData?.avatarConfig,
                                   photoUrl: _profile!.profilePicture,
-                                  fallbackName: _userData?.name ?? _profile!.name,
+                                  fallbackName:
+                                      _userData?.name ?? _profile!.name,
                                   radius: avatarRadius - 1,
                                 ),
                               ),
@@ -1575,7 +1575,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 radius: avatarRadius,
                                 backgroundColor: Colors.white,
                                 child: UniversalAvatar(
-                                  avatarConfig: _profile?.avatarConfig ?? _customerProfile?.avatarConfig ?? _companyProfile?.avatarConfig ?? _userData?.avatarConfig,
+                                  avatarConfig: _profile?.avatarConfig ??
+                                      _customerProfile?.avatarConfig ??
+                                      _companyProfile?.avatarConfig ??
+                                      _userData?.avatarConfig,
                                   photoUrl: imageUrl,
                                   fallbackName: _userData?.name,
                                   radius: avatarRadius - 1,
@@ -1747,16 +1750,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (_profile!.city != null || _profile!.address != null)
             Row(
               children: [
-                if (_profile!.city != null || _profile!.address != null) ...[
-                  const Icon(Icons.location_on_rounded,
-                      size: 14, color: Color(0xFF9E9E9E)),
-                  const SizedBox(width: 3),
-                  Text(
+                const Icon(Icons.location_on_rounded,
+                    size: 14, color: Color(0xFF9E9E9E)),
+                const SizedBox(width: 3),
+                Expanded(
+                  child: Text(
                     _profile!.city ?? _profile!.address ?? '',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style:
                         const TextStyle(color: Color(0xFF9E9E9E), fontSize: 13),
                   ),
-                ],
+                ),
               ],
             ),
 
@@ -3586,7 +3591,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 radius: avatarRadius,
                                 backgroundColor: Colors.white,
                                 child: UniversalAvatar(
-                                  avatarConfig: _profile?.avatarConfig ?? _customerProfile?.avatarConfig ?? _companyProfile?.avatarConfig ?? _userData?.avatarConfig,
+                                  avatarConfig: _profile?.avatarConfig ??
+                                      _customerProfile?.avatarConfig ??
+                                      _companyProfile?.avatarConfig ??
+                                      _userData?.avatarConfig,
                                   photoUrl: imageUrl,
                                   fallbackName: _userData?.name,
                                   radius: avatarRadius - 1,
@@ -4101,7 +4109,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 radius: avatarRadius,
                                 backgroundColor: Colors.white,
                                 child: UniversalAvatar(
-                                  avatarConfig: _profile?.avatarConfig ?? _customerProfile?.avatarConfig ?? _companyProfile?.avatarConfig ?? _userData?.avatarConfig,
+                                  avatarConfig: _profile?.avatarConfig ??
+                                      _customerProfile?.avatarConfig ??
+                                      _companyProfile?.avatarConfig ??
+                                      _userData?.avatarConfig,
                                   photoUrl: imageUrl,
                                   fallbackName: profile.companyName,
                                   radius: avatarRadius - 1,
@@ -4772,4 +4783,3 @@ class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {
     );
   }
 }
-

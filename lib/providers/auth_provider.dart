@@ -17,6 +17,7 @@ class AuthProvider with ChangeNotifier {
   bool _isLoading = false; // used by signup / resetPassword
   bool _isEmailLoading = false; // used by email sign-in only
   bool _isGoogleLoading = false; // used by Google sign-in only
+  bool _isSigningOut = false;
   String? _error;
 
   UserModel? get currentUser => _currentUser;
@@ -29,6 +30,7 @@ class AuthProvider with ChangeNotifier {
 
   /// True only while the Google sign-in button is loading.
   bool get isGoogleLoading => _isGoogleLoading;
+  bool get isSigningOut => _isSigningOut;
   String? get error => _error;
   bool get isAuthenticated => _currentUser != null;
 
@@ -93,7 +95,10 @@ class AuthProvider with ChangeNotifier {
         // If the user document was not found (e.g., they were deleted by an admin),
         // we sign them out to complete the deletion process locally if no auth flows are active.
         final firebaseUser = _authService.currentUser;
-        if (firebaseUser != null && !_isEmailLoading && !_isGoogleLoading && !_isLoading) {
+        if (firebaseUser != null &&
+            !_isEmailLoading &&
+            !_isGoogleLoading &&
+            !_isLoading) {
           debugPrint('User document absent; signing out cached firebase user.');
           _authService.signOut();
           return;
@@ -171,11 +176,18 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> signOut() async {
     ++_authRevision;
-    _currentUser = null;
+    _isSigningOut = true;
     _error = null;
     notifyListeners();
-    PresenceService.instance.stopTracking();
-    await _authService.signOut();
+    try {
+      PresenceService.instance.stopTracking();
+      await _authService.signOut();
+      _currentUser = null;
+      _error = null;
+    } finally {
+      _isSigningOut = false;
+      notifyListeners();
+    }
   }
 
   Future<bool> signInWithGoogle({String defaultRole = 'customer'}) async {

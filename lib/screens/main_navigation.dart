@@ -17,6 +17,7 @@ import 'profile/profile_tab_screen.dart';
 import 'portfolio/my_shop_screen.dart';
 import 'admin/admin_screen.dart';
 import 'delivery/delivery_screen.dart';
+import 'auth/login_screen.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -29,6 +30,7 @@ class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
   final FirestoreService _firestoreService = FirestoreService();
   final ChatService _chatService = ChatService();
+  bool _redirectingToLogin = false;
 
   // ── In-app notification banners ─────────────────────────────────────────
   StreamSubscription<QuerySnapshot>? _notifSub;
@@ -80,14 +82,25 @@ class _MainNavigationState extends State<MainNavigation> {
     // Capture role synchronously — used inside the async listener to avoid
     // accessing BuildContext across an async gap.
     final capturedRole = auth.userRole ?? UserRoles.customer;
-    if (uid == null || uid == _watchingUserId) return;
+    if (uid == null) {
+      _watchingUserId = null;
+      _notifSub?.cancel();
+      _orderNotifSub?.cancel();
+      _settingsSub?.cancel();
+      _notifSub = null;
+      _orderNotifSub = null;
+      _settingsSub = null;
+      return;
+    }
+    if (uid == _watchingUserId) return;
     _watchingUserId = uid;
     _notifSub?.cancel();
     _orderNotifSub?.cancel();
     _settingsSub?.cancel();
 
     _settingsSub = _firestoreService.userSettingsStream(uid).listen((settings) {
-      _pushNotificationsEnabled = settings['pushNotifications'] as bool? ?? true;
+      _pushNotificationsEnabled =
+          settings['pushNotifications'] as bool? ?? true;
       _jobNotificationsEnabled = settings['jobNotifications'] as bool? ?? true;
     });
 
@@ -215,6 +228,30 @@ class _MainNavigationState extends State<MainNavigation> {
     final authProvider = Provider.of<AuthProvider>(context);
     final userRole = authProvider.userRole ?? UserRoles.customer;
     final currentUserId = authProvider.currentUser?.uid;
+
+    if (authProvider.isSigningOut) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (authProvider.currentUser == null) {
+      if (!_redirectingToLogin) {
+        _redirectingToLogin = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+            (route) => false,
+          );
+        });
+      }
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    _redirectingToLogin = false;
 
     // Start/reattach the banner stream when the logged-in user changes
     _initBannerStream();

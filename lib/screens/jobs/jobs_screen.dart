@@ -129,9 +129,8 @@ class _JobsScreenState extends State<JobsScreen> {
     // For skilled persons: also stream the jobs they have applied to
     if (!isCompany && currentUid != null) {
       _appliedJobsSub?.cancel();
-      _appliedJobsSub = _firestoreService
-          .streamAppliedJobs(currentUid)
-          .listen((jobs) {
+      _appliedJobsSub =
+          _firestoreService.streamAppliedJobs(currentUid).listen((jobs) {
         if (mounted) setState(() => _appliedJobs = jobs);
       });
     } else {
@@ -228,17 +227,17 @@ class _JobsScreenState extends State<JobsScreen> {
           builder: (_) => ChatDetailScreen(
             chatId: chatId,
             otherUserId: job.companyId,
-            otherUserName:
-                (companyUser?.name.trim().isNotEmpty == true)
-                    ? companyUser!.name.trim()
-                    : 'Company',
+            otherUserName: (companyUser?.name.trim().isNotEmpty == true)
+                ? companyUser!.name.trim()
+                : 'Company',
             otherUserPhoto: companyUser?.profilePhoto,
           ),
         ),
       );
     } catch (e) {
       if (mounted) {
-        AppDialog.error(context, 'Unable to open job chat', detail: e.toString());
+        AppDialog.error(context, 'Unable to open job chat',
+            detail: e.toString());
       }
     } finally {
       if (mounted && _openingJobChatForJobId == job.id) {
@@ -268,7 +267,8 @@ class _JobsScreenState extends State<JobsScreen> {
       final goVerify = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
           title: const Row(
             children: [
               Icon(Icons.verified_user_outlined, color: Color(0xFF4527A0)),
@@ -355,7 +355,8 @@ class _JobsScreenState extends State<JobsScreen> {
             ),
           ],
           bottom: const TabBar(
-            isScrollable: true,
+            isScrollable: false,
+            indicatorSize: TabBarIndicatorSize.tab,
             indicatorColor: Colors.white,
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white60,
@@ -409,8 +410,11 @@ class _JobsScreenState extends State<JobsScreen> {
     }
 
     // ── Skilled Person: tabbed view ──────────────────────────────────────────
-    final acceptedCount =
-        _appliedJobs.where((j) => j.applicationStatus[FirebaseAuth.instance.currentUser?.uid ?? ''] == 'accepted').length;
+    final acceptedCount = _appliedJobs
+        .where((j) =>
+            j.applicationStatus[FirebaseAuth.instance.currentUser?.uid ?? ''] ==
+            'accepted')
+        .length;
 
     return DefaultTabController(
       length: 2,
@@ -437,20 +441,20 @@ class _JobsScreenState extends State<JobsScreen> {
             child: Container(
               decoration: BoxDecoration(
                 border: Border(
-                  bottom: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.14)),
+                  bottom:
+                      BorderSide(color: Colors.white.withValues(alpha: 0.14)),
                 ),
               ),
               child: TabBar(
-                isScrollable: true,
+                isScrollable: false,
+                indicatorSize: TabBarIndicatorSize.tab,
                 indicatorColor: Colors.white,
                 indicatorWeight: 3,
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.white70,
                 tabs: [
                   const Tab(
-                      icon: Icon(Icons.search, size: 18),
-                      text: 'Browse Jobs'),
+                      icon: Icon(Icons.search, size: 18), text: 'Browse Jobs'),
                   Tab(
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -523,15 +527,17 @@ class _JobsScreenState extends State<JobsScreen> {
     }
 
     // Group by status
-    final accepted =
-        _appliedJobs.where((j) => j.applicationStatus[userId] == 'accepted').toList();
+    final accepted = _appliedJobs
+        .where((j) => j.applicationStatus[userId] == 'accepted')
+        .toList();
     final pending = _appliedJobs
         .where((j) =>
             j.applicationStatus[userId] == 'pending' ||
             j.applicationStatus[userId] == null)
         .toList();
-    final rejected =
-        _appliedJobs.where((j) => j.applicationStatus[userId] == 'rejected').toList();
+    final rejected = _appliedJobs
+        .where((j) => j.applicationStatus[userId] == 'rejected')
+        .toList();
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -544,15 +550,15 @@ class _JobsScreenState extends State<JobsScreen> {
           const SizedBox(height: 16),
         ],
         if (pending.isNotEmpty) ...[
-          _sectionHeader(
-              Icons.hourglass_top, 'Pending Review', Colors.orange, pending.length),
+          _sectionHeader(Icons.hourglass_top, 'Pending Review', Colors.orange,
+              pending.length),
           const SizedBox(height: 8),
           ...pending.map((j) => _appliedJobCard(j, userId, 'pending')),
           const SizedBox(height: 16),
         ],
         if (rejected.isNotEmpty) ...[
-          _sectionHeader(
-              Icons.cancel_outlined, 'Not Selected', Colors.red, rejected.length),
+          _sectionHeader(Icons.cancel_outlined, 'Not Selected', Colors.red,
+              rejected.length),
           const SizedBox(height: 8),
           ...rejected.map((j) => _appliedJobCard(j, userId, 'rejected')),
         ],
@@ -560,17 +566,14 @@ class _JobsScreenState extends State<JobsScreen> {
     );
   }
 
-  Widget _sectionHeader(
-      IconData icon, String title, Color color, int count) {
+  Widget _sectionHeader(IconData icon, String title, Color color, int count) {
     return Row(
       children: [
         Icon(icon, size: 16, color: color),
         const SizedBox(width: 6),
         Text(title,
             style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: color)),
+                fontSize: 13, fontWeight: FontWeight.bold, color: color)),
         const SizedBox(width: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -608,8 +611,7 @@ class _JobsScreenState extends State<JobsScreen> {
       child: InkWell(
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(
-              builder: (_) => JobDetailScreen(job: job)),
+          MaterialPageRoute(builder: (_) => JobDetailScreen(job: job)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -682,8 +684,8 @@ class _JobsScreenState extends State<JobsScreen> {
                           Expanded(
                             child: Text(
                               'Application accepted. Use Manage Chat to discuss this job and view offer letters.',
-                              style: TextStyle(
-                                  fontSize: 12, color: Colors.green),
+                              style:
+                                  TextStyle(fontSize: 12, color: Colors.green),
                             ),
                           ),
                         ],
@@ -700,7 +702,8 @@ class _JobsScreenState extends State<JobsScreen> {
                             ? const SizedBox(
                                 width: 14,
                                 height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Icon(Icons.chat_bubble_outline_rounded,
                                 size: 16),
@@ -712,7 +715,8 @@ class _JobsScreenState extends State<JobsScreen> {
                         style: OutlinedButton.styleFrom(
                           foregroundColor: const Color(0xFF1565C0),
                           side: BorderSide(
-                            color: const Color(0xFF1565C0).withValues(alpha: 0.35),
+                            color:
+                                const Color(0xFF1565C0).withValues(alpha: 0.35),
                           ),
                           padding: const EdgeInsets.symmetric(vertical: 10),
                         ),
@@ -744,7 +748,6 @@ class _JobsScreenState extends State<JobsScreen> {
           ],
         ),
       );
-
 
   // ─── Shared jobs list body ────────────────────────────────────────────────
 
@@ -791,8 +794,8 @@ class _JobsScreenState extends State<JobsScreen> {
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
               ),
               const SizedBox(height: 12),

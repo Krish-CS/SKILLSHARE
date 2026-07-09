@@ -6,6 +6,7 @@ import '../../services/firestore_service.dart';
 import '../../utils/app_helpers.dart';
 import '../../utils/app_dialog.dart';
 import '../../utils/modern_pickers.dart';
+import '../chat/chat_detail_screen.dart';
 import '../shop/order_tracking_screen.dart';
 
 class DeliveryScreen extends StatefulWidget {
@@ -62,7 +63,8 @@ class _DeliveryScreenState extends State<DeliveryScreen>
         ),
         bottom: TabBar(
           controller: _tabController,
-          isScrollable: true,
+          isScrollable: false,
+          indicatorSize: TabBarIndicatorSize.tab,
           indicatorColor: Colors.white,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
@@ -334,6 +336,26 @@ class _DeliveryCard extends StatelessWidget {
                   ),
                 ],
               ),
+            if (isAssigned && order.sellerId.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openSellerChat(context, order, partnerId),
+                    icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                    label: const Text('Chat with Skilled Person'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF7B1FA2),
+                      side: const BorderSide(color: Color(0xFF7B1FA2)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                  ),
+                ),
+              ),
             if (isAssigned && order.status == 'out_for_delivery')
               Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -363,6 +385,44 @@ class _DeliveryCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _openSellerChat(
+    BuildContext context,
+    OrderModel order,
+    String partnerId,
+  ) async {
+    try {
+      final service = FirestoreService();
+      final seller = await service.getUserById(order.sellerId);
+      final chatId = await service.ensureDeliverySellerChat(
+        orderId: order.id,
+        deliveryPartnerId: partnerId,
+        deliveryPartnerName: partnerName,
+      );
+      if (!context.mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatDetailScreen(
+            chatId: chatId,
+            otherUserId: order.sellerId,
+            otherUserName: seller?.name.trim().isNotEmpty == true
+                ? seller!.name
+                : 'Skilled Person',
+            otherUserPhoto: seller?.profilePhoto,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) {
+        AppDialog.error(
+          context,
+          'Unable to open chat',
+          detail: e.toString(),
+        );
+      }
+    }
   }
 
   Future<void> _updateStatus(

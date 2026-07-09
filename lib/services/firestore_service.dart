@@ -72,8 +72,7 @@ class FirestoreService {
   final Random _random = Random.secure();
   static const String _aadhaarRegistryCollection =
       AppConstants.aadhaarRegistryCollection;
-  static const String _companyVerificationReportType =
-      'company_verification';
+  static const String _companyVerificationReportType = 'company_verification';
 
   String _generateDeliveryVerificationCode() =>
       (_random.nextInt(900000) + 100000).toString();
@@ -460,6 +459,7 @@ class FirestoreService {
       'name': safeName.isEmpty ? 'User' : safeName,
       'photo': safePhoto,
       if (safeRole.isNotEmpty) 'role': safeRole,
+      if (user?.avatarConfig != null) 'avatarConfig': user!.avatarConfig,
     };
   }
 
@@ -526,6 +526,21 @@ class FirestoreService {
     };
 
     try {
+      final existingChat = await chatRef.get();
+      if (existingChat.exists) {
+        await chatRef.set({
+          'participants': participants,
+          'participantDetails': {
+            userAId: _participantDetailsFromUser(userA),
+            userBId: _participantDetailsFromUser(userB),
+          },
+          'isWorkChat': false,
+          'isJobChat': false,
+          'chatCategory': _deriveDirectChatCategory(userA, userB),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        return chatId;
+      }
       await chatRef.set(chatData, SetOptions(merge: true));
       return chatId;
     } on FirebaseException catch (e) {
@@ -535,6 +550,88 @@ class FirestoreService {
           .add(chatData);
       return fallbackRef.id;
     }
+  }
+
+  Future<String> ensureDeliverySellerChat({
+    required String orderId,
+    required String deliveryPartnerId,
+    required String deliveryPartnerName,
+  }) async {
+    final orderRef =
+        _firestore.collection(AppConstants.ordersCollection).doc(orderId);
+    final orderSnap = await orderRef.get();
+    if (!orderSnap.exists) {
+      throw Exception('Order not found.');
+    }
+
+    final data = orderSnap.data() ?? <String, dynamic>{};
+    final assignedId = (data['deliveryPartnerId'] as String?)?.trim() ?? '';
+    if (assignedId != deliveryPartnerId) {
+      throw Exception('You are not assigned to this delivery.');
+    }
+    return _ensureDeliverySellerChatFromOrderData(
+      orderId: orderId,
+      orderData: data,
+      deliveryPartnerId: deliveryPartnerId,
+      deliveryPartnerName: deliveryPartnerName,
+    );
+  }
+
+  Future<String> _ensureDeliverySellerChatFromOrderData({
+    required String orderId,
+    required Map<String, dynamic> orderData,
+    required String deliveryPartnerId,
+    required String deliveryPartnerName,
+  }) async {
+    final sellerId = (orderData['sellerId'] as String?)?.trim() ?? '';
+    if (sellerId.isEmpty) {
+      throw Exception('Seller details are missing for this delivery.');
+    }
+
+    final now = DateTime.now();
+    final seller = await getUserById(sellerId);
+    final deliveryPartner = await getUserById(deliveryPartnerId) ??
+        UserModel(
+          uid: deliveryPartnerId,
+          email: '',
+          name: deliveryPartnerName.trim().isEmpty
+              ? 'Delivery Partner'
+              : deliveryPartnerName.trim(),
+          role: UserRoles.deliveryPartner,
+          createdAt: now,
+          updatedAt: now,
+        );
+
+    final chatId = await _ensureDirectChatBetweenUsers(
+      userA: deliveryPartner,
+      userB: seller,
+      userAId: deliveryPartnerId,
+      userBId: sellerId,
+    );
+
+    final productName =
+        (orderData['productName'] as String?)?.trim() ?? 'this delivery';
+    final chatRef =
+        _firestore.collection(AppConstants.chatsCollection).doc(chatId);
+    final chatSnap = await chatRef.get();
+    final currentLastMessage =
+        (chatSnap.data()?['lastMessage'] as String?)?.trim() ?? '';
+    final updateData = <String, dynamic>{
+      'deliveryOrderIds': FieldValue.arrayUnion([orderId]),
+      'chatCategory': 'delivery',
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    if (currentLastMessage.isEmpty ||
+        currentLastMessage.startsWith('Delivery chat opened for ')) {
+      updateData.addAll({
+        'lastMessage': 'Delivery chat opened for $productName',
+        'lastMessageType': 'delivery_update',
+        'lastMessageTime': FieldValue.serverTimestamp(),
+      });
+    }
+    await chatRef.set(updateData, SetOptions(merge: true));
+
+    return chatId;
   }
 
   Future<String> _ensureWorkProjectChat({
@@ -882,7 +979,10 @@ class FirestoreService {
     final normalizedUserId = userId.trim();
     if (normalizedUserId.isEmpty) return;
 
-    await _firestore.collection(AppConstants.usersCollection).doc(normalizedUserId).set(
+    await _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(normalizedUserId)
+        .set(
       {'lastNotificationSeenAt': FieldValue.serverTimestamp()},
       SetOptions(merge: true),
     );
@@ -2677,7 +2777,7 @@ class FirestoreService {
       createdOrders.add(order);
       batch.set(orderRef, order.toMap());
       final remainingStock = latestProduct.stock - item.quantity;
-      
+
       // Update the product within the batch to ensure consistency.
       batch.update(productRef, {
         'stock': remainingStock,
@@ -2907,22 +3007,24 @@ class FirestoreService {
             'This order is not configured for delivery partner flow.');
       }
       if (status != 'confirmed' && status != 'failed_delivery') {
-        throw Exception('Only confirmed or failed orders can be accepted for delivery.');
+        throw Exception(
+            'Only confirmed or failed orders can be accepted for delivery.');
       }
       if (status == 'confirmed' && assignedPartnerId.isNotEmpty) {
-        throw Exception('This order is already assigned to a delivery partner.');
+        throw Exception(
+            'This order is already assigned to a delivery partner.');
       }
 
       final updateData = <String, dynamic>{
         'deliveryPartnerId': deliveryPartnerId,
         'deliveryPartnerName': deliveryPartnerName,
+        'status': 'out_for_delivery',
+        'statusTimeline.out_for_delivery': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
-      
+
       if (status == 'failed_delivery') {
-        updateData['status'] = 'confirmed';
-        // Clear previous delivery milestones so the tracking timeline resets for the buyer
-        updateData['statusTimeline.out_for_delivery'] = FieldValue.delete();
+        // Clear the failed milestone so the tracking timeline resets for the buyer.
         updateData['statusTimeline.failed_delivery'] = FieldValue.delete();
       }
 
@@ -2939,6 +3041,17 @@ class FirestoreService {
     final productId = (data['productId'] as String?)?.trim() ?? '';
     final productName =
         (data['productName'] as String?)?.trim() ?? 'your order';
+
+    try {
+      await _ensureDeliverySellerChatFromOrderData(
+        orderId: orderId,
+        orderData: data,
+        deliveryPartnerId: deliveryPartnerId,
+        deliveryPartnerName: deliveryPartnerName,
+      );
+    } catch (e) {
+      debugPrint('Delivery seller chat creation skipped: $e');
+    }
 
     await _createNotificationRecord(
       toUserId: deliveryPartnerId,
@@ -2980,17 +3093,19 @@ class FirestoreService {
       final snap = await transaction.get(ref);
       if (!snap.exists) throw Exception('Order not found.');
       final data = snap.data()!;
-      
+
       final assignedId = data['deliveryPartnerId'] as String?;
       if (assignedId != deliveryPartnerId) {
-        throw Exception('You are not the assigned delivery partner for this order.');
+        throw Exception(
+            'You are not the assigned delivery partner for this order.');
       }
-      
+
       final currentStatus = data['status'] as String?;
       if (currentStatus == 'delivered' || currentStatus == 'out_for_delivery') {
-        throw Exception('Cannot cancel a delivery that is already active or delivered.');
+        throw Exception(
+            'Cannot cancel a delivery that is already active or delivered.');
       }
-      
+
       transaction.update(ref, {
         'deliveryPartnerId': FieldValue.delete(),
         'deliveryPartnerName': FieldValue.delete(),
@@ -3014,7 +3129,8 @@ class FirestoreService {
         fromUserId: deliveryPartnerId,
         type: 'shopDeliveryCancelled',
         title: 'Delivery Partner Cancelled',
-        body: '$deliveryPartnerName cancelled picking up $productName. Please reassign.',
+        body:
+            '$deliveryPartnerName cancelled picking up $productName. Please reassign.',
         orderId: orderId,
         productId: productId,
         productName: productName,
@@ -3052,7 +3168,8 @@ class FirestoreService {
         throw Exception('This order is not using delivery-partner flow.');
       }
       if (currentStatus == 'cancelled' || currentStatus == 'delivered') {
-        throw Exception('This order is already $currentStatus and cannot be updated.');
+        throw Exception(
+            'This order is already $currentStatus and cannot be updated.');
       }
       if (assignedId != deliveryPartnerId) {
         throw Exception(
@@ -3070,7 +3187,7 @@ class FirestoreService {
           throw Exception('Invalid delivery code. Ask the customer again.');
         }
       }
-      
+
       transaction.update(ref, {
         'status': status,
         'statusTimeline.$status': FieldValue.serverTimestamp(),
@@ -3095,33 +3212,37 @@ class FirestoreService {
       _ => 'Delivery status updated',
     };
 
-    if (buyerId.isNotEmpty) {
-      await _createNotificationRecord(
-        toUserId: buyerId,
-        fromUserId: deliveryPartnerId,
-        type: 'shopDeliveryStatusUpdated',
-        title: eventTitle,
-        body: 'Delivery update for $productName: ${status.toUpperCase()}.',
-        orderId: orderId,
-        productId: productId,
-        productName: productName,
-        status: status,
-      );
-    }
+    try {
+      if (buyerId.isNotEmpty) {
+        await _createNotificationRecord(
+          toUserId: buyerId,
+          fromUserId: deliveryPartnerId,
+          type: 'shopDeliveryStatusUpdated',
+          title: eventTitle,
+          body: 'Delivery update for $productName: ${status.toUpperCase()}.',
+          orderId: orderId,
+          productId: productId,
+          productName: productName,
+          status: status,
+        );
+      }
 
-    if (sellerId.isNotEmpty) {
-      await _createNotificationRecord(
-        toUserId: sellerId,
-        fromUserId: deliveryPartnerId,
-        type: 'shopDeliveryStatusUpdated',
-        title: eventTitle,
-        body:
-            'Delivery update for your order item $productName: ${status.toUpperCase()}.',
-        orderId: orderId,
-        productId: productId,
-        productName: productName,
-        status: status,
-      );
+      if (sellerId.isNotEmpty) {
+        await _createNotificationRecord(
+          toUserId: sellerId,
+          fromUserId: deliveryPartnerId,
+          type: 'shopDeliveryStatusUpdated',
+          title: eventTitle,
+          body:
+              'Delivery update for your order item $productName: ${status.toUpperCase()}.',
+          orderId: orderId,
+          productId: productId,
+          productName: productName,
+          status: status,
+        );
+      }
+    } catch (e) {
+      debugPrint('Delivery status notification skipped: $e');
     }
   }
 
@@ -4480,8 +4601,9 @@ class FirestoreService {
           .snapshots()
           .listen(
         (snapshot) {
-          reports =
-              snapshot.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList();
+          reports = snapshot.docs
+              .map((doc) => {'id': doc.id, ...doc.data()})
+              .toList();
           emit();
         },
         onError: (Object e, StackTrace st) {
@@ -4731,12 +4853,15 @@ class FirestoreService {
     if (skilledDoc.exists) {
       final data = skilledDoc.data();
       if (data != null && data['verificationData'] != null) {
-        final verificationData = data['verificationData'] as Map<String, dynamic>;
+        final verificationData =
+            data['verificationData'] as Map<String, dynamic>;
         final aadhaarNumber = verificationData['aadhaarNumber'] as String?;
         if (aadhaarNumber != null && aadhaarNumber.isNotEmpty) {
           final cleanAadhaar = _normalizeAadhaar(aadhaarNumber);
           // Free the Aadhaar from the registry so they can use it again later
-          batch.delete(_firestore.collection(_aadhaarRegistryCollection).doc(cleanAadhaar));
+          batch.delete(_firestore
+              .collection(_aadhaarRegistryCollection)
+              .doc(cleanAadhaar));
         }
       }
     }
@@ -4797,14 +4922,14 @@ class FirestoreService {
     required String requestId,
     required String customerId,
   }) async {
-    final ref = _firestore.collection(AppConstants.requestsCollection).doc(requestId);
+    final ref =
+        _firestore.collection(AppConstants.requestsCollection).doc(requestId);
     final snap = await ref.get();
     if (!snap.exists) throw Exception('Request not found.');
 
     final data = snap.data() ?? <String, dynamic>{};
-    final ownerId = ((data['customerId'] ?? data['requesterId']) as String?)
-            ?.trim() ??
-        '';
+    final ownerId =
+        ((data['customerId'] ?? data['requesterId']) as String?)?.trim() ?? '';
     if (ownerId != customerId) {
       throw Exception('Not authorized to delete this request.');
     }
@@ -4850,15 +4975,15 @@ class FirestoreService {
     }
 
     final memberTypeRaw = normalizeString(payload['memberType']);
-    final memberType =
-        memberTypeRaw == AppConstants.memberTypeSkilled
-            ? AppConstants.memberTypeSkilled
-            : AppConstants.memberTypeCompany;
+    final memberType = memberTypeRaw == AppConstants.memberTypeSkilled
+        ? AppConstants.memberTypeSkilled
+        : AppConstants.memberTypeCompany;
 
     final statusRaw = normalizeString(payload['status']).toLowerCase();
     final status = statusRaw == 'inactive' ? 'inactive' : 'active';
 
-    final approvalRaw = normalizeString(payload['approvalStatus']).toLowerCase();
+    final approvalRaw =
+        normalizeString(payload['approvalStatus']).toLowerCase();
     final approvalStatus = approvalRaw == AppConstants.approvalApproved
         ? AppConstants.approvalApproved
         : approvalRaw == AppConstants.approvalRejected
@@ -4937,8 +5062,7 @@ class FirestoreService {
       query = query.where('memberType', isEqualTo: memberType.trim());
     }
     if (approvalStatus != null && approvalStatus.trim().isNotEmpty) {
-      query =
-          query.where('approvalStatus', isEqualTo: approvalStatus.trim());
+      query = query.where('approvalStatus', isEqualTo: approvalStatus.trim());
     }
 
     final snapshot = await query.limit(limit).get();
@@ -4974,8 +5098,7 @@ class FirestoreService {
       query = query.where('memberType', isEqualTo: memberType.trim());
     }
     if (approvalStatus != null && approvalStatus.trim().isNotEmpty) {
-      query =
-          query.where('approvalStatus', isEqualTo: approvalStatus.trim());
+      query = query.where('approvalStatus', isEqualTo: approvalStatus.trim());
     }
 
     return query.limit(limit).snapshots().map(
@@ -5032,4 +5155,3 @@ class FirestoreService {
     );
   }
 }
-

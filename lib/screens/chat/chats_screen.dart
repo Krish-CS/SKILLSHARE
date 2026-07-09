@@ -8,7 +8,7 @@ import '../../services/presence_service.dart';
 import '../../utils/app_helpers.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/user_roles.dart';
-import '../../widgets/universal_avatar.dart';
+import '../../widgets/reactive_avatar.dart';
 import 'chat_detail_screen.dart';
 import 'company_chat_hub_screen.dart';
 
@@ -17,6 +17,7 @@ class _PersonChatGroup {
   final String otherUserId;
   final String otherUserName;
   final String? otherUserPhoto;
+  final Map<String, dynamic>? otherUserAvatarConfig;
   ChatModel? normalChat;
   ChatModel? hiringChat;
   final List<ChatModel> jobChats = [];
@@ -25,6 +26,7 @@ class _PersonChatGroup {
     required this.otherUserId,
     required this.otherUserName,
     this.otherUserPhoto,
+    this.otherUserAvatarConfig,
   });
 
   void addChat(ChatModel chat) {
@@ -533,7 +535,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
     if (isSkilledPerson) {
       return _buildSkilledRoleTabs(
         customerChats: customerChats,
-        skilledChats: [...skilledChats, ...unknownChats],
+        skilledChats: [...skilledChats, ...deliveryChats, ...unknownChats],
         companyChats: [...jobChats, ...companyChats],
       );
     }
@@ -624,12 +626,14 @@ class _ChatsScreenState extends State<ChatsScreen> {
       final details = chat.participantDetails[uid];
       final name = (details?['name'] as String? ?? '').trim();
       final photo = details?['photo'] as String?;
+      final avatarConfig = _avatarConfigFromDetails(details);
       map.putIfAbsent(
         uid,
         () => _PersonChatGroup(
           otherUserId: uid,
           otherUserName: name.isEmpty ? 'Unknown' : name,
           otherUserPhoto: photo?.isEmpty == true ? null : photo,
+          otherUserAvatarConfig: avatarConfig,
         ),
       );
       map[uid]!.addChat(chat);
@@ -637,6 +641,13 @@ class _ChatsScreenState extends State<ChatsScreen> {
     final groups = map.values.toList()
       ..sort((a, b) => b.latestTime.compareTo(a.latestTime));
     return groups;
+  }
+
+  Map<String, dynamic>? _avatarConfigFromDetails(dynamic details) {
+    if (details is! Map) return null;
+    final raw = details['avatarConfig'];
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return null;
   }
 
   Widget _buildSkilledRoleTabs({
@@ -697,6 +708,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
             child: const TabBar(
               dividerColor: Colors.transparent,
               isScrollable: false,
+              labelPadding: EdgeInsets.zero,
               indicatorSize: TabBarIndicatorSize.tab,
               indicator: BoxDecoration(
                 gradient: LinearGradient(
@@ -707,27 +719,39 @@ class _ChatsScreenState extends State<ChatsScreen> {
                 borderRadius: BorderRadius.all(Radius.circular(12)),
               ),
               labelStyle: TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
               unselectedLabelStyle: TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: FontWeight.w500,
               ),
               labelColor: Colors.white,
               unselectedLabelColor: Color(0xFF8E24AA),
               tabs: [
                 Tab(
-                  icon: Icon(Icons.person_outline_rounded),
-                  text: 'Customer Chats',
+                  icon: Icon(Icons.person_outline_rounded, size: 19),
+                  iconMargin: EdgeInsets.only(bottom: 2),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('Customer Chats', maxLines: 1),
+                  ),
                 ),
                 Tab(
-                  icon: Icon(Icons.groups_2_outlined),
-                  text: 'Skilled Chats',
+                  icon: Icon(Icons.groups_2_outlined, size: 19),
+                  iconMargin: EdgeInsets.only(bottom: 2),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('Skilled Chats', maxLines: 1),
+                  ),
                 ),
                 Tab(
-                  icon: Icon(Icons.apartment_rounded),
-                  text: 'Company Chats',
+                  icon: Icon(Icons.apartment_rounded, size: 19),
+                  iconMargin: EdgeInsets.only(bottom: 2),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('Company Chats', maxLines: 1),
+                  ),
                 ),
               ],
             ),
@@ -788,17 +812,17 @@ class _ChatsScreenState extends State<ChatsScreen> {
   }
 
   String _resolvedOtherRoleForChat(ChatModel chat) {
-    final category = (chat.chatCategory ?? '').trim().toLowerCase();
-    if (category.contains('company')) return UserRoles.company;
-    if (category.contains('customer')) return UserRoles.customer;
-    if (category.contains('skilled')) return UserRoles.skilledPerson;
-    if (category.contains('delivery')) return UserRoles.deliveryPartner;
-
     final role = _otherUserRoleForChat(chat);
     if (role == UserRoles.company) return UserRoles.company;
     if (role == UserRoles.deliveryPartner) return UserRoles.deliveryPartner;
     if (role == UserRoles.skilledPerson) return UserRoles.skilledPerson;
     if (role == UserRoles.customer) return UserRoles.customer;
+
+    final category = (chat.chatCategory ?? '').trim().toLowerCase();
+    if (category.contains('company')) return UserRoles.company;
+    if (category.contains('customer')) return UserRoles.customer;
+    if (category.contains('skilled')) return UserRoles.skilledPerson;
+    if (category.contains('delivery')) return UserRoles.deliveryPartner;
 
     // Fallbacks for partially loaded/legacy participant role metadata.
     if (_isJobChat(chat)) return UserRoles.company;
@@ -906,6 +930,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
   Widget _buildPersonGroupItem(_PersonChatGroup group) {
     final name = group.otherUserName;
     final photo = group.otherUserPhoto;
+    final avatarConfig = group.otherUserAvatarConfig;
     final unreadCount = group.totalUnread(_currentUserId ?? '');
     final latestMsg = group.latestMessage;
     final latestTime = group.latestTime;
@@ -958,11 +983,12 @@ class _ChatsScreenState extends State<ChatsScreen> {
                     CircleAvatar(
                       radius: 28,
                       backgroundColor: Colors.transparent,
-                      child: UniversalAvatar(
-                        photoUrl: photo,
+                      child: ReactiveAvatar(
+                        userId: group.otherUserId,
                         fallbackName: name,
+                        initialPhotoUrl: photo,
+                        initialAvatarConfig: avatarConfig,
                         radius: 28,
-                        animate: false,
                       ),
                     ),
                     Positioned(
@@ -1108,6 +1134,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
     final otherUserDetails = chat.participantDetails[otherUserId];
     final name = otherUserDetails?['name'] ?? 'Unknown';
     final photo = otherUserDetails?['photo'];
+    final avatarConfig = _avatarConfigFromDetails(otherUserDetails);
     final unreadCount =
         activeUserId == null ? 0 : (chat.unreadCount[activeUserId] ?? 0);
     final pendingWork = _pendingWorkCounts[chat.id] ?? 0;
@@ -1142,11 +1169,12 @@ class _ChatsScreenState extends State<ChatsScreen> {
                     CircleAvatar(
                       radius: 28,
                       backgroundColor: Colors.transparent,
-                      child: UniversalAvatar(
-                        photoUrl: photo,
+                      child: ReactiveAvatar(
+                        userId: otherUserId,
                         fallbackName: name,
+                        initialPhotoUrl: photo,
+                        initialAvatarConfig: avatarConfig,
                         radius: 28,
-                        animate: false,
                       ),
                     ),
                     // Online indicator dot

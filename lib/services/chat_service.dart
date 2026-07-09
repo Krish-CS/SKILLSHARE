@@ -40,17 +40,15 @@ class ChatService {
             .toString()
             .trim();
     final role = (details['role'] ?? '').toString().trim();
+    final avatarConfig = details['avatarConfig'];
 
     return {
       'name': name.isEmpty ? 'User' : name,
       'photo': photo,
       if (role.isNotEmpty) 'role': role,
+      if (avatarConfig is Map)
+        'avatarConfig': Map<String, dynamic>.from(avatarConfig),
     };
-  }
-
-  bool _hasRole(Map<String, dynamic> details) {
-    final rawRole = (details['role'] as String?)?.trim() ?? '';
-    return rawRole.isNotEmpty;
   }
 
   Map<String, dynamic> _mergeParticipantDetails(
@@ -60,12 +58,17 @@ class ChatService {
     final preferredName = (preferred['name'] as String?)?.trim() ?? '';
     final preferredPhoto = (preferred['photo'] as String?)?.trim() ?? '';
     final preferredRole = (preferred['role'] as String?)?.trim() ?? '';
+    final preferredAvatarConfig = preferred['avatarConfig'];
 
     final fallbackName = (fallback['name'] as String?)?.trim() ?? '';
     final fallbackPhoto = (fallback['photo'] as String?)?.trim() ?? '';
     final fallbackRole = (fallback['role'] as String?)?.trim() ?? '';
+    final fallbackAvatarConfig = fallback['avatarConfig'];
 
     final mergedRole = preferredRole.isNotEmpty ? preferredRole : fallbackRole;
+    final mergedAvatarConfig = preferredAvatarConfig is Map
+        ? preferredAvatarConfig
+        : fallbackAvatarConfig;
 
     return {
       'name': preferredName.isNotEmpty
@@ -73,6 +76,8 @@ class ChatService {
           : (fallbackName.isNotEmpty ? fallbackName : 'User'),
       'photo': preferredPhoto.isNotEmpty ? preferredPhoto : fallbackPhoto,
       if (mergedRole.isNotEmpty) 'role': mergedRole,
+      if (mergedAvatarConfig is Map)
+        'avatarConfig': Map<String, dynamic>.from(mergedAvatarConfig),
     };
   }
 
@@ -211,6 +216,7 @@ class ChatService {
         'name': data['name'],
         'profilePhoto': data['profilePhoto'],
         'role': data['role'],
+        'avatarConfig': data['avatarConfig'],
       });
     } catch (_) {
       return _normalizeParticipantDetails(const {});
@@ -293,14 +299,10 @@ class ChatService {
     var normalizedUser1 = _normalizeParticipantDetails(user1Details);
     var normalizedUser2 = _normalizeParticipantDetails(user2Details);
 
-    if (!_hasRole(normalizedUser1)) {
-      final loadedUser1 = await _loadUserChatDetails(user1Id);
-      normalizedUser1 = _mergeParticipantDetails(normalizedUser1, loadedUser1);
-    }
-    if (!_hasRole(normalizedUser2)) {
-      final loadedUser2 = await _loadUserChatDetails(user2Id);
-      normalizedUser2 = _mergeParticipantDetails(normalizedUser2, loadedUser2);
-    }
+    final loadedUser1 = await _loadUserChatDetails(user1Id);
+    normalizedUser1 = _mergeParticipantDetails(normalizedUser1, loadedUser1);
+    final loadedUser2 = await _loadUserChatDetails(user2Id);
+    normalizedUser2 = _mergeParticipantDetails(normalizedUser2, loadedUser2);
 
     final directChatCategory =
         _deriveDirectChatCategory(normalizedUser1, normalizedUser2);

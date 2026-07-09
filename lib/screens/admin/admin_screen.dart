@@ -126,163 +126,203 @@ class _AdminScreenState extends State<AdminScreen>
   Widget build(BuildContext context) {
     final isNarrow = MediaQuery.sizeOf(context).width < 420;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FB),
-      appBar: AppBar(
-        toolbarHeight: isNarrow ? 76 : 72,
-        titleSpacing: 12,
-        title: Row(
-          children: [
-            const CircleAvatar(
-              radius: 18,
-              backgroundColor: Color(0x26FFFFFF),
-              child: Icon(Icons.admin_panel_settings,
-                  color: Colors.white, size: 20),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Admin Control Center',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: isNarrow ? 16 : 18,
-                    ),
-                  ),
-                  Text(
-                    'Manage users, products and reports',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: isNarrow ? 11 : 12,
-                    ),
-                  ),
-                ],
+    return MediaQuery.withClampedTextScaling(
+      maxScaleFactor: 1.15,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF4F6FB),
+        appBar: AppBar(
+          toolbarHeight: isNarrow ? 76 : 72,
+          titleSpacing: 12,
+          title: Row(
+            children: [
+              const CircleAvatar(
+                radius: 18,
+                backgroundColor: Color(0x26FFFFFF),
+                child: Icon(Icons.admin_panel_settings,
+                    color: Colors.white, size: 20),
               ),
-            ),
-          ],
-        ),
-        flexibleSpace: _buildAnimatedHeaderBackground(),
-        elevation: 2,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 10),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFEF5350), Color(0xFFF57C00)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Admin Control Center',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: isNarrow ? 16 : 18,
+                      ),
+                    ),
+                    Text(
+                      'Manage users, products and reports',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: isNarrow ? 11 : 12,
+                      ),
+                    ),
+                  ],
                 ),
-                borderRadius: BorderRadius.circular(999),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFEF5350).withValues(alpha: 0.35),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
               ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
+            ],
+          ),
+          flexibleSpace: _buildAnimatedHeaderBackground(),
+          elevation: 2,
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFEF5350), Color(0xFFF57C00)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                   borderRadius: BorderRadius.circular(999),
-                  onTap: _logout,
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isNarrow ? 10 : 14,
-                      vertical: 8,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFEF5350).withValues(alpha: 0.35),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (!isNarrow) ...[
-                          const Text(
-                            'Logout',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(999),
+                    onTap: _logout,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isNarrow ? 10 : 14,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (!isNarrow) ...[
+                            const Text(
+                              'Logout',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 6),
+                            const SizedBox(width: 6),
+                          ],
+                          const Icon(Icons.logout_rounded,
+                              color: Colors.white, size: 18),
                         ],
-                        const Icon(Icons.logout_rounded,
-                            color: Colors.white, size: 18),
-                      ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
+          ],
+          bottom: TabBar(
+            controller: _tabController,
+            isScrollable: false,
+            labelPadding: EdgeInsets.zero,
+            indicatorSize: TabBarIndicatorSize.tab,
+            indicator: UnderlineTabIndicator(
+              borderSide: BorderSide(color: _tabAccents[_activeTab], width: 3),
+            ),
+            labelStyle: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+            unselectedLabelStyle: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+            labelColor: Colors.white,
+            unselectedLabelColor: const Color(0xFFCEBFE8),
+            tabs: const [
+              Tab(
+                icon: Icon(Icons.dashboard, size: 19),
+                iconMargin: EdgeInsets.only(bottom: 2),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('Dashboard', maxLines: 1),
+                ),
+              ),
+              Tab(
+                icon: Icon(Icons.people, size: 19),
+                iconMargin: EdgeInsets.only(bottom: 2),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('Users', maxLines: 1),
+                ),
+              ),
+              Tab(
+                icon: Icon(Icons.inventory_2, size: 19),
+                iconMargin: EdgeInsets.only(bottom: 2),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('Products', maxLines: 1),
+                ),
+              ),
+              Tab(
+                icon: Icon(Icons.report, size: 19),
+                iconMargin: EdgeInsets.only(bottom: 2),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('Reports', maxLines: 1),
+                ),
+              ),
+            ],
           ),
-        ],
-        bottom: TabBar(
+        ),
+        body: TabBarView(
           controller: _tabController,
-          isScrollable: true,
-          indicatorSize: TabBarIndicatorSize.label,
-          indicator: UnderlineTabIndicator(
-            borderSide: BorderSide(color: _tabAccents[_activeTab], width: 3),
-          ),
-          labelColor: Colors.white,
-          unselectedLabelColor: const Color(0xFFCEBFE8),
-          tabs: const [
-            Tab(icon: Icon(Icons.dashboard), text: 'Dashboard'),
-            Tab(icon: Icon(Icons.people), text: 'Users'),
-            Tab(icon: Icon(Icons.inventory_2), text: 'Products'),
-            Tab(icon: Icon(Icons.report), text: 'Reports'),
+          children: [
+            _AnimatedTabGradientShell(
+              colors: const [
+                [Color(0xFFE8F1FF), Color(0xFFF5EEFF), Color(0xFFFFF2F7)],
+                [Color(0xFFEFFBFF), Color(0xFFF5F2FF), Color(0xFFFFF8EC)],
+              ],
+              child: _DashboardTab(
+                firestoreService: _firestoreService,
+                onOpenPendingVerifications: () {
+                  _tabController.animateTo(1);
+                  _usersTabKey.currentState?.showPendingVerificationFilter();
+                },
+                onOpenReports: () {
+                  _tabController.animateTo(3);
+                },
+              ),
+            ),
+            _AnimatedTabGradientShell(
+              colors: const [
+                [Color(0xFFEAF4FF), Color(0xFFF1EEFF), Color(0xFFF4FCFF)],
+                [Color(0xFFFFF2F8), Color(0xFFEFF7FF), Color(0xFFF6F3FF)],
+              ],
+              child: _UsersTab(
+                  key: _usersTabKey, firestoreService: _firestoreService),
+            ),
+            _AnimatedTabGradientShell(
+              colors: const [
+                [Color(0xFFFFF4EE), Color(0xFFF8F2FF), Color(0xFFEFFFFC)],
+                [Color(0xFFFFFAF1), Color(0xFFEFF2FF), Color(0xFFFFF0F7)],
+              ],
+              child: AdminProductsTab(firestoreService: _firestoreService),
+            ),
+            _AnimatedTabGradientShell(
+              colors: const [
+                [Color(0xFFFFF6EF), Color(0xFFFFF1F7), Color(0xFFEFFBFF)],
+                [Color(0xFFFFFCEF), Color(0xFFF4EEFF), Color(0xFFFFF4F4)],
+              ],
+              child: _ReportsTab(firestoreService: _firestoreService),
+            ),
           ],
         ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _AnimatedTabGradientShell(
-            colors: const [
-              [Color(0xFFE8F1FF), Color(0xFFF5EEFF), Color(0xFFFFF2F7)],
-              [Color(0xFFEFFBFF), Color(0xFFF5F2FF), Color(0xFFFFF8EC)],
-            ],
-            child: _DashboardTab(
-              firestoreService: _firestoreService,
-              onOpenPendingVerifications: () {
-                _tabController.animateTo(1);
-                _usersTabKey.currentState?.showPendingVerificationFilter();
-              },
-              onOpenReports: () {
-                _tabController.animateTo(3);
-              },
-            ),
-          ),
-          _AnimatedTabGradientShell(
-            colors: const [
-              [Color(0xFFEAF4FF), Color(0xFFF1EEFF), Color(0xFFF4FCFF)],
-              [Color(0xFFFFF2F8), Color(0xFFEFF7FF), Color(0xFFF6F3FF)],
-            ],
-            child: _UsersTab(
-                key: _usersTabKey, firestoreService: _firestoreService),
-          ),
-          _AnimatedTabGradientShell(
-            colors: const [
-              [Color(0xFFFFF4EE), Color(0xFFF8F2FF), Color(0xFFEFFFFC)],
-              [Color(0xFFFFFAF1), Color(0xFFEFF2FF), Color(0xFFFFF0F7)],
-            ],
-            child: AdminProductsTab(firestoreService: _firestoreService),
-          ),
-          _AnimatedTabGradientShell(
-            colors: const [
-              [Color(0xFFFFF6EF), Color(0xFFFFF1F7), Color(0xFFEFFBFF)],
-              [Color(0xFFFFFCEF), Color(0xFFF4EEFF), Color(0xFFFFF4F4)],
-            ],
-            child: _ReportsTab(firestoreService: _firestoreService),
-          ),
-        ],
       ),
     );
   }
@@ -789,7 +829,10 @@ class _UsersTabState extends State<_UsersTab> {
     final formData = await showDialog<_DeliveryPartnerFormData>(
       context: context,
       barrierColor: Colors.black54,
-      builder: (_) => const _DeliveryPartnerDialog(),
+      builder: (_) => MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.15,
+        child: const _DeliveryPartnerDialog(),
+      ),
     );
 
     if (formData == null) return;
@@ -826,7 +869,10 @@ class _UsersTabState extends State<_UsersTab> {
     final formData = await showDialog<_AdminUserFormData>(
       context: context,
       barrierColor: Colors.black54,
-      builder: (_) => const _AdminUserDialog(),
+      builder: (_) => MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.15,
+        child: const _AdminUserDialog(),
+      ),
     );
 
     if (formData == null) return;
@@ -996,63 +1042,72 @@ class _UsersTabState extends State<_UsersTab> {
     final updated = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black54,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocalState) {
-          return AlertDialog(
-            title: const Text('Edit User'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(labelText: 'Name'),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: phoneController,
-                    decoration: const InputDecoration(labelText: 'Phone'),
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    value: selectedRole,
-                    decoration: const InputDecoration(labelText: 'Role'),
-                    items: UserRoles.allRoles
-                        .map(
-                          (role) => DropdownMenuItem(
-                            value: role,
-                            child: Text(UserRoles.getDisplayName(role)),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        setLocalState(() => selectedRole = value);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: isActive,
-                    title: const Text('Active account'),
-                    onChanged: (value) => setLocalState(() => isActive = value),
-                  ),
-                ],
+      builder: (ctx) => MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.15,
+        child: StatefulBuilder(
+          builder: (ctx, setLocalState) {
+            return AlertDialog(
+              title: const Text('Edit User'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(labelText: 'Name'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: phoneController,
+                      decoration: const InputDecoration(labelText: 'Phone'),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      value: selectedRole,
+                      decoration: const InputDecoration(labelText: 'Role'),
+                      items: UserRoles.allRoles
+                          .map(
+                            (role) => DropdownMenuItem(
+                              value: role,
+                              child: Text(
+                                UserRoles.getDisplayName(role),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setLocalState(() => selectedRole = value);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: isActive,
+                      title: const Text('Active account'),
+                      onChanged: (value) =>
+                          setLocalState(() => isActive = value),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.of(ctx).pop(true),
-                child: const Text('Save'),
-              ),
-            ],
-          );
-        },
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
 
@@ -1185,302 +1240,321 @@ class _UsersTabState extends State<_UsersTab> {
   Widget build(BuildContext context) {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
 
-    return Column(
-      children: [
-        Container(
-          margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF1565C0), Color(0xFF5E35B1)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: const Row(
-            children: [
-              Icon(Icons.groups_rounded, color: Colors.white),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Users Management',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-              Text(
-                'Live',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [
-                  Color(0xFFFFFFFF),
-                  Color(0xFFF4F7FF),
-                  Color(0xFFF8F2FF),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFD7DFF8)),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF5E35B1).withValues(alpha: 0.09),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
+    return RefreshIndicator(
+      onRefresh: _loadUsers,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverToBoxAdapter(
             child: Column(
               children: [
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isCompact = constraints.maxWidth < 760;
-
-                    final actionButtons = Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: _createUserWithRole,
-                          icon: const Icon(Icons.person_add, size: 18),
-                          label: const Text('Add User'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1565C0),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: _isBulkCreatingUsers
-                              ? null
-                              : _bulkCreateUsersFromCsv,
-                          icon: _isBulkCreatingUsers
-                              ? const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.upload_file, size: 18),
-                          label: const Text('Bulk CSV'),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: _createDeliveryPartner,
-                          icon: const Icon(Icons.local_shipping, size: 18),
-                          label: const Text('Add Delivery'),
-                        ),
-                      ],
-                    );
-
-                    if (isCompact) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Manage user profiles, roles, status and bulk user creation.',
-                            style: TextStyle(
-                              color: Colors.grey[700],
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          actionButtons,
-                        ],
-                      );
-                    }
-
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Manage user profiles, roles, status and bulk user creation.',
-                            style: TextStyle(
-                              color: Colors.grey[700],
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        actionButtons,
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  onChanged: (v) {
-                    _searchQuery = v.toLowerCase();
-                    _applyFilter();
-                  },
-                  decoration: InputDecoration(
-                    hintText: 'Search users...',
-                    prefixIcon: const Icon(Icons.search),
-                    filled: true,
-                    fillColor: const Color(0xFFF9FBFF),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFD3DCF7)),
+                Container(
+                  margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF1565C0), Color(0xFF5E35B1)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
+                  child: const Row(
                     children: [
-                      _filterChip(
-                          'All',
-                          null,
-                          _pendingVerificationOnly
-                              ? '__pending__'
-                              : _roleFilter,
-                          const [Color(0xFF1565C0), Color(0xFF5E35B1)],
-                          (v) => setState(() {
-                                _pendingVerificationOnly = false;
-                                _roleFilter = v;
-                                _applyFilter();
-                              })),
-                      _filterChip(
-                          'Customers',
-                          UserRoles.customer,
-                          _pendingVerificationOnly
-                              ? '__pending__'
-                              : _roleFilter,
-                          const [Color(0xFF1565C0), Color(0xFF5E35B1)],
-                          (v) => setState(() {
-                                _pendingVerificationOnly = false;
-                                _roleFilter = v;
-                                _applyFilter();
-                              })),
-                      _filterChip(
-                          'Skilled',
-                          UserRoles.skilledPerson,
-                          _pendingVerificationOnly
-                              ? '__pending__'
-                              : _roleFilter,
-                          const [Color(0xFF1565C0), Color(0xFF5E35B1)],
-                          (v) => setState(() {
-                                _pendingVerificationOnly = false;
-                                _roleFilter = v;
-                                _applyFilter();
-                              })),
-                      _filterChip(
-                          'Companies',
-                          UserRoles.company,
-                          _pendingVerificationOnly
-                              ? '__pending__'
-                              : _roleFilter,
-                          const [Color(0xFF1565C0), Color(0xFF5E35B1)],
-                          (v) => setState(() {
-                                _pendingVerificationOnly = false;
-                                _roleFilter = v;
-                                _applyFilter();
-                              })),
-                      _filterChip(
-                          'Delivery',
-                          UserRoles.deliveryPartner,
-                          _pendingVerificationOnly
-                              ? '__pending__'
-                              : _roleFilter,
-                          const [Color(0xFF1565C0), Color(0xFF5E35B1)],
-                          (v) => setState(() {
-                                _pendingVerificationOnly = false;
-                                _roleFilter = v;
-                                _applyFilter();
-                              })),
-                      _filterChip(
-                          'Pending Verifications',
-                          '__pending__',
-                          _pendingVerificationOnly
-                              ? '__pending__'
-                              : _roleFilter,
-                          const [Color(0xFF1565C0), Color(0xFF5E35B1)],
-                          (v) => setState(() {
-                                _pendingVerificationOnly = v == '__pending__';
-                                _roleFilter = v == '__pending__'
-                                    ? UserRoles.skilledPerson
-                                    : v;
-                                _applyFilter();
-                              })),
+                      Icon(Icons.groups_rounded, color: Colors.white),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Users Management',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        'Live',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [
+                          Color(0xFFFFFFFF),
+                          Color(0xFFF4F7FF),
+                          Color(0xFFF8F2FF),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFD7DFF8)),
+                      boxShadow: [
+                        BoxShadow(
+                          color:
+                              const Color(0xFF5E35B1).withValues(alpha: 0.09),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isCompact = constraints.maxWidth < 760;
+
+                            final actionButtons = Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                ElevatedButton.icon(
+                                  onPressed: _createUserWithRole,
+                                  icon: const Icon(Icons.person_add, size: 18),
+                                  label: const Text('Add User'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF1565C0),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                                OutlinedButton.icon(
+                                  onPressed: _isBulkCreatingUsers
+                                      ? null
+                                      : _bulkCreateUsersFromCsv,
+                                  icon: _isBulkCreatingUsers
+                                      ? const SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2),
+                                        )
+                                      : const Icon(Icons.upload_file, size: 18),
+                                  label: const Text('Bulk CSV'),
+                                ),
+                                OutlinedButton.icon(
+                                  onPressed: _createDeliveryPartner,
+                                  icon: const Icon(Icons.local_shipping,
+                                      size: 18),
+                                  label: const Text('Add Delivery'),
+                                ),
+                              ],
+                            );
+
+                            if (isCompact) {
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Manage user profiles, roles, status and bulk user creation.',
+                                    style: TextStyle(
+                                      color: Colors.grey[700],
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  actionButtons,
+                                ],
+                              );
+                            }
+
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Manage user profiles, roles, status and bulk user creation.',
+                                    style: TextStyle(
+                                      color: Colors.grey[700],
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                actionButtons,
+                              ],
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          onChanged: (v) {
+                            _searchQuery = v.toLowerCase();
+                            _applyFilter();
+                          },
+                          decoration: InputDecoration(
+                            hintText: 'Search users...',
+                            prefixIcon: const Icon(Icons.search),
+                            filled: true,
+                            fillColor: const Color(0xFFF9FBFF),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  const BorderSide(color: Color(0xFFD3DCF7)),
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _filterChip(
+                                  'All',
+                                  null,
+                                  _pendingVerificationOnly
+                                      ? '__pending__'
+                                      : _roleFilter,
+                                  const [Color(0xFF1565C0), Color(0xFF5E35B1)],
+                                  (v) => setState(() {
+                                        _pendingVerificationOnly = false;
+                                        _roleFilter = v;
+                                        _applyFilter();
+                                      })),
+                              _filterChip(
+                                  'Customers',
+                                  UserRoles.customer,
+                                  _pendingVerificationOnly
+                                      ? '__pending__'
+                                      : _roleFilter,
+                                  const [Color(0xFF1565C0), Color(0xFF5E35B1)],
+                                  (v) => setState(() {
+                                        _pendingVerificationOnly = false;
+                                        _roleFilter = v;
+                                        _applyFilter();
+                                      })),
+                              _filterChip(
+                                  'Skilled',
+                                  UserRoles.skilledPerson,
+                                  _pendingVerificationOnly
+                                      ? '__pending__'
+                                      : _roleFilter,
+                                  const [Color(0xFF1565C0), Color(0xFF5E35B1)],
+                                  (v) => setState(() {
+                                        _pendingVerificationOnly = false;
+                                        _roleFilter = v;
+                                        _applyFilter();
+                                      })),
+                              _filterChip(
+                                  'Companies',
+                                  UserRoles.company,
+                                  _pendingVerificationOnly
+                                      ? '__pending__'
+                                      : _roleFilter,
+                                  const [Color(0xFF1565C0), Color(0xFF5E35B1)],
+                                  (v) => setState(() {
+                                        _pendingVerificationOnly = false;
+                                        _roleFilter = v;
+                                        _applyFilter();
+                                      })),
+                              _filterChip(
+                                  'Delivery',
+                                  UserRoles.deliveryPartner,
+                                  _pendingVerificationOnly
+                                      ? '__pending__'
+                                      : _roleFilter,
+                                  const [Color(0xFF1565C0), Color(0xFF5E35B1)],
+                                  (v) => setState(() {
+                                        _pendingVerificationOnly = false;
+                                        _roleFilter = v;
+                                        _applyFilter();
+                                      })),
+                              _filterChip(
+                                  'Pending Verifications',
+                                  '__pending__',
+                                  _pendingVerificationOnly
+                                      ? '__pending__'
+                                      : _roleFilter,
+                                  const [Color(0xFF1565C0), Color(0xFF5E35B1)],
+                                  (v) => setState(() {
+                                        _pendingVerificationOnly =
+                                            v == '__pending__';
+                                        _roleFilter = v == '__pending__'
+                                            ? UserRoles.skilledPerson
+                                            : v;
+                                        _applyFilter();
+                                      })),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: _ManagedMembersSection(
+                    firestoreService: widget.firestoreService,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '${_filteredUsers.length} user(s) found',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: _ManagedMembersSection(
-            firestoreService: widget.firestoreService,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            '${_filteredUsers.length} user(s) found',
-            style: TextStyle(color: Colors.grey[600], fontSize: 13),
-          ),
-        ),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _loadUsers,
-            child: _filteredUsers.isEmpty
-                ? const Center(child: Text('No users found'))
-                : ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: _filteredUsers.length,
-                    itemBuilder: (context, index) {
-                      final user = _filteredUsers[index];
-                      return _UserCard(
-                        index: index,
-                        user: user,
-                        onEdit: () => _editUser(user),
-                        onSuspend: () => _toggleSuspend(user),
-                        onDelete: () => _deleteAccount(user),
-                      );
-                    },
-                  ),
-          ),
-        ),
-      ],
+          if (_filteredUsers.isEmpty)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(child: Text('No users found')),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.all(12),
+              sliver: SliverList.builder(
+                itemCount: _filteredUsers.length,
+                itemBuilder: (context, index) {
+                  final user = _filteredUsers[index];
+                  return _UserCard(
+                    index: index,
+                    user: user,
+                    onEdit: () => _editUser(user),
+                    onSuspend: () => _toggleSuspend(user),
+                    onDelete: () => _deleteAccount(user),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -1871,7 +1945,10 @@ class _ManagedMembersSectionState extends State<_ManagedMembersSection> {
     final formData = await showDialog<_ManagedMemberFormData>(
       context: context,
       barrierColor: Colors.black54,
-      builder: (_) => const _ManagedMemberDialog(),
+      builder: (_) => MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.15,
+        child: const _ManagedMemberDialog(),
+      ),
     );
 
     if (formData == null) return;
@@ -1913,8 +1990,11 @@ class _ManagedMembersSectionState extends State<_ManagedMembersSection> {
     final formData = await showDialog<_ManagedMemberFormData>(
       context: context,
       barrierColor: Colors.black54,
-      builder: (_) => _ManagedMemberDialog(
-        initialData: _ManagedMemberFormData.fromExisting(member),
+      builder: (_) => MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.15,
+        child: _ManagedMemberDialog(
+          initialData: _ManagedMemberFormData.fromExisting(member),
+        ),
       ),
     );
 
@@ -2192,9 +2272,7 @@ class _ManagedMembersSectionState extends State<_ManagedMembersSection> {
       return raw;
     }
 
-    final csv = rows
-        .map((row) => row.map(csvEscape).join(','))
-        .join('\n');
+    final csv = rows.map((row) => row.map(csvEscape).join(',')).join('\n');
     await Clipboard.setData(ClipboardData(text: csv));
     if (!mounted) return;
     await AppDialog.info(
@@ -2248,10 +2326,10 @@ class _ManagedMembersSectionState extends State<_ManagedMembersSection> {
     final parentName = (member['parentName'] ?? '').toString();
     final parentId = (member['parentUserId'] ?? '').toString();
     final skillCategory = (member['skillCategory'] ?? '').toString();
-    final status = ((member['status'] ?? 'active').toString().toLowerCase() ==
-            'inactive')
-        ? 'inactive'
-        : 'active';
+    final status =
+        ((member['status'] ?? 'active').toString().toLowerCase() == 'inactive')
+            ? 'inactive'
+            : 'active';
 
     final subtitleParts = <String>[
       if (roleOrDesignation.isNotEmpty) roleOrDesignation,
@@ -2674,8 +2752,8 @@ class _ManagedMemberFormData {
       name: (data['name'] ?? '').toString(),
       email: (data['email'] ?? '').toString(),
       phone: (data['phone'] ?? '').toString(),
-      memberType: (data['memberType'] ?? AppConstants.memberTypeCompany)
-          .toString(),
+      memberType:
+          (data['memberType'] ?? AppConstants.memberTypeCompany).toString(),
       parentUserId: (data['parentUserId'] ?? '').toString(),
       parentName: (data['parentName'] ?? '').toString(),
       designation: (data['designation'] ?? '').toString(),
@@ -2811,8 +2889,8 @@ class _ManagedMemberDialogState extends State<_ManagedMemberDialog> {
       title: Text(widget.initialData == null ? 'Add Member' : 'Edit Member'),
       content: Form(
         key: _formKey,
-        child: SizedBox(
-          width: 520,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -2838,16 +2916,25 @@ class _ManagedMemberDialogState extends State<_ManagedMemberDialog> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   value: _memberType,
                   decoration: const InputDecoration(labelText: 'Member Type'),
                   items: const [
                     DropdownMenuItem(
                       value: AppConstants.memberTypeCompany,
-                      child: Text('Company Member'),
+                      child: Text(
+                        'Company Member',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     DropdownMenuItem(
                       value: AppConstants.memberTypeSkilled,
-                      child: Text('Skilled Member'),
+                      child: Text(
+                        'Skilled Member',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                   onChanged: (value) {
@@ -2913,12 +3000,26 @@ class _ManagedMemberDialogState extends State<_ManagedMemberDialog> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   value: _status,
                   decoration: const InputDecoration(labelText: 'Status'),
                   items: const [
-                    DropdownMenuItem(value: 'active', child: Text('Active')),
                     DropdownMenuItem(
-                        value: 'inactive', child: Text('Inactive')),
+                      value: 'active',
+                      child: Text(
+                        'Active',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'inactive',
+                      child: Text(
+                        'Inactive',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ],
                   onChanged: (value) {
                     if (value != null) {
@@ -2928,21 +3029,34 @@ class _ManagedMemberDialogState extends State<_ManagedMemberDialog> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   value: _approvalStatus,
                   decoration:
                       const InputDecoration(labelText: 'Approval Status'),
                   items: const [
                     DropdownMenuItem(
                       value: AppConstants.approvalPending,
-                      child: Text('Pending'),
+                      child: Text(
+                        'Pending',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     DropdownMenuItem(
                       value: AppConstants.approvalApproved,
-                      child: Text('Approved'),
+                      child: Text(
+                        'Approved',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     DropdownMenuItem(
                       value: AppConstants.approvalRejected,
-                      child: Text('Rejected'),
+                      child: Text(
+                        'Rejected',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                   onChanged: (value) {
@@ -3097,13 +3211,18 @@ class _AdminUserDialogState extends State<_AdminUserDialog> {
               ),
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _role,
                 decoration: const InputDecoration(labelText: 'Role'),
                 items: UserRoles.allRoles
                     .map(
                       (role) => DropdownMenuItem(
                         value: role,
-                        child: Text(UserRoles.getDisplayName(role)),
+                        child: Text(
+                          UserRoles.getDisplayName(role),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     )
                     .toList(),
@@ -3727,18 +3846,22 @@ class _ReportCard extends StatelessWidget {
 
                   final suspendButton = ElevatedButton.icon(
                     onPressed: () => onResolve('suspend_user'),
-                    icon: const Icon(Icons.block, size: 16, color: Colors.white),
+                    icon:
+                        const Icon(Icons.block, size: 16, color: Colors.white),
                     label: const Text('Suspend User',
                         style: TextStyle(color: Colors.white)),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                    style:
+                        ElevatedButton.styleFrom(backgroundColor: Colors.red),
                   );
 
                   final resolveButton = ElevatedButton.icon(
                     onPressed: () => onResolve('resolve'),
-                    icon: const Icon(Icons.check, size: 16, color: Colors.white),
+                    icon:
+                        const Icon(Icons.check, size: 16, color: Colors.white),
                     label: const Text('Resolve',
                         style: TextStyle(color: Colors.white)),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                    style:
+                        ElevatedButton.styleFrom(backgroundColor: Colors.green),
                   );
 
                   if (isCompact) {

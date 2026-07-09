@@ -93,10 +93,19 @@ class _MyShopScreenState extends State<MyShopScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
-          isScrollable: true,
+          isScrollable: false,
+          indicatorSize: TabBarIndicatorSize.tab,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
+          labelStyle: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
           tabs: const [
             Tab(text: 'Products', icon: Icon(Icons.inventory_2)),
             Tab(text: 'Orders', icon: Icon(Icons.list_alt)),

@@ -228,12 +228,28 @@ class _CartScreenState extends State<CartScreen>
         bottom: TabBar(
           controller: _tabController,
           isScrollable: false,
+          indicatorSize: TabBarIndicatorSize.tab,
+          labelPadding: EdgeInsets.zero,
           indicatorColor: Colors.white,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           tabs: const [
-            Tab(icon: Icon(Icons.shopping_cart, size: 18), text: 'Cart'),
-            Tab(icon: Icon(Icons.list_alt, size: 18), text: 'My Orders'),
+            Tab(
+              icon: Icon(Icons.shopping_cart, size: 18),
+              iconMargin: EdgeInsets.only(bottom: 2),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('Cart', maxLines: 1),
+              ),
+            ),
+            Tab(
+              icon: Icon(Icons.list_alt, size: 18),
+              iconMargin: EdgeInsets.only(bottom: 2),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('My Orders', maxLines: 1),
+              ),
+            ),
           ],
         ),
       ),

@@ -90,7 +90,8 @@ class _ExpertCardState extends State<ExpertCard> {
                   children: [
                     // User name
                     Text(
-                      AppHelpers.capitalize(widget.profile.name ?? 'Professional'),
+                      AppHelpers.capitalize(
+                          widget.profile.name ?? 'Professional'),
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -100,9 +101,11 @@ class _ExpertCardState extends State<ExpertCard> {
                     ),
                     const SizedBox(height: 2),
                     // Category as a chip/tag
-                    if (widget.profile.category != null && widget.profile.category!.isNotEmpty)
+                    if (widget.profile.category != null &&
+                        widget.profile.category!.isNotEmpty)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
                         margin: const EdgeInsets.only(bottom: 4),
                         decoration: BoxDecoration(
                           color: const Color(0xFFE91E63).withValues(alpha: 0.1),
@@ -165,7 +168,8 @@ class _ExpertCardState extends State<ExpertCard> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Icon(Icons.work_outline, size: 16, color: Colors.grey[600]),
+                        Icon(Icons.work_outline,
+                            size: 16, color: Colors.grey[600]),
                         const SizedBox(width: 4),
                         Text(
                           '${widget.profile.projectCount} Projects',
@@ -176,7 +180,8 @@ class _ExpertCardState extends State<ExpertCard> {
                         ),
                         const SizedBox(width: 16),
                         if (widget.profile.city != null) ...[
-                          Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                          Icon(Icons.location_on,
+                              size: 16, color: Colors.grey[600]),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
@@ -203,13 +208,15 @@ class _ExpertCardState extends State<ExpertCard> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => ProfileScreen(userId: widget.profile.userId),
+                          builder: (_) =>
+                              ProfileScreen(userId: widget.profile.userId),
                         ),
                       );
                     },
                     icon: const Icon(Icons.person_outline),
                     style: IconButton.styleFrom(
-                      backgroundColor: const Color(0xFF2196F3).withValues(alpha: 0.1),
+                      backgroundColor:
+                          const Color(0xFF2196F3).withValues(alpha: 0.1),
                       foregroundColor: const Color(0xFF2196F3),
                     ),
                   ),
@@ -218,7 +225,8 @@ class _ExpertCardState extends State<ExpertCard> {
                     onPressed: () => _startChat(context),
                     icon: const Icon(Icons.message_outlined),
                     style: IconButton.styleFrom(
-                      backgroundColor: const Color(0xFF4CAF50).withValues(alpha: 0.1),
+                      backgroundColor:
+                          const Color(0xFF4CAF50).withValues(alpha: 0.1),
                       foregroundColor: const Color(0xFF4CAF50),
                     ),
                   ),
@@ -244,12 +252,22 @@ class _ExpertCardState extends State<ExpertCard> {
       final chatId = await chatService.getOrCreateChat(
         currentUser.uid,
         widget.profile.userId,
-        {'name': myUser.name, 'photo': myUser.profilePhoto ?? ''},
-        {'name': '', 'photo': widget.profile.profilePicture ?? ''},
+        {
+          'name': myUser.name,
+          'photo': myUser.profilePhoto ?? '',
+          if (myUser.avatarConfig != null) 'avatarConfig': myUser.avatarConfig,
+        },
+        {
+          'name': '',
+          'photo': widget.profile.profilePicture ?? '',
+          if (widget.profile.avatarConfig != null)
+            'avatarConfig': widget.profile.avatarConfig,
+        },
       );
 
       // Get other user's name
-      final otherUser = await FirestoreService().getUserById(widget.profile.userId);
+      final otherUser =
+          await FirestoreService().getUserById(widget.profile.userId);
 
       if (!context.mounted) return;
       Navigator.push(

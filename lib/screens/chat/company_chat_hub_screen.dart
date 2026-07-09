@@ -20,7 +20,7 @@ import '../../utils/app_dialog.dart';
 import '../../utils/app_fonts.dart';
 import '../../utils/user_roles.dart';
 import '../../utils/web_image_loader.dart';
-import '../../widgets/universal_avatar.dart';
+import '../../widgets/reactive_avatar.dart';
 import '../../widgets/app_popup.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../profile/profile_screen.dart';
@@ -370,11 +370,11 @@ class _CompanyChatHubScreenState extends State<CompanyChatHubScreen>
                       CircleAvatar(
                         radius: 17,
                         backgroundColor: Colors.transparent,
-                        child: UniversalAvatar(
-                          photoUrl: widget.otherUserPhoto,
+                        child: ReactiveAvatar(
+                          userId: widget.otherUserId,
                           fallbackName: widget.otherUserName,
+                          initialPhotoUrl: widget.otherUserPhoto,
                           radius: 17,
-                          animate: false,
                         ),
                       ),
                       Positioned(
@@ -2295,6 +2295,3 @@ class _ImagePreviewPage extends StatelessWidget {
     );
   }
 }
-
-
-

@@ -813,7 +813,8 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
     addIfHas(const ['quantity', 'qty', 'stock'], 80);
     addIfHas(const ['category', 'productcategory'], 20);
     addIfHas(const ['imageurl', 'imagelink', 'image'], 20);
-    addIfHas(const ['assigneeuserid', 'assigneeid', 'email', 'assigneename'], 20);
+    addIfHas(
+        const ['assigneeuserid', 'assigneeid', 'email', 'assigneename'], 20);
 
     return score;
   }
@@ -913,7 +914,8 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
           : const <int, Uint8List>{};
 
       if (rows.length < 2) {
-        throw Exception('File must contain header row + at least one data row.');
+        throw Exception(
+            'File must contain header row + at least one data row.');
       }
 
       final headersRaw = rows.first.map((e) => _cellToText(e)).toList();
@@ -937,7 +939,10 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
       final categoryIdx = idxFor(const ['category', 'productcategory']);
       final imageUrlIdx = idxFor(const ['imageurl', 'imagelink', 'image']);
 
-      if (nameIdx == null || descIdx == null || priceIdx == null || qtyIdx == null) {
+      if (nameIdx == null ||
+          descIdx == null ||
+          priceIdx == null ||
+          qtyIdx == null) {
         throw Exception(
           'Missing required columns. Required: name, description, price, quantity/stock.',
         );
@@ -962,14 +967,18 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
 
         final name = nameIdx < row.length ? _cellToText(row[nameIdx]) : '';
         final desc = descIdx < row.length ? _cellToText(row[descIdx]) : '';
-        final priceText = priceIdx < row.length ? _cellToText(row[priceIdx]) : '';
+        final priceText =
+            priceIdx < row.length ? _cellToText(row[priceIdx]) : '';
         final qtyText = qtyIdx < row.length ? _cellToText(row[qtyIdx]) : '';
         final category = categoryIdx != null && categoryIdx < row.length
             ? _cellToText(row[categoryIdx])
             : '';
         final imageUrl = _extractImageUrlFromRow(row, imageUrlIdx);
 
-        if (name.isEmpty && desc.isEmpty && priceText.isEmpty && qtyText.isEmpty) {
+        if (name.isEmpty &&
+            desc.isEmpty &&
+            priceText.isEmpty &&
+            qtyText.isEmpty) {
           skippedEmptyRowCount++;
           continue;
         }
@@ -1020,7 +1029,8 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
           invalidPriceRowCount++;
         }
 
-        final parsedStock = int.tryParse(draft.stockController.text.trim()) ?? 0;
+        final parsedStock =
+            int.tryParse(draft.stockController.text.trim()) ?? 0;
         if (parsedStock <= 0) {
           invalidStockRowCount++;
         }
@@ -1069,8 +1079,7 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
 
       AppPopup.show(
         context,
-        message:
-            'Imported ${imported.length} draft product(s). '
+        message: 'Imported ${imported.length} draft product(s). '
             '${extractedImageCount > 0 ? 'Auto-attached $extractedImageCount image(s) from XLSX. ' : ''}'
             'Add/review images, then click Assign Bulk Products.',
         type: PopupType.success,
@@ -1551,11 +1560,11 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
         TextEditingController(text: product.price.toStringAsFixed(0));
     final stockController = TextEditingController(text: '${product.stock}');
     final existingImages = product.images
-      .map((url) => url.trim().startsWith('data:image')
-        ? url.trim()
-        : _normalizeImportedImageUrl(url))
-      .where((url) => url.trim().isNotEmpty)
-      .toList();
+        .map((url) => url.trim().startsWith('data:image')
+            ? url.trim()
+            : _normalizeImportedImageUrl(url))
+        .where((url) => url.trim().isNotEmpty)
+        .toList();
     final oldPrimaryImageUrl =
         existingImages.isNotEmpty ? existingImages.first : '';
     final imageUrlController = TextEditingController(text: oldPrimaryImageUrl);
@@ -1570,358 +1579,403 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
       context: context,
       barrierColor: Colors.black54,
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (_, setLocalState) {
-            Future<void> pickAndUploadReplacement() async {
-              final XFile? picked = await _picker.pickImage(
-                source: ImageSource.gallery,
-                imageQuality: 90,
-              );
-              if (picked == null) return;
-
-              setLocalState(() {
-                isUploadingEditImage = true;
-                imageEditStatus = 'Uploading replacement image...';
-              });
-
-              try {
-                final bytes = await picked.readAsBytes();
-                final folder = product.sourceType == 'skillshare'
-                    ? 'skillshare_products'
-                    : 'assigned_products';
-                final url = await _cloudinaryService.uploadImageBytes(
-                  bytes,
-                  folder: folder,
-                  filename:
-                      'edit_${product.id}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        return MediaQuery.withClampedTextScaling(
+          maxScaleFactor: 1.15,
+          child: StatefulBuilder(
+            builder: (_, setLocalState) {
+              Future<void> pickAndUploadReplacement() async {
+                final XFile? picked = await _picker.pickImage(
+                  source: ImageSource.gallery,
+                  imageQuality: 90,
                 );
+                if (picked == null) return;
 
-                if (url == null || url.isEmpty) {
-                  throw Exception('Image upload failed');
+                setLocalState(() {
+                  isUploadingEditImage = true;
+                  imageEditStatus = 'Uploading replacement image...';
+                });
+
+                try {
+                  final bytes = await picked.readAsBytes();
+                  final folder = product.sourceType == 'skillshare'
+                      ? 'skillshare_products'
+                      : 'assigned_products';
+                  final url = await _cloudinaryService.uploadImageBytes(
+                    bytes,
+                    folder: folder,
+                    filename:
+                        'edit_${product.id}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+                  );
+
+                  if (url == null || url.isEmpty) {
+                    throw Exception('Image upload failed');
+                  }
+
+                  if (!ctx.mounted) return;
+                  setLocalState(() {
+                    primaryImageUrl = url;
+                    imageUrlController.text = url;
+                    imageEditStatus = 'Image replaced successfully';
+                    isUploadingEditImage = false;
+                  });
+                } catch (e) {
+                  if (!ctx.mounted) return;
+                  setLocalState(() {
+                    imageEditStatus = 'Image upload failed: $e';
+                    isUploadingEditImage = false;
+                  });
                 }
-
-                if (!ctx.mounted) return;
-                setLocalState(() {
-                  primaryImageUrl = url;
-                  imageUrlController.text = url;
-                  imageEditStatus = 'Image replaced successfully';
-                  isUploadingEditImage = false;
-                });
-              } catch (e) {
-                if (!ctx.mounted) return;
-                setLocalState(() {
-                  imageEditStatus = 'Image upload failed: $e';
-                  isUploadingEditImage = false;
-                });
               }
-            }
 
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: 640,
-                  maxHeight: MediaQuery.of(ctx).size.height * 0.9,
-                ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFFDFEFF), Color(0xFFF3F5FF), Color(0xFFFFF6FC)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: const Color(0xFFD9DFFD)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF4A3B8F).withValues(alpha: 0.25),
-                        blurRadius: 24,
-                        offset: const Offset(0, 14),
-                      ),
-                    ],
+              return Dialog(
+                backgroundColor: Colors.transparent,
+                insetPadding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: 640,
+                    maxHeight: MediaQuery.of(ctx).size.height * 0.9,
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.fromLTRB(18, 14, 14, 14),
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Color(0xFF304FFE), Color(0xFF7B1FA2), Color(0xFFE91E63)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(24),
-                            topRight: Radius.circular(24),
-                          ),
-                        ),
-                        child: const Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 18,
-                              backgroundColor: Color(0x2AFFFFFF),
-                              child: Icon(Icons.edit_rounded, color: Colors.white, size: 20),
-                            ),
-                            SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Edit Product',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'Update image, details and availability',
-                                    style: TextStyle(color: Color(0xFFE3E7FF), fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [
+                          Color(0xFFFDFEFF),
+                          Color(0xFFF3F5FF),
+                          Color(0xFFFFF6FC)
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                      Flexible(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: double.infinity,
-                                height: 150,
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFFEAF1FF), Color(0xFFF7EDFF)],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: const Color(0xFFD2DCFF)),
-                                ),
-                                clipBehavior: Clip.antiAlias,
-                                child: primaryImageUrl.isEmpty
-                                    ? const Center(
-                                        child: Text(
-                                          'No image selected',
-                                          style: TextStyle(
-                                            color: Color(0xFF5B5E74),
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      )
-                                    : WebImageLoader.loadImage(
-                                        imageUrl: primaryImageUrl,
-                                        fit: BoxFit.cover,
-                                        errorWidget: const Center(
-                                          child: Text(
-                                            'Could not preview image',
-                                            style: TextStyle(
-                                              color: Colors.redAccent,
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                              ),
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  OutlinedButton.icon(
-                                    onPressed:
-                                        isUploadingEditImage ? null : pickAndUploadReplacement,
-                                    icon: isUploadingEditImage
-                                        ? const SizedBox(
-                                            width: 14,
-                                            height: 14,
-                                            child: CircularProgressIndicator(strokeWidth: 2),
-                                          )
-                                        : const Icon(Icons.photo),
-                                    label: const Text('Replace Image'),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  OutlinedButton.icon(
-                                    onPressed: isUploadingEditImage
-                                        ? null
-                                        : () {
-                                            setLocalState(() {
-                                              primaryImageUrl = '';
-                                              imageUrlController.clear();
-                                              imageEditStatus = 'Image removed';
-                                            });
-                                          },
-                                    icon: const Icon(Icons.delete_outline),
-                                    label: const Text('Clear'),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              TextField(
-                                controller: imageUrlController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Image URL',
-                                  prefixIcon: Icon(Icons.link_rounded),
-                                ),
-                                onChanged: (value) {
-                                  setLocalState(() {
-                                    primaryImageUrl = value.trim();
-                                    imageEditStatus = null;
-                                  });
-                                },
-                              ),
-                              if (imageEditStatus != null) ...[
-                                const SizedBox(height: 8),
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: imageEditStatus!.startsWith('Image upload failed')
-                                        ? const Color(0xFFFFEBEE)
-                                        : const Color(0xFFE8F5E9),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(
-                                    imageEditStatus!,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: imageEditStatus!.startsWith('Image upload failed')
-                                          ? const Color(0xFFC62828)
-                                          : const Color(0xFF2E7D32),
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: const Color(0xFFD9DFFD)),
+                      boxShadow: [
+                        BoxShadow(
+                          color:
+                              const Color(0xFF4A3B8F).withValues(alpha: 0.25),
+                          blurRadius: 24,
+                          offset: const Offset(0, 14),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.fromLTRB(18, 14, 14, 14),
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Color(0xFF304FFE),
+                                Color(0xFF7B1FA2),
+                                Color(0xFFE91E63)
                               ],
-                              const SizedBox(height: 10),
-                              TextField(
-                                controller: nameController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Name',
-                                  prefixIcon: Icon(Icons.label_rounded),
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(24),
+                              topRight: Radius.circular(24),
+                            ),
+                          ),
+                          child: const Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundColor: Color(0x2AFFFFFF),
+                                child: Icon(Icons.edit_rounded,
+                                    color: Colors.white, size: 20),
+                              ),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Edit Product',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      'Update image, details and availability',
+                                      style: TextStyle(
+                                          color: Color(0xFFE3E7FF),
+                                          fontSize: 12),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 10),
-                              TextField(
-                                controller: descController,
-                                maxLines: 3,
-                                decoration: const InputDecoration(
-                                  labelText: 'Description',
-                                  prefixIcon: Icon(Icons.notes_rounded),
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              TextField(
-                                controller: priceController,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(decimal: true),
-                                decoration: const InputDecoration(
-                                  labelText: 'Price',
-                                  prefixIcon: Icon(Icons.currency_rupee_rounded),
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              TextField(
-                                controller: stockController,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: 'Stock',
-                                  prefixIcon: Icon(Icons.inventory_2_rounded),
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              DropdownButtonFormField<String>(
-                                value: AppConstants.categories.contains(category)
-                                    ? category
-                                    : AppConstants.categories.first,
-                                items: AppConstants.categories
-                                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                                    .toList(),
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    setLocalState(() => category = value);
-                                  }
-                                },
-                                decoration: const InputDecoration(
-                                  labelText: 'Category',
-                                  prefixIcon: Icon(Icons.category_rounded),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF7F9FF),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: const Color(0xFFD8E0FF)),
-                                ),
-                                child: SwitchListTile(
-                                  contentPadding:
-                                      const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                                  value: isAvailable,
-                                  title: const Text('Available'),
-                                  subtitle: const Text('Toggle product visibility for shoppers'),
-                                  onChanged: (value) {
-                                    setLocalState(() => isAvailable = value);
-                                  },
-                                ),
-                              ),
-                              const SizedBox(height: 14),
                             ],
                           ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () => Navigator.of(ctx).pop(false),
-                                child: const Text('Cancel'),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFF304FFE), Color(0xFF7B1FA2)],
+                        Flexible(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: double.infinity,
+                                  height: 150,
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [
+                                        Color(0xFFEAF1FF),
+                                        Color(0xFFF7EDFF)
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                        color: const Color(0xFFD2DCFF)),
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: primaryImageUrl.isEmpty
+                                      ? const Center(
+                                          child: Text(
+                                            'No image selected',
+                                            style: TextStyle(
+                                              color: Color(0xFF5B5E74),
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        )
+                                      : WebImageLoader.loadImage(
+                                          imageUrl: primaryImageUrl,
+                                          fit: BoxFit.cover,
+                                          errorWidget: const Center(
+                                            child: Text(
+                                              'Could not preview image',
+                                              style: TextStyle(
+                                                color: Colors.redAccent,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                 ),
-                                child: ElevatedButton(
-                                  onPressed: isUploadingEditImage
-                                      ? null
-                                      : () => Navigator.of(ctx).pop(true),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.transparent,
-                                    shadowColor: Colors.transparent,
+                                const SizedBox(height: 10),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    OutlinedButton.icon(
+                                      onPressed: isUploadingEditImage
+                                          ? null
+                                          : pickAndUploadReplacement,
+                                      icon: isUploadingEditImage
+                                          ? const SizedBox(
+                                              width: 14,
+                                              height: 14,
+                                              child: CircularProgressIndicator(
+                                                  strokeWidth: 2),
+                                            )
+                                          : const Icon(Icons.photo),
+                                      label: const Text('Replace Image'),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed: isUploadingEditImage
+                                          ? null
+                                          : () {
+                                              setLocalState(() {
+                                                primaryImageUrl = '';
+                                                imageUrlController.clear();
+                                                imageEditStatus =
+                                                    'Image removed';
+                                              });
+                                            },
+                                      icon: const Icon(Icons.delete_outline),
+                                      label: const Text('Clear'),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: imageUrlController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Image URL',
+                                    prefixIcon: Icon(Icons.link_rounded),
                                   ),
-                                  child: const Text(
-                                    'Save Changes',
-                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                                  onChanged: (value) {
+                                    setLocalState(() {
+                                      primaryImageUrl = value.trim();
+                                      imageEditStatus = null;
+                                    });
+                                  },
+                                ),
+                                if (imageEditStatus != null) ...[
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: imageEditStatus!
+                                              .startsWith('Image upload failed')
+                                          ? const Color(0xFFFFEBEE)
+                                          : const Color(0xFFE8F5E9),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      imageEditStatus!,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: imageEditStatus!.startsWith(
+                                                'Image upload failed')
+                                            ? const Color(0xFFC62828)
+                                            : const Color(0xFF2E7D32),
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 10),
+                                TextField(
+                                  controller: nameController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Name',
+                                    prefixIcon: Icon(Icons.label_rounded),
                                   ),
                                 ),
-                              ),
+                                const SizedBox(height: 10),
+                                TextField(
+                                  controller: descController,
+                                  maxLines: 3,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Description',
+                                    prefixIcon: Icon(Icons.notes_rounded),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                TextField(
+                                  controller: priceController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                          decimal: true),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Price',
+                                    prefixIcon:
+                                        Icon(Icons.currency_rupee_rounded),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                TextField(
+                                  controller: stockController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Stock',
+                                    prefixIcon: Icon(Icons.inventory_2_rounded),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                DropdownButtonFormField<String>(
+                                  isExpanded: true,
+                                  value:
+                                      AppConstants.categories.contains(category)
+                                          ? category
+                                          : AppConstants.categories.first,
+                                  items: AppConstants.categories
+                                      .map((c) => DropdownMenuItem(
+                                            value: c,
+                                            child: Text(
+                                              c,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ))
+                                      .toList(),
+                                  onChanged: (value) {
+                                    if (value != null) {
+                                      setLocalState(() => category = value);
+                                    }
+                                  },
+                                  decoration: const InputDecoration(
+                                    labelText: 'Category',
+                                    prefixIcon: Icon(Icons.category_rounded),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF7F9FF),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                        color: const Color(0xFFD8E0FF)),
+                                  ),
+                                  child: SwitchListTile(
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 2),
+                                    value: isAvailable,
+                                    title: const Text('Available'),
+                                    subtitle: const Text(
+                                        'Toggle product visibility for shoppers'),
+                                    onChanged: (value) {
+                                      setLocalState(() => isAvailable = value);
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () => Navigator.of(ctx).pop(false),
+                                  child: const Text('Cancel'),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [
+                                        Color(0xFF304FFE),
+                                        Color(0xFF7B1FA2)
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: ElevatedButton(
+                                    onPressed: isUploadingEditImage
+                                        ? null
+                                        : () => Navigator.of(ctx).pop(true),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.transparent,
+                                      shadowColor: Colors.transparent,
+                                    ),
+                                    child: const Text(
+                                      'Save Changes',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w700),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );
@@ -1942,14 +1996,14 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
     final updatedPrimaryImageUrl = imageUrlController.text.trim();
 
     final retainedSecondaryImages = existingImages
-      .where((url) => url.trim().isNotEmpty)
-      .where((url) => url != oldPrimaryImageUrl)
-      .where((url) => url != updatedPrimaryImageUrl)
-      .toList();
+        .where((url) => url.trim().isNotEmpty)
+        .where((url) => url != oldPrimaryImageUrl)
+        .where((url) => url != updatedPrimaryImageUrl)
+        .toList();
 
     final updatedImages = updatedPrimaryImageUrl.isEmpty
-      ? retainedSecondaryImages
-      : <String>[updatedPrimaryImageUrl, ...retainedSecondaryImages];
+        ? retainedSecondaryImages
+        : <String>[updatedPrimaryImageUrl, ...retainedSecondaryImages];
 
     nameController.dispose();
     descController.dispose();
@@ -2073,7 +2127,12 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
             await _loadAdminLogo();
           },
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              16,
+              16,
+              16 + MediaQuery.paddingOf(context).bottom,
+            ),
             children: [
               _buildAdminLogoCard(),
               const SizedBox(height: 14),
@@ -2139,17 +2198,15 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                           CircleAvatar(
                             radius: 24,
                             backgroundColor: const Color(0xFFEEEAF9),
-                            backgroundImage:
-                                (_adminLogoUrl != null &&
-                                        _adminLogoUrl!.isNotEmpty)
-                                    ? WebImageLoader.getImageProvider(
-                                        _adminLogoUrl)
-                                    : null,
-                            child:
-                                (_adminLogoUrl == null || _adminLogoUrl!.isEmpty)
-                                    ? const Icon(Icons.shield,
-                                        color: Color(0xFF512DA8))
-                                    : null,
+                            backgroundImage: (_adminLogoUrl != null &&
+                                    _adminLogoUrl!.isNotEmpty)
+                                ? WebImageLoader.getImageProvider(_adminLogoUrl)
+                                : null,
+                            child: (_adminLogoUrl == null ||
+                                    _adminLogoUrl!.isEmpty)
+                                ? const Icon(Icons.shield,
+                                    color: Color(0xFF512DA8))
+                                : null,
                           ),
                           const SizedBox(width: 12),
                           const Expanded(
@@ -2219,8 +2276,7 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
             _sectionTitle(
               icon: Icons.workspace_premium,
               title: 'Add Official SkillShare Product',
-              subtitle:
-                  'These are published as SkillShare Official products.',
+              subtitle: 'These are published as SkillShare Official products.',
               gradient: const [Color(0xFF8E24AA), Color(0xFFFF5C8A)],
             ),
             const SizedBox(height: 12),
@@ -2271,12 +2327,17 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _officialCategory,
               items: AppConstants.categories
                   .map(
                     (c) => DropdownMenuItem<String>(
                       value: c,
-                      child: Text(c),
+                      child: Text(
+                        c,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   )
                   .toList(),
@@ -2412,8 +2473,8 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                               ? const SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2),
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Icon(Icons.upload_file),
                           label: const Text('Import CSV / Excel'),
@@ -2497,10 +2558,10 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
     final isValid = issues.isEmpty;
     final screenWidth = MediaQuery.of(context).size.width;
     final previewHeight = screenWidth >= 1400
-      ? 220.0
-      : screenWidth >= 1000
-        ? 180.0
-        : 120.0;
+        ? 220.0
+        : screenWidth >= 1000
+            ? 180.0
+            : 120.0;
 
     return GestureDetector(
       onTap: () => draft.imagePasteFocusNode.requestFocus(),
@@ -2524,9 +2585,7 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                isValid
-                    ? const Color(0xFFF8FCFF)
-                    : const Color(0xFFFFF6F8),
+                isValid ? const Color(0xFFF8FCFF) : const Color(0xFFFFF6F8),
                 Colors.white,
               ],
             ),
@@ -2559,8 +2618,8 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                         ? 'Row is valid'
                         : 'Issues: ${issues.join(' • ')}',
                     child: Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: isValid
                             ? const Color(0xFFE8F5E9)
@@ -2617,8 +2676,8 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                             Expanded(
                               child: Text(
                                 'Product ${index + 1}',
-                                style:
-                                    const TextStyle(fontWeight: FontWeight.w700),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700),
                               ),
                             ),
                             statusChip,
@@ -2650,6 +2709,8 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                 const SizedBox(height: 6),
                 Text(
                   'Missing: ${issues.join(' | ')}',
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 11,
                     color: Color(0xFFC62828),
@@ -2660,20 +2721,39 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
               const SizedBox(height: 4),
               const Text(
                 'Tip: click this row and press Ctrl+V to paste product image',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 11, color: Colors.black54),
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: draft.assigneeUserId,
                 decoration: const InputDecoration(
                   labelText: 'Assign to skilled person',
                   border: OutlineInputBorder(),
                 ),
+                selectedItemBuilder: (context) => _skilledUsers
+                    .map(
+                      (u) => Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          u.name.trim().isNotEmpty ? u.name : u.email,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(),
                 items: _skilledUsers
                     .map(
                       (u) => DropdownMenuItem<String>(
                         value: u.uid,
-                        child: Text('${u.name} (${u.email})'),
+                        child: Text(
+                          '${u.name} (${u.email})',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     )
                     .toList(),
@@ -2727,9 +2807,19 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: draft.category,
                 items: AppConstants.categories
-                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .map(
+                      (c) => DropdownMenuItem(
+                        value: c,
+                        child: Text(
+                          c,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
                     .toList(),
                 onChanged: (v) {
                   if (v != null) setState(() => draft.category = v);
@@ -2740,42 +2830,53 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                 ),
               ),
               const SizedBox(height: 8),
-              TextField(
-                controller: draft.imageUrlController,
-                decoration: InputDecoration(
-                  labelText: 'Image URL (optional - can edit imported links)',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    tooltip: 'Validate image link',
-                    onPressed: draft.isImageUploading
-                        ? null
-                        : () => _validateDraftImageUrl(
-                              draft,
-                              showSuccessToast: true,
-                            ),
-                    icon: draft.imageLinkStatus == _ImageLinkStatus.validating
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.link),
-                  ),
-                ),
-                onChanged: (value) {
-                  final trimmed = value.trim();
-                  setState(() {
-                    draft.imageUrl = trimmed.isEmpty ? null : trimmed;
-                    draft.imageLinkStatus = _ImageLinkStatus.idle;
-                    draft.imageLinkValidationMessage = null;
-                    draft.localImagePreviewBytes = null;
-                  });
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 420;
+                  return TextField(
+                    controller: draft.imageUrlController,
+                    decoration: InputDecoration(
+                      labelText: isCompact
+                          ? 'Image URL'
+                          : 'Image URL (optional - can edit imported links)',
+                      helperText:
+                          isCompact ? 'Optional imported image link' : null,
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        tooltip: 'Validate image link',
+                        onPressed: draft.isImageUploading
+                            ? null
+                            : () => _validateDraftImageUrl(
+                                  draft,
+                                  showSuccessToast: true,
+                                ),
+                        icon: draft.imageLinkStatus ==
+                                _ImageLinkStatus.validating
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.link),
+                      ),
+                    ),
+                    onChanged: (value) {
+                      final trimmed = value.trim();
+                      setState(() {
+                        draft.imageUrl = trimmed.isEmpty ? null : trimmed;
+                        draft.imageLinkStatus = _ImageLinkStatus.idle;
+                        draft.imageLinkValidationMessage = null;
+                        draft.localImagePreviewBytes = null;
+                      });
+                    },
+                  );
                 },
               ),
               const SizedBox(height: 8),
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final isCompact = constraints.maxWidth < 540;
+                  final isCompact = constraints.maxWidth < 700;
 
                   final statusText = Text(
                     draft.isImageUploading
@@ -2874,7 +2975,8 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                 },
               ),
               if (draft.localImagePreviewBytes != null ||
-                  (draft.imageUrl != null && draft.imageUrl!.trim().isNotEmpty)) ...[
+                  (draft.imageUrl != null &&
+                      draft.imageUrl!.trim().isNotEmpty)) ...[
                 const SizedBox(height: 8),
                 Container(
                   width: double.infinity,
@@ -3027,8 +3129,8 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                   Expanded(
                     child: Text(
                       '${item.fileName} • ${item.isXlsx ? 'XLSX' : 'CSV'} • ${item.importedRows}/${item.processedRows} row(s)',
-                      style:
-                          const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -3038,8 +3140,9 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                     issues == 0 ? 'Clean' : '$issues issue(s)',
                     style: TextStyle(
                       fontSize: 11,
-                      color:
-                          issues == 0 ? const Color(0xFF2E7D32) : Colors.redAccent,
+                      color: issues == 0
+                          ? const Color(0xFF2E7D32)
+                          : Colors.redAccent,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -3074,8 +3177,7 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
             _sectionTitle(
               icon: Icons.inventory_2,
               title: 'Manage Products (Edit / Delete)',
-              subtitle:
-                  'Quickly review and update all listed products.',
+              subtitle: 'Quickly review and update all listed products.',
               gradient: const [Color(0xFF5E35B1), Color(0xFF1E88E5)],
             ),
             const SizedBox(height: 10),
@@ -3093,8 +3195,7 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                   return const Text('No products found.');
                 }
 
-                final sortedProducts = [...products]
-                  ..sort((a, b) {
+                final sortedProducts = [...products]..sort((a, b) {
                     final aIssues = _productAttentionIssues(a).isNotEmpty;
                     final bIssues = _productAttentionIssues(b).isNotEmpty;
                     if (aIssues == bIssues) {
@@ -3113,106 +3214,241 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                     final isSkillShare = p.sourceType == 'skillshare';
                     final attentionIssues = _productAttentionIssues(p);
                     final needsAttention = attentionIssues.isNotEmpty;
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: needsAttention
-                            ? const Color(0xFFFFF7F2)
-                            : const Color(0xFFF8FAFF),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: needsAttention
-                              ? const Color(0xFFFFCC80)
-                              : const Color(0xFFE3E8FA),
-                          width: needsAttention ? 1.3 : 1,
+                    final productSummary =
+                        '${isSkillShare ? 'SkillShare Official' : 'Assigned/Seller'} • '
+                        '₹${p.price.toStringAsFixed(0)} • '
+                        'Stock: ${p.stock} • '
+                        '${p.isAvailable ? 'Available' : 'Unavailable'}';
+
+                    Widget productAvatar() {
+                      return CircleAvatar(
+                        backgroundColor:
+                            isSkillShare ? const Color(0xFFEEEAF9) : null,
+                        backgroundImage: p.images.isNotEmpty
+                            ? WebImageLoader.getImageProvider(p.images.first)
+                            : null,
+                        child: p.images.isEmpty
+                            ? Icon(
+                                isSkillShare
+                                    ? Icons.verified
+                                    : Icons.inventory_2,
+                                color: isSkillShare
+                                    ? const Color(0xFF512DA8)
+                                    : Colors.blueGrey,
+                              )
+                            : null,
+                      );
+                    }
+
+                    Widget attentionChip({int? maxLines}) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
                         ),
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFEBD9),
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        leading: CircleAvatar(
-                          backgroundColor:
-                              isSkillShare ? const Color(0xFFEEEAF9) : null,
-                          backgroundImage:
-                            p.images.isNotEmpty ? WebImageLoader.getImageProvider(p.images.first) : null,
-                          child: p.images.isEmpty
-                              ? Icon(
-                                  isSkillShare ? Icons.verified : Icons.inventory_2,
-                                  color: isSkillShare
-                                      ? const Color(0xFF512DA8)
-                                      : Colors.blueGrey,
-                                )
-                              : null,
-                        ),
-                        title: Text(
-                          p.name,
-                          maxLines: 1,
+                        child: Text(
+                          'Needs attention: ${attentionIssues.join(' • ')}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFFB45309),
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: maxLines,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${isSkillShare ? 'SkillShare Official' : 'Assigned/Seller'} • '
-                              '₹${p.price.toStringAsFixed(0)} • '
-                              'Stock: ${p.stock} • '
-                              '${p.isAvailable ? 'Available' : 'Unavailable'}',
-                            ),
-                            if (needsAttention)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFEBD9),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(
-                                    'Needs attention: ${attentionIssues.join(' • ')}',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Color(0xFFB45309),
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                        trailing: Wrap(
-                          spacing: 4,
-                          children: [
-                            if (needsAttention)
-                              const Padding(
-                                padding: EdgeInsets.only(top: 10),
-                                child: Icon(
-                                  Icons.warning_amber_rounded,
-                                  color: Color(0xFFB45309),
-                                  size: 18,
-                                ),
-                              ),
-                            IconButton(
-                              onPressed: () => _editProduct(p),
-                              icon:
-                                  const Icon(Icons.edit, color: Color(0xFF1565C0)),
-                            ),
-                            IconButton(
-                              onPressed: () => _deleteProduct(p),
-                              icon: const Icon(
-                                Icons.delete,
-                                color: Colors.redAccent,
-                              ),
-                            ),
-                          ],
-                        ),
+                      );
+                    }
+
+                    final cardDecoration = BoxDecoration(
+                      color: needsAttention
+                          ? const Color(0xFFFFF7F2)
+                          : const Color(0xFFF8FAFF),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: needsAttention
+                            ? const Color(0xFFFFCC80)
+                            : const Color(0xFFE3E8FA),
+                        width: needsAttention ? 1.3 : 1,
                       ),
+                    );
+                    return LayoutBuilder(
+                      builder: (context, constraints) {
+                        if (constraints.maxWidth < 520) {
+                          return Container(
+                            decoration: cardDecoration,
+                            child: Padding(
+                              padding: const EdgeInsets.all(10),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      productAvatar(),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              p.name,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              productSummary,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: Colors.grey[700],
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (needsAttention) ...[
+                                        const SizedBox(width: 6),
+                                        const Icon(
+                                          Icons.warning_amber_rounded,
+                                          color: Color(0xFFB45309),
+                                          size: 18,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  if (needsAttention) ...[
+                                    const SizedBox(height: 8),
+                                    attentionChip(maxLines: 2),
+                                  ],
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: OutlinedButton.icon(
+                                          onPressed: () => _editProduct(p),
+                                          icon:
+                                              const Icon(Icons.edit, size: 16),
+                                          label: const Text('Edit'),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: OutlinedButton.icon(
+                                          onPressed: () => _deleteProduct(p),
+                                          icon: const Icon(
+                                            Icons.delete,
+                                            size: 16,
+                                          ),
+                                          label: const Text('Delete'),
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: Colors.redAccent,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
+                        return Container(
+                          decoration: cardDecoration,
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            leading: productAvatar(),
+                            title: Text(
+                              p.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${isSkillShare ? 'SkillShare Official' : 'Assigned/Seller'} • '
+                                  '₹${p.price.toStringAsFixed(0)} • '
+                                  'Stock: ${p.stock} • '
+                                  '${p.isAvailable ? 'Available' : 'Unavailable'}',
+                                ),
+                                if (needsAttention)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFFEBD9),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Text(
+                                        'Needs attention: ${attentionIssues.join(' • ')}',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: Color(0xFFB45309),
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            trailing: SizedBox(
+                              width: needsAttention ? 138 : 96,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (needsAttention)
+                                    const Padding(
+                                      padding: EdgeInsets.only(right: 4),
+                                      child: Icon(
+                                        Icons.warning_amber_rounded,
+                                        color: Color(0xFFB45309),
+                                        size: 18,
+                                      ),
+                                    ),
+                                  IconButton(
+                                    onPressed: () => _editProduct(p),
+                                    icon: const Icon(
+                                      Icons.edit,
+                                      color: Color(0xFF1565C0),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    onPressed: () => _deleteProduct(p),
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      color: Colors.redAccent,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     );
                   },
                 );
@@ -3254,7 +3490,8 @@ class _BulkProductDraft {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController descController = TextEditingController();
   final TextEditingController priceController = TextEditingController();
-  final TextEditingController stockController = TextEditingController(text: '1');
+  final TextEditingController stockController =
+      TextEditingController(text: '1');
   final TextEditingController imageUrlController = TextEditingController();
   final FocusNode imagePasteFocusNode = FocusNode();
 
